@@ -1,5 +1,8 @@
 ## file
 
+Yield to the avatar's destination as well as its current position. Start the next outing's wait after returning home; favor nearby eligible points of interest.
+Why: a wanderer must clear where the avatar is arriving, long outings should not immediately trigger another, and nearby scenery should be visited more often than distant scenery.
+
 Life (idles and wandering) runs on `lifePace()` from `character-life.ts`: `window.agentWorldLife = { pace }` speeds it up, and under a driven browser (`navigator.webdriver`, every headless test) it defaults to 0, so nobody idles or wanders. Tests that read positions, frames, or `moving` stay exact without knowing about life; a test of life sets the pace in an init script (`tests/world-life.test.ts`). Electron is never driven, so the app always lives at pace 1.
 Why: wandering moves figures off their spots and idles swap textures at random moments; turning it on everywhere made the existing headless suites (written for still characters) racy.
 Verify: apps/agent-workplace/tests/world-life.test.ts, apps/agent-workplace/tests/life.test.ts

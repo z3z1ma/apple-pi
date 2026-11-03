@@ -1,5 +1,8 @@
 ## file
 
+Furniture fidgets sort just above the supporting foreground piece; floor fidgets sort by their feet with characters.
+Why: the foreground pass redraws furniture over its contents otherwise, while floor objects need ordinary character occlusion.
+
 Fidgets are presentation only (ticket 29, decision 27): nothing here may call `window.agentWorkplace`, send an intent that reaches the backend, or store anything in the runtime. A light's or box's on/open state lives in a module-level map keyed `theme:placeKey:slot index`, so it lasts while the app runs and resets on restart. `fidgets.test.ts` drives every play through the real backend API and fails on any command, runtime row, integration call, or outside request.
 Verify: apps/agent-workplace/tests/fidgets.test.ts, apps/agent-workplace/tests/world-fidgets.test.ts
 

@@ -44,37 +44,32 @@ import { drawSigns, type SignView, SquareLife, type TownsfolkView } from "./plac
 import { type Facing, PERSON_TILES, type Pose, Walker, type WalkerView } from "./walker.js";
 import { Wander, type WanderView } from "./wander.js";
 
-/** A `#rrggbb` colour as its red, green, and blue. */
 const rgb = (hex: string): [number, number, number] => {
 	const n = Number.parseInt(hex.slice(1), 16);
 	return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
 
-const STANDING = 120; // sprite px from head to feet in a standing frame
+const STANDING = 120;
 const FADE_OUT_MS = 240;
 const FADE_IN_MS = 320;
-const PAN_SPEED = 900; // world px per second with the arrow keys
-const DRAG_THRESHOLD = 6; // screen px before a press becomes a drag
-const SEAM_PX = 24; // painting px over which two strips of a growing place blend
-/** The banner's name, largest first, down to the smallest size that still reads at the default zoom. */
+const PAN_SPEED = 900;
+const DRAG_THRESHOLD = 6;
+const SEAM_PX = 24;
+
 const BANNER_FONT = [15, 12] as const;
-/** A name stays on one line down to this size before it is broken onto more. */
+
 const BANNER_ONE_LINE = 13;
-/** Abbreviated words keep at most this many letters; abbreviated names may take this many lines (12 px fits five). */
+
 const BANNER_ABBREVIATION = 6;
 const BANNER_LINES_SHORT = 5;
-/** How quickly the camera catches up with the avatar (per second); higher is tighter. */
+
 const FOLLOW_RATE = 4.5;
-/** How quickly the zoom eases to the wheel's choice (per second). */
+
 const ZOOM_RATE = 10;
 const MAX_ZOOM = 2;
-/** The camera centres on the avatar's chest, not its feet. */
+
 const FOLLOW_LIFT = PERSON_TILES / 2;
-/**
- * Where the avatar stands to talk to someone, in tiles from their feet, in order of preference: beside them or a
- * little in front to either side (whichever is quickest), where neither body hides the other; failing those, well in
- * front or just behind.
- */
+
 const TALK_OFFSETS: Point[][] = [
 	[
 		[-1.1, 0.05],
@@ -87,18 +82,18 @@ const TALK_OFFSETS: Point[][] = [
 		[0, -0.9],
 	],
 ];
-/** How far the avatar steps on into a door while the view fades out. */
+
 const STEP_IN = 0.7;
-/** How far a walk may end from where it was meant to before the avatar says it cannot reach. */
+
 const REACH = 0.35;
-/** Over how many tiles a character fades in after coming through a door, or out going through one. */
+
 const DOOR_FADE = 0.9;
-/** Water: how long each ripple frame takes to flow into the next (ms), and how opaque it lies in its basin. */
+
 const WATER_FRAME_MS = 700;
 const WATER_ALPHA = 0.92;
-/** Over how many world px the water's edge fades into its basin. */
+
 const WATER_FEATHER = 5;
-/** Where a badge floats, in tiles above the feet, by pose (a raised hand reaches higher than a head). */
+
 const BADGE_LIFT: Record<Pose, number> = {
 	standing: 2.12,
 	seated: 2.12,
@@ -107,66 +102,57 @@ const BADGE_LIFT: Record<Pose, number> = {
 	dozing: 2.12,
 	"in-bed": 2.12,
 };
-/** Where a dozing sleeper's "z" rises from, in tiles above its feet (just over its head at the table). */
+
 const Z_LIFT = 1.3;
-/** Sleepers are drawn a little dimmer and cooler, as if the lamps did not reach them. */
+
 const SLEEP_TINT = 0xd2c8dc;
-/** A sleeper's head and shoulders, cut from its standing frame: from this far above its feet (sheet px), this tall. */
+
 const HEAD_CUT = [124, 50] as const;
 const HEAD_SCALE = 0.84;
-/** A character that needs the operator barks this long after it starts to, then every so often; each bark lasts. */
+
 const FIRST_BARK_MS = [1200, 2200] as const;
 const BARK_EVERY_MS = [22_000, 38_000] as const;
 const BARK_MS = 4200;
-/** Below this zoom, badges and barks are drawn larger so they keep this zoom's size on screen. */
+
 const UI_ZOOM = 1;
-/**
- * Pixel art stays crisp zoomed in: a texture is drawn with nearest filtering once one of its pixels covers at least this
- * many screen pixels (sprites and overlays from 1; paintings, which are painted rather than pixel-gridded, from 1.5),
- * and smoothed below that, so nothing shimmers or loses its outline when drawn smaller than its source.
- */
+
 const CRISP_FROM = { sprite: 1, painting: 1.5 } as const;
-/** How often (ms) textures are looked over for the filtering their size on screen needs, besides on every zoom. */
+
 const REFILTER_EVERY_MS = 500;
-/** How often the interface's panels are measured for how far the painting may slide out from under them. */
+
 const INSETS_EVERY_MS = 300;
-/** At most this many barks show in a place at once, so a busy room stays calm. */
+
 const BARKS_AT_ONCE = 2;
-/** How long a bark takes to fade in or out (ms), and how far it rises as it comes (px). */
+
 const BARK_FADE_MS = 320;
 const BARK_RISE = 5;
-/** Space kept round a bark on screen (CSS px): from other barks and from the interface. */
+
 const BARK_MARGIN = 6;
-/** A bark that has no room waits this long (ms) before it tries again. */
+
 const BARK_RETRY_MS = 2500;
 
-/** A character in the place: walking in, at its spot, or walking out after its session stopped. */
 interface Figure {
 	character: Character;
 	walker: Walker;
 	look: string;
-	/** Its spot's feet position; undefined while it walks out. */
+
 	spot?: Point;
-	/** Its session left this place: it walks out through the door and is gone. */
+
 	leaving: boolean;
-	/** Fading in from, or out toward, this point in a doorway. */
+
 	fade?: { at: Point; out: boolean };
 	badge?: { kind: BadgeKind; container: Phaser.GameObjects.Container };
-	/**
-	 * Its bark: the line, its shape, when it starts to fade out, how far its bubble slides sideways (px) to keep clear,
-	 * and how much of it shows (eased toward 1 while it has room, toward 0 while it is covered or going).
-	 */
+
 	bark?: { line: string; shape: BarkShape; until: number; shift: number; shown: number; going: boolean };
-	/** When it barks next (scene time, ms), while it needs the operator. */
+
 	nextBark?: number;
 	barks: number;
-	/** The index of the spot it holds. */
+
 	spotIndex?: number;
-	/** Asleep at the inn: its rising "z", and in a bed, its head on the pillow under the quilt. */
+
 	sleep?: { z: Phaser.GameObjects.Container; bed?: InBed; breath?: Phaser.Tweens.Tween };
 }
 
-/** A sleeper in a bed: its head on the pillow, the quilt drawn over it, and the bed (tiles) that answers the pointer. */
 interface InBed {
 	head: Phaser.GameObjects.Image;
 	quilt: Phaser.GameObjects.Image;
@@ -174,7 +160,6 @@ interface InBed {
 	pillow: Point;
 }
 
-/** A door as the scene uses it: a painted door from the place data, or a wing door placed in the gallery. */
 interface SceneDoor extends Door {
 	repository?: string;
 	boarded?: boolean;
@@ -191,10 +176,10 @@ export interface FigureView {
 	frame: number;
 	badge: BadgeKind | null;
 	bark: string | null;
-	/** Where its bark's bubble is on screen (CSS px) while it shows. */
+
 	barkBox: Box | null;
 	alpha: number;
-	/** The idle it is playing, and where it is in a wander (tickets 06 and 07). */
+
 	idle: string | null;
 	wander: WanderView["state"];
 	interest: string | null;
@@ -204,20 +189,20 @@ export interface OverlayView {
 	kind: OverlaySlot["kind"];
 	x: number;
 	y: number;
-	/** The animation frame shown (fire, water), else 0. */
+
 	frame: number;
 	alpha: number;
 }
 
 export interface BannerView {
 	name: string;
-	/** What is stitched on it, lines joined by newlines. */
+
 	text: string;
-	/** Its font size, in px at zoom 1. */
+
 	size: number;
-	/** The text stays inside the cloth. */
+
 	fits: boolean;
-	/** Some words were cut short to fit (the full name shows on hover). */
+
 	abbreviated: boolean;
 }
 
@@ -225,7 +210,7 @@ export interface DoorView {
 	name: string;
 	to: string;
 	boarded?: boolean;
-	/** The door's centre on screen, in CSS px. */
+
 	x: number;
 	y: number;
 }
@@ -234,36 +219,29 @@ export interface AvatarView extends WalkerView {
 	look: string;
 }
 
-// Which spot each character holds, per place, for as long as the app runs; and view choices that outlive a scene.
 const heldSpots = new Map<string, Map<string, number>>();
 let showGrid = false;
-/**
- * Key presses already handled. Phaser's keyboard plugin runs its whole queue of the frame's key events again for each
- * new event, skipping only a repeat of the very last one, so after another key's release (Escape's, closing a panel) a
- * G pressed and released in the same frame came round twice and toggled the grid back off.
- */
+
 const handledKeys = new WeakSet<KeyboardEvent>();
 
-/** A new theme lays its places out its own way: who held which spot no longer means anything. */
 export function forgetSpots() {
 	heldSpots.clear();
 	SquareLife.forget();
 }
 let lastHeadquarters: string | undefined;
-/** The zoom the operator chose with the wheel, per painting: each place keeps its own. */
+
 const chosenZoom = new Map<string, number>();
 
 interface SceneData {
 	ref?: PlaceRef;
-	/** Where the avatar comes from, keying the entry it arrives at. */
+
 	from?: string;
-	/** Laying the same place out again: keep the avatar and the view where they were. */
+
 	keep?: { avatar: Point; facing: Facing; mid: Point };
-	/** On arrival, walk up to this character (going to it from the side panel). */
+
 	goTo?: string;
 }
 
-/** The current place: its painting, the characters at its spots, the operator's avatar, and doors that lead elsewhere. */
 export class PlaceScene extends Phaser.Scene {
 	private readonly store: WorldStore;
 	private readonly view: ViewStore;
@@ -271,85 +249,85 @@ export class PlaceScene extends Phaser.Scene {
 	private from?: string;
 	private keep?: SceneData["keep"];
 	private figures = new Map<string, Figure>();
-	/** The banners hung in the place, and how their names were stitched. */
+
 	private banners: BannerView[] = [];
-	/** Where each banner's cloth is (tiles), answering the pointer with the full name. */
+
 	private bannerRects: { name: string; rect: Rect }[] = [];
-	/** The overlays drawn in the place's slots, for the tests' view. */
+
 	private overlays: { slot: OverlaySlot; object: Phaser.GameObjects.Image; frame?: () => number }[] = [];
 	private doors: SceneDoor[] = [];
-	/** The painting's images as drawn (the whole painting, or the strips of a growing place), for the tests' view. */
+
 	private paintingImages: Phaser.GameObjects.Image[] = [];
-	/** The inn's beds, by the spot whose sleeper lies in each. */
+
 	private beds = new Map<number, { slot: OverlaySlot; image: Phaser.GameObjects.Image }>();
-	/** The place's host (the innkeeper), standing at its post. */
+
 	private host?: { walker: Walker; look: string; name: string; at: Point };
-	/** The square's recruiter at its booth (ticket 10): talking to it recruits an independent agent. */
+
 	private recruiter?: { walker: Walker; look: string; name: string; at: Point };
-	/** In the town square: the townsfolk who stand for Slack channels with unread messages. */
+
 	private square?: SquareLife;
-	/** The pack's ambient characters standing here, there only for fun (ticket 08). */
+
 	private ambient?: AmbientCast;
-	/** Those standing about wander a little: townsfolk, idle agents, and the host behind its counter (ticket 07). */
+
 	private wander?: Wander;
-	/** The names lettered on the buildings' sign boards (the square's). */
+
 	private signs: SignView[] = [];
-	/** At the forge: the open pull requests lying on its workbenches. */
+
 	private benches?: ForgeBenches;
-	/** At the quest office: the issues assigned to the operator, pinned on its board. */
+
 	private questBoard?: QuestBoard;
-	/** Things to fidget with in the place's `fidget` slots: pure play, never work. */
+
 	private fidgets?: Fidgets;
-	/** What moves in the place besides its characters, and out of doors the light of the time of day (ticket 11). */
+
 	private atmosphere?: AtmosphereLayer;
-	/** The place's own lamps (its `glow` slots), which out of doors glow brighter after dark; and their share now. */
+
 	private lamps: Glow[] = [];
 	private lampShare = 1;
-	/** At the inn: sleepers beyond its spots, upstairs; one who comes down takes the stairs, not the front door. */
+
 	private upstairs = new Set<string>();
-	/** Messenger birds carrying mail through the place. */
+
 	private birds!: Birds;
-	/** Mail already known: only mail sent while the operator is here flies as a bird. */
+
 	private mailSeen = new Set<string>();
-	/** The rookery's open window, where its own birds come and go; and when the next one does. */
+
 	private window?: Point;
 	private nextAmbient = 0;
 	private ambientCount = 0;
-	/** The pile of letters on the rookery's desk, shown while mail waits. */
+
 	private letters?: Phaser.GameObjects.Image;
-	/** The tag on the inn's stairs that says how many more sleep upstairs. */
+
 	private upstairsTag?: { count: number; tag: Phaser.GameObjects.Container };
 	private gridOverlay?: Phaser.GameObjects.Graphics;
-	/** With the walk grid shown, the avatar's walk: its straight runs and corners. */
+
 	private pathOverlay?: Phaser.GameObjects.Graphics;
 	private walkable!: Grid;
 	private avatar!: Walker;
 	private avatarLook = "";
-	/** Coming in through a door: the avatar fades in over its first steps from this point in the doorway. */
+
 	private avatarFade?: Point;
 	private leaving = false;
 	private drag?: { x: number; y: number; mid: Point; moved: boolean; consumed: boolean };
 	private keys?: Record<"left" | "right" | "up" | "down" | "a" | "d" | "w" | "s", Phaser.Input.Keyboard.Key>;
-	/** The point the camera centres on, in world px; it eases toward the avatar. */
+
 	private mid: Point = [0, 0];
-	/** Looking around (dragging, the arrow keys) holds the camera off the avatar until it walks again. */
+
 	private freeLook?: Point;
 	private zoomTarget = 1;
 	private pointerAt?: Point;
-	/** The cursor over the world (undefined off it) and the CSS last set; the click markers. */
+
 	private cursor?: { kind: CursorKind; art: CursorArt };
 	private cursorShown = "";
 	private marks!: ClickMarks;
 	private goTo?: string;
-	/** How far the interface's panels reach in from each edge of the window (CSS px), measured now and then. */
+
 	private insets: Insets = { top: 0, right: 0, bottom: 0, left: 0, panels: [] };
-	/** Where the interface's panels, the place's title, and the hover text are on screen (CSS px), measured with them. */
+
 	private uiBoxes: Box[] = [];
 	private insetsAt = -Infinity;
-	/** Each texture's filtering as last set (true for nearest), and the zoom and time of the last look over them. */
+
 	private filters = new Map<string, boolean>();
 	private filteredAt = { zoom: 0, time: -Infinity };
-	/** Where the avatar is leaving for, read when the fade ends (a `go-to` may add whom to walk up to). */
+
 	private departure?: SceneData;
 
 	constructor(store: WorldStore, view: ViewStore) {
@@ -358,7 +336,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.view = view;
 	}
 
-	/** The theme worn now: switching theme reopens the scene in the new one. */
 	private get theme(): Theme {
 		return worn();
 	}
@@ -425,7 +402,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.addRecruiter();
 		this.addAmbient();
 		this.signs = drawSigns(this, this.layout.place.doors, this.theme);
-		// Townsfolk stand in the square, and those it has no room for in the street beyond it (ticket 09).
+
 		const street = this.layout.ref.kind === "street";
 		if (this.layout.ref.kind === "square" || street)
 			this.square = new SquareLife(this, {
@@ -478,7 +455,7 @@ export class PlaceScene extends Phaser.Scene {
 			uiScale: () => Math.max(1, UI_ZOOM / this.cameras.main.zoom),
 		});
 		this.addAtmosphere();
-		// Characters first, so the avatar arrives clear of where they stand.
+
 		this.showCharacters(false);
 		this.addAvatar();
 		this.birds = new Birds(this);
@@ -491,8 +468,7 @@ export class PlaceScene extends Phaser.Scene {
 		this.zoomTarget = this.clampZoom(chosenZoom.get(this.layout.data) ?? this.defaultZoom());
 		camera.setZoom(this.zoomTarget);
 		this.mid = this.keep?.mid ?? this.followMid(camera.zoom);
-		// The quest office's board, the library's desk, and the forge's smith stand on the north wall: arriving, the view
-		// looks there first (the painting's top at the window's top), until the avatar walks.
+
 		const kind = this.layout.ref.kind;
 		if (!this.keep && (kind === "quest-office" || kind === "library" || kind === "forge")) {
 			const view = this.scale.height / camera.zoom;
@@ -546,7 +522,7 @@ export class PlaceScene extends Phaser.Scene {
 		if (this.avatarFade) {
 			const near = dist([this.avatar.x, this.avatar.y], this.avatarFade) / DOOR_FADE;
 			this.avatar.setAlpha(Math.min(1, near));
-			// Through the doorway (or off on another walk): fully here.
+
 			if (near >= 1) this.avatarFade = undefined;
 		}
 		this.wander?.update(delta);
@@ -569,10 +545,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.refreshHover();
 	}
 
-	/**
-	 * Nearest filtering for textures drawn at least as large as their own pixels, smoothing for those drawn smaller: each
-	 * texture by the largest of its images on screen. Textures are shared between scenes, so each scene sets them anew.
-	 */
 	private refilter(time: number) {
 		const zoom = this.cameras.main.zoom;
 		if (Math.abs(zoom - this.filteredAt.zoom) < 1e-3 && time - this.filteredAt.time < REFILTER_EVERY_MS) return;
@@ -594,24 +566,18 @@ export class PlaceScene extends Phaser.Scene {
 		}
 	}
 
-	/** The frames the painting is drawn from: `__BASE` for a whole painting, a strip each for a growing place. */
 	paintingFrames(): string[] {
 		return this.paintingImages.map((image) => String(image.frame.name));
 	}
 
-	/** Each texture's filtering now, for tests: true where its pixels are drawn crisp. */
 	filterView(): Record<string, boolean> {
 		return Object.fromEntries(this.filters);
 	}
 
-	// Read-only hooks for tests and the overlay.
-
-	/** The place shown now, to reopen it (in another theme). */
 	placeRef(): PlaceRef {
 		return this.layout.ref;
 	}
 
-	/** Fade the view out to the backdrop; resolves once it is dark (or at once when nothing is drawn). */
 	fadeAway(): Promise<void> {
 		const camera = this.cameras?.main;
 		if (!camera || !this.scene.isActive()) return Promise.resolve();
@@ -634,12 +600,10 @@ export class PlaceScene extends Phaser.Scene {
 		return this.present().map((figure) => figure.character.name);
 	}
 
-	/** Everyone whose session is in this place (not those walking out). */
 	figureViews(): FigureView[] {
 		return this.present().map((figure) => this.figureView(figure));
 	}
 
-	/** Those walking out because their session stopped or moved elsewhere. */
 	departingViews(): FigureView[] {
 		return [...this.figures.values()].filter((f) => f.leaving).map((figure) => this.figureView(figure));
 	}
@@ -664,7 +628,6 @@ export class PlaceScene extends Phaser.Scene {
 		};
 	}
 
-	/** A bark's bubble on screen, from the container as drawn (its tail left out). */
 	private barkBox(bark: NonNullable<Figure["bark"]>): Box {
 		const { container, body, width, height, tail } = bark.shape;
 		const scale = container.scaleX * this.cameras.main.zoom;
@@ -678,18 +641,14 @@ export class PlaceScene extends Phaser.Scene {
 		};
 	}
 
-	/** At the forge, the pull requests lying on its benches. */
 	workViews(): WorkView[] {
 		return this.benches?.views() ?? [];
 	}
 
-	/** At the quest office, the notices pinned on its board. */
 	noticeViews(): NoticeView[] {
 		return this.questBoard?.views() ?? [];
 	}
 
-	/** The place's fidget objects: what each shows and what it is doing. */
-	/** The world's cursor (which kind, which sprite, the CSS on the canvas) and the click markers showing. */
 	pointerView(): { cursor: CursorKind | null; art: CursorArt | null; css: string; marks: MarkView[] } {
 		const { kind = null, art = null } = this.cursor ?? {};
 		return { cursor: kind, art, css: this.cursorShown, marks: this.marks.views() };
@@ -699,17 +658,14 @@ export class PlaceScene extends Phaser.Scene {
 		return this.fidgets?.views() ?? [];
 	}
 
-	/** In the town square, the townsfolk standing for Slack channels with unread messages. */
 	townsfolkViews(): TownsfolkView[] {
 		return this.square?.views() ?? [];
 	}
 
-	/** The buildings' signs and the names lettered on them. */
 	signViews(): SignView[] {
 		return this.signs;
 	}
 
-	/** The place's host, where it stands, and the idle it plays. */
 	hostView(): { name: string; look: string; x: number; y: number; idle: string | null; moving: boolean } | undefined {
 		const host = this.host;
 		const { idle, moving } = host?.walker.view() ?? {};
@@ -725,18 +681,15 @@ export class PlaceScene extends Phaser.Scene {
 		);
 	}
 
-	/** Where someone is in a wander. */
 	private wanderView(id: string): { wander: WanderView["state"]; interest: string | null } {
 		const view = this.wander?.view(id);
 		return { wander: view?.state ?? "home", interest: view?.interest ?? null };
 	}
 
-	/** The pack's ambient characters standing here (ticket 08). */
 	ambientViews(): AmbientView[] {
 		return this.ambient?.views() ?? [];
 	}
 
-	/** The square's recruiter, where it stands. */
 	recruiterView(): { name: string; look: string; x: number; y: number } | undefined {
 		const recruiter = this.recruiter;
 		return recruiter && { name: recruiter.name, look: recruiter.look, x: recruiter.walker.x, y: recruiter.walker.y };
@@ -758,7 +711,6 @@ export class PlaceScene extends Phaser.Scene {
 		});
 	}
 
-	/** A point in tiles, on screen in CSS px. */
 	toScreen([x, y]: Point): Point {
 		const camera = this.cameras.main;
 		return [
@@ -767,7 +719,6 @@ export class PlaceScene extends Phaser.Scene {
 		];
 	}
 
-	/** A point on screen in CSS px, in tiles. */
 	toWorld([x, y]: Point): Point {
 		const camera = this.cameras.main;
 		return [
@@ -780,7 +731,6 @@ export class PlaceScene extends Phaser.Scene {
 		return { zoom: this.cameras.main.zoom, target: this.zoomTarget, min: this.minZoom(), max: this.maxZoom() };
 	}
 
-	/** The gallery's niches and the wings in them, left to right. */
 	galleryView():
 		| { niches: number; wings: { name: string; boarded: boolean; door: "open" | "closed" | "boarded" }[] }
 		| undefined {
@@ -804,7 +754,6 @@ export class PlaceScene extends Phaser.Scene {
 		return this.banners.map((banner) => ({ ...banner }));
 	}
 
-	/** What animates over the painting: each overlay's kind, place (tiles), and the frame or brightness it shows. */
 	overlayViews(): OverlayView[] {
 		return this.overlays
 			.filter(({ object }) => object.visible)
@@ -821,7 +770,6 @@ export class PlaceScene extends Phaser.Scene {
 		return showGrid;
 	}
 
-	/** Look at a door, as dragging the view there would; the camera returns to the avatar when it next walks. */
 	lookAt(doorName: string): boolean {
 		const door = this.doors.find((d) => d.name === doorName);
 		if (!door) return false;
@@ -832,15 +780,12 @@ export class PlaceScene extends Phaser.Scene {
 		return true;
 	}
 
-	// Drawing.
-
 	private drawPainting() {
 		const { place, strips, data } = this.layout;
 		const key = `painting:${data}`;
 		if (!strips) {
 			this.add;
-			// Its whole image by name: once furniture pieces are cut from it as frames, the texture's default frame is the
-			// first piece, and a later visit would stretch that piece over the place.
+
 			const whole = this.add
 				.image(0, 0, key, "__BASE")
 				.setOrigin(0)
@@ -849,11 +794,11 @@ export class PlaceScene extends Phaser.Scene {
 			this.paintingImages.push(whole);
 			return;
 		}
-		// A growing place: the painting cut into strips laid side by side, each seam blended over a few pixels.
+
 		const texture = this.textures.get(key);
 		const source = texture.getSourceImage() as HTMLImageElement;
 		const base = this.theme.places[data];
-		const ppt = source.width / base.cols; // painting px per tile
+		const ppt = source.width / base.cols;
 		const scale = TILE / ppt;
 		strips.forEach((strip, i) => {
 			const sx = Math.round(strip.from * ppt);
@@ -879,10 +824,6 @@ export class PlaceScene extends Phaser.Scene {
 		});
 	}
 
-	/**
-	 * Furniture in front: each piece of the painting drawn again at the depth of its feet line, so a character standing
-	 * behind it (feet further north) is hidden where the piece covers it.
-	 */
 	private drawForeground() {
 		const { place, strips, data } = this.layout;
 		if (strips || !place.foreground?.length) return;
@@ -904,7 +845,6 @@ export class PlaceScene extends Phaser.Scene {
 		}
 	}
 
-	/** A narrow patch that fades the painting at `left` into the painting at `right`. */
 	private seamTexture(source: HTMLImageElement, left: number, right: number): string {
 		const key = `seam:${left}:${right}`;
 		if (this.textures.exists(key)) return key;
@@ -931,11 +871,6 @@ export class PlaceScene extends Phaser.Scene {
 		return key;
 	}
 
-	/** Each wing's door in its niche: closed while agents work there, boarded up while it is empty. */
-	/**
-	 * Fire in hearths, water in basins, and warm light at lanterns and candles, each in its slot. The painting leaves
-	 * those slots empty or unlit; these bring them to life.
-	 */
 	private drawOverlays() {
 		this.overlays = [];
 		for (const slot of this.layout.place.overlaySlots) {
@@ -948,10 +883,9 @@ export class PlaceScene extends Phaser.Scene {
 		}
 	}
 
-	/** Letters waiting on the rookery's desk: drawn while any mail waits (for a sleeper, mostly). */
 	private addLetters(slot: OverlaySlot) {
 		const [x, y] = slot.at;
-		// On the desk: drawn over the desk's own foreground piece, as anything lying on it is.
+
 		const desk = this.layout.place.foreground?.find(
 			({ rect: [rx, ry, rw, rh] }) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh,
 		);
@@ -969,7 +903,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.letters?.setVisible((this.store.get()?.mail ?? []).some((item) => item.state === "waiting"));
 	}
 
-	/** Motes, leaves, birds, steam, and the like, and out of doors the light of the time of day (ticket 11). */
 	private addAtmosphere() {
 		const floor = gridFor(this.layout.place);
 		this.atmosphere = new AtmosphereLayer(this, {
@@ -980,7 +913,7 @@ export class PlaceScene extends Phaser.Scene {
 			open: (at) => isOpen(floor, at),
 			lamps: (share) => {
 				if (Math.abs(share - this.lampShare) < 0.01) return;
-				// Eased over a moment the first time too, so arriving after dark the lamps come up as the place fades in.
+
 				this.lampShare = share;
 				for (const lamp of this.lamps) lamp.level(0.5 * share, 900);
 			},
@@ -988,26 +921,19 @@ export class PlaceScene extends Phaser.Scene {
 		});
 	}
 
-	/** The place's atmosphere and light now, for tests. */
 	atmosphereView(): AtmosphereView | undefined {
 		return this.atmosphere?.view();
 	}
 
-	/** Messenger birds in flight with mail, for tests. */
 	birdViews(): BirdView[] {
 		return this.birds?.views() ?? [];
 	}
 
-	/**
-	 * New mail flies as a bird: between two characters here from one to the other, out by the door to someone elsewhere,
-	 * in by it from someone elsewhere; the operator's own letters leave from the avatar. In the rookery every letter
-	 * comes in by its window to the keeper.
-	 */
 	private flyNewMail() {
 		for (const item of this.store.get()?.mail ?? []) {
 			if (this.mailSeen.has(item.id)) continue;
 			this.mailSeen.add(item.id);
-			// Mail sent long ago that only now shows (a reconnect) is not news.
+
 			if (Date.now() - item.sentAt > 120_000) continue;
 			this.flyLetter(item);
 		}
@@ -1016,7 +942,7 @@ export class PlaceScene extends Phaser.Scene {
 	private flyLetter(item: MailItem) {
 		const { door } = this.doorway();
 		const [dx, dy, dw, dh] = door.rect;
-		// The doorway, at the height of the door's middle above the floor in front of it.
+
 		const doorway: Perch = { at: [dx + dw / 2, door.standAt[1]], lift: Math.max(0.6, door.standAt[1] - (dy + dh / 2)) };
 		if (this.layout.ref.kind === "rookery" && this.window && this.host) {
 			const [wx, wy] = this.window;
@@ -1030,7 +956,6 @@ export class PlaceScene extends Phaser.Scene {
 		else if (receiver) this.birds.fly(item.id, item.from, item.to, doorway, receiver);
 	}
 
-	/** Where a bird takes off from or lands by a character here (its shoulder), or the avatar for the operator. */
 	private perchOf(id: string): Perch | undefined {
 		if (id === OPERATOR) return { at: [this.avatar.x, this.avatar.y], lift: 1.3 };
 		const figure = this.figures.get(id);
@@ -1038,7 +963,6 @@ export class PlaceScene extends Phaser.Scene {
 		return { at: [figure.walker.x, figure.walker.y], lift: figure.walker.pose === "seated" ? 1.05 : 1.3 };
 	}
 
-	/** The rookery's own birds: now and then one comes in by the window and goes out by the door, or the other way. */
 	private ambientBirds(time: number) {
 		if (!this.window) return;
 		if (!this.nextAmbient) this.nextAmbient = time + Phaser.Math.Between(2500, 5000);
@@ -1053,7 +977,6 @@ export class PlaceScene extends Phaser.Scene {
 		else this.birds.fly(id, "door", "window", low, high, { out: true, ambient: true });
 	}
 
-	/** A bed standing on the floor, its foot's bottom centre at the slot; whoever holds its spot sleeps in it. */
 	private addBed(slot: OverlaySlot) {
 		const [x, y] = slot.at;
 		const image = this.add
@@ -1064,7 +987,6 @@ export class PlaceScene extends Phaser.Scene {
 		if (slot.spot !== undefined) this.beds.set(slot.spot, { slot, image });
 	}
 
-	/** The bed's quilt and sheet alone, cut along the turned-down sheet, to draw over a sleeper's shoulders. */
 	private quiltTexture(): string {
 		const key = "bed:quilt";
 		if (this.textures.exists(key)) return key;
@@ -1088,8 +1010,6 @@ export class PlaceScene extends Phaser.Scene {
 		return key;
 	}
 
-	/** The host at its post (the innkeeper behind the bar), facing the room; it never walks. */
-	/** The square's recruiter at its booth, facing the room; it never walks. */
 	private addRecruiter() {
 		const at = this.layout.place.recruiter?.at;
 		const look = at && recruiterLook(this.theme);
@@ -1100,7 +1020,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.wander?.add("recruiter", "host", walker, () => at);
 	}
 
-	/** The pack's ambient characters who stand here: presentation only, they send nothing anywhere (ticket 08). */
 	private addAmbient() {
 		if (!this.layout.place.ambient?.length) return;
 		this.ambient = new AmbientCast(this, {
@@ -1111,7 +1030,7 @@ export class PlaceScene extends Phaser.Scene {
 			toScreen: (at) => this.toScreen(at),
 			zoom: () => this.cameras.main.zoom,
 			screen: () => ({ width: this.cameras.main.width, height: this.cameras.main.height }),
-			// Clear of the interface and of the agents' barks, which come first.
+
 			covered: (box) =>
 				[...this.uiBoxes, ...[...this.figures.values()].flatMap((f) => (f.bark ? [this.barkBox(f.bark)] : []))].some(
 					(other) => overlaps(box, other),
@@ -1126,12 +1045,11 @@ export class PlaceScene extends Phaser.Scene {
 		if (!host || !look) return;
 		const walker = new Walker(this, host.look, look, host.at, "down");
 		this.host = { walker, look: host.look, name: this.theme.labels[host.look] ?? host.look, at: host.at };
-		// Standing at its post it idles now and then, and shifts a little behind its counter (tickets 06 and 07).
+
 		walker.live(`host:${this.layout.key}`);
 		this.wander?.add("host", "host", walker, () => host.at);
 	}
 
-	/** A fire standing on the hearth floor: its four frames flicker in a loose rhythm, with warm light around it. */
 	private addFire(slot: OverlaySlot) {
 		const [x, y] = slot.at;
 		const w = (slot.w ?? 1.2) * TILE;
@@ -1155,12 +1073,11 @@ export class PlaceScene extends Phaser.Scene {
 		this.addGlow({ kind: "glow", at: [x, y - (slot.w ?? 1.2) * 0.45], r: (slot.w ?? 1.2) * 2.1 }, 0.42);
 	}
 
-	/** Water filling a basin's ellipse, clipped to it (and around anything standing in it), its ripples cycling. */
 	private addWater(slot: OverlaySlot) {
 		const [cx, cy] = slot.at;
 		const rx = (slot.rx ?? 2) * TILE;
 		const ry = (slot.ry ?? 1) * TILE;
-		const RES = 2; // canvas px per world px, so the water stays crisp zoomed in
+		const RES = 2;
 		const keys = [0, 1, 2, 3].map((i) => {
 			const key = `water:${this.layout.data}:${cx}:${cy}:${i}`;
 			if (this.textures.exists(key)) return key;
@@ -1170,7 +1087,6 @@ export class PlaceScene extends Phaser.Scene {
 			canvas.height = Math.ceil(ry * 2 * RES);
 			const ctx = canvas.getContext("2d")!;
 			if (slot.hole?.length) {
-				// Round anything standing in the water (a fountain's pillar): its edge stays crisp.
 				ctx.beginPath();
 				ctx.rect(0, 0, canvas.width, canvas.height);
 				const [first, ...rest] = slot.hole.map(
@@ -1181,9 +1097,9 @@ export class PlaceScene extends Phaser.Scene {
 				ctx.closePath();
 				ctx.clip("evenodd");
 			}
-			// The pool's own oval is a little larger than the basin, so its edge tucks under the rim.
+
 			ctx.drawImage(source, -0.06 * canvas.width, -0.08 * canvas.height, canvas.width * 1.12, canvas.height * 1.16);
-			// The basin's oval, its edge feathered over a few pixels so the water meets the stone softly, not in steps.
+
 			ctx.globalCompositeOperation = "destination-in";
 			ctx.setTransform(1, 0, 0, ry / rx, rx * RES, ry * RES);
 			const edge = ctx.createRadialGradient(0, 0, 0, 0, 0, rx * RES);
@@ -1195,13 +1111,12 @@ export class PlaceScene extends Phaser.Scene {
 			this.textures.addCanvas(key, canvas);
 			return key;
 		});
-		// A basin traced as a foreground piece (so characters behind it are hidden) would cover its water: the water lies
-		// just over that piece instead. Nobody stands in a basin, so nobody is under the water either way.
+
 		const basin = this.layout.place.foreground?.find(
 			({ rect: [x, y, w, h] }) => cx >= x && cx <= x + w && cy >= y && cy <= y + h,
 		);
 		const depth = basin ? basin.feet * TILE - 0.4 : -1;
-		// Two layers cross-fade from each ripple frame into the next, so the water moves smoothly rather than jumping.
+
 		const below = this.add
 			.image(cx * TILE, cy * TILE, keys[0])
 			.setScale(1 / RES)
@@ -1219,7 +1134,6 @@ export class PlaceScene extends Phaser.Scene {
 			duration: WATER_FRAME_MS,
 			repeat: -1,
 			onUpdate: (tween) => {
-				// Eased so each frame rests a moment before the next one comes in.
 				above.setAlpha(WATER_ALPHA * Phaser.Math.Easing.Sine.InOut(tween.getValue() ?? 0));
 			},
 			onRepeat: () => {
@@ -1231,10 +1145,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.overlays.push({ slot, object: below, frame: () => frame });
 	}
 
-	/**
-	 * Warm light around a lantern or a candle: a soft halo added to what is under it, flickering a little. A fidget's
-	 * light (`listed` false) turns it up and down through the handle; the place's own glows are listed as overlays.
-	 */
 	private addGlow(
 		slot: OverlaySlot,
 		strength = 0.5,
@@ -1242,7 +1152,7 @@ export class PlaceScene extends Phaser.Scene {
 		depth = glowDepth(this.layout.place, slot.at),
 	): Glow {
 		const [x, y] = slot.at;
-		// Sorted with what it lights (not over everyone), and never darkened by the night.
+
 		const glow = keepLit(
 			this.add
 				.image(x * TILE, y * TILE, this.glowTexture())
@@ -1252,7 +1162,7 @@ export class PlaceScene extends Phaser.Scene {
 		);
 		const scale = ((slot.r ?? 0.9) * TILE * 2) / glow.width;
 		glow.setScale(scale);
-		// The flicker eases toward a new brightness and size now and then; the level scales it.
+
 		const light = { level: strength, flicker: 1, size: 1 };
 		const apply = () => glow.setAlpha(light.level * light.flicker).setScale(scale * light.size);
 		let fade: Phaser.Tweens.Tween | undefined;
@@ -1284,7 +1194,6 @@ export class PlaceScene extends Phaser.Scene {
 		};
 	}
 
-	/** One warm radial light, drawn once and shared by every glow. */
 	private glowTexture(): string {
 		const key = "glow:warm";
 		if (this.textures.exists(key)) return key;
@@ -1305,9 +1214,6 @@ export class PlaceScene extends Phaser.Scene {
 		return key;
 	}
 
-	/**
-	 * Each room's door in its niche. Wing doors follow their team's state; the meeting room stays open.
-	 */
 	private drawRoomDoors() {
 		const { niches } = this.layout;
 		const template = this.theme.places.gallery.niches;
@@ -1318,10 +1224,9 @@ export class PlaceScene extends Phaser.Scene {
 				.image((x + dx + dw / 2) * TILE, (dy + dh) * TILE, `overlay:door-${door}`)
 				.setOrigin(0.5, 1)
 				.setDepth((dy + dh) * TILE - TILE);
-			// Each state's sprite keeps its own proportions, at the niche's height.
+
 			image.setScale((dh * TILE) / image.height);
-			// Without the sprite's outermost pixels: the anime school's door sprites carry a line of magenta keying fringe
-			// along their sides and foot, which drew a pink line down the door frame.
+
 			image.setCrop(1, 0, image.width - 2, image.height - 1);
 			if (door === "open") this.addGlow({ kind: "glow", at: [x + dx + dw / 2, dy + dh - 0.35], r: dw * 0.75 }, 0.32);
 			this.banner(x, template.banner[1], name);
@@ -1336,7 +1241,6 @@ export class PlaceScene extends Phaser.Scene {
 		}
 	}
 
-	/** The wing room's own banner on its painted rod. */
 	private drawBanners() {
 		const { ref, title } = this.layout;
 		if (ref.kind !== "wing") return;
@@ -1345,12 +1249,6 @@ export class PlaceScene extends Phaser.Scene {
 			if (slot.kind === "banner") this.banner(slot.at[0], slot.at[1], name);
 	}
 
-	/**
-	 * A cream banner hung with its rod at (x, top), the name stitched on it at the largest size that fits: on one line,
-	 * else broken after `-`, `_`, `.`, `/`, or a space onto up to four lines, never smaller than legible. A name that still
-	 * does not fit is abbreviated, word by word (`reconciliation` to `reconc.`), and cut short with an ellipsis only as a
-	 * last resort; the banner answers the pointer with the full name.
-	 */
 	private banner(x: number, top: number, name: string) {
 		const image = this.add
 			.image(x * TILE, top * TILE, "overlay:banner-cream")
@@ -1358,8 +1256,7 @@ export class PlaceScene extends Phaser.Scene {
 			.setDepth((top + 6) * TILE);
 		const style = this.theme.world.banner;
 		image.setScale((style.tiles * TILE) / image.width);
-		// The name stays inside the cloth (the pack measures it: inside the fantasy banner's vine border, above its
-		// swallowtail).
+
 		const [tx, ty, tw, th] = style.text;
 		const width = image.displayWidth * tw;
 		const height = image.displayHeight * th;
@@ -1376,7 +1273,7 @@ export class PlaceScene extends Phaser.Scene {
 			.setDepth(image.depth + 1);
 		const view: BannerView = { name, text: "", size: 0, fits: false, abbreviated: false };
 		this.banners.push(view);
-		// The cloth answers the pointer with the whole name, however it is stitched.
+
 		this.bannerRects.push({
 			name,
 			rect: [
@@ -1386,7 +1283,7 @@ export class PlaceScene extends Phaser.Scene {
 				(style.hover[3] * image.displayHeight) / TILE,
 			],
 		});
-		// A separator may hang just past the edge, as punctuation does.
+
 		const fits = (line: string) => {
 			text.setText(line.trim().replace(/[-_./]$/, ""));
 			return text.width <= width + 0.5;
@@ -1401,7 +1298,7 @@ export class PlaceScene extends Phaser.Scene {
 			text.setText(shown);
 		};
 		const parts = bannerParts(name);
-		// On one line while it reads well, else on as many lines as it takes at the largest size that fits.
+
 		for (let size = BANNER_FONT[0]; size >= BANNER_ONE_LINE; size--) {
 			text.setFontSize(size);
 			if (fits(name)) return done(size, [name]);
@@ -1413,8 +1310,7 @@ export class PlaceScene extends Phaser.Scene {
 			text.setText(lines.join("\n"));
 			if (text.height <= height) return done(size, lines);
 		}
-		// Too long whole at the smallest legible size: each word that does not fit its line is cut to the longest start
-		// that does, with a full stop ("reconc."), and the words go on as few lines as fit.
+
 		const size = BANNER_FONT[1];
 		text.setFontSize(size);
 		const fitsExactly = (line: string) => {
@@ -1425,14 +1321,14 @@ export class PlaceScene extends Phaser.Scene {
 			const sep = /[-_./ ]$/.test(part) ? part.slice(-1) : "";
 			const word = sep ? part.slice(0, -1) : part;
 			if (fits(part)) return part;
-			// A start of up to six letters that fits and ends on a consonant ("custom.", "reconc."), at least three.
+
 			let n = Math.min(word.length - 1, BANNER_ABBREVIATION);
 			while (n > 3 && (!fitsExactly(`${word.slice(0, n)}.`) || /[aeiouy]/i.test(word[n - 1]))) n--;
 			view.abbreviated = true;
-			// The full stop ends the word; the next one starts after a space, not the separator.
+
 			return `${word.slice(0, n)}.${sep ? " " : ""}`;
 		});
-		// As many lines as the cloth holds at this size (a short sign plate holds fewer than a banner), at most five.
+
 		const tall = (count: number) => {
 			text.setText(Array.from({ length: count }, () => "Ag").join("\n"));
 			return text.height <= height + 0.5;
@@ -1441,7 +1337,6 @@ export class PlaceScene extends Phaser.Scene {
 		while (most > 1 && !tall(most)) most--;
 		let lines = bannerLines(short, fits, most);
 		if (!lines) {
-			// More words than lines: as many as fit, the last line cut short.
 			lines = [];
 			let line = "";
 			for (const part of short) {
@@ -1523,18 +1418,12 @@ export class PlaceScene extends Phaser.Scene {
 		for (const [x, y] of path.slice(1)) graphics.fillCircle(x * TILE, y * TILE, 4);
 	}
 
-	// Characters.
-
-	/**
-	 * Put the place's characters at their spots. With `animate`, a character new to the place walks in through its
-	 * door to its spot, and one whose session left walks out by it; otherwise they are simply there.
-	 */
 	private showCharacters(animate: boolean) {
 		const world = this.store.get();
 		const room = this.layout.place.spots.length;
 		const characters = charactersIn(this.layout.ref, world, room);
 		const ids = new Set(characters.map((character) => character.id));
-		// At the inn, a sleeper still asleep but no longer among the newest goes upstairs; one who woke goes out.
+
 		const stillAsleep = new Set((world?.dormant ?? []).map((agent) => agent.id));
 		const inn = this.layout.ref.kind === "inn";
 		for (const figure of this.figures.values())
@@ -1564,21 +1453,20 @@ export class PlaceScene extends Phaser.Scene {
 			else if (moved) figure.walker.moveTo(spot);
 			this.dress(figure);
 		}
-		// In the square, townsfolk stand on the painted spots agents left free.
+
 		const held = new Set(spots.values());
 		this.square?.arrange(
 			this.layout.place.spots.map((_, i) => i).filter((i) => !held.has(i)),
 			animate,
 		);
-		// Characters block only their own footprint, at the spot they stand on or are walking to; so do the host and
-		// the townsfolk.
+
 		this.walkable = gridFor(this.layout.place, [
 			...this.present().map(({ spot }) => spot!),
 			...(this.host ? [this.host.at] : []),
 			...(this.recruiter ? [this.recruiter.at] : []),
 			...(this.square?.occupied() ?? []),
 			...(this.ambient?.occupied() ?? []),
-			// A cat on the floor is walked round, as a body is.
+
 			...floorFidgets(this.layout.place),
 		]);
 		for (const figure of arrivals)
@@ -1589,7 +1477,6 @@ export class PlaceScene extends Phaser.Scene {
 		}
 	}
 
-	/** On the stairs, how many more sleep upstairs than the inn below has spots for. */
 	private tagUpstairs(count: number) {
 		if (this.upstairsTag?.count === count) return;
 		this.upstairsTag?.tag.destroy();
@@ -1603,7 +1490,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.upstairsTag = { count, tag };
 	}
 
-	/** A tag in the world (the inn's upstairs count) fades while a panel or the title covers it, like a bark. */
 	private keepTagsClear(delta: number) {
 		const tag = this.upstairsTag?.tag;
 		if (!tag) return;
@@ -1615,7 +1501,6 @@ export class PlaceScene extends Phaser.Scene {
 		tag.setAlpha(Phaser.Math.Clamp(tag.alpha + (covered ? -step : step), 0, 1));
 	}
 
-	/** The inn's stairs up to the rooms, where sleepers beyond its spots rest. */
 	private stairs(): Door | undefined {
 		return this.layout.place.doors.find((door) => door.to === "rooms");
 	}
@@ -1625,7 +1510,7 @@ export class PlaceScene extends Phaser.Scene {
 		const walker = new Walker(this, look, this.theme.looks[look], [x, y], "down");
 		const figure: Figure = { character, walker, look, leaving: false, barks: 0 };
 		this.figures.set(character.id, figure);
-		// Standing about, it idles now and then, and an idle agent steps out to somewhere near and back (06, 07).
+
 		walker.live(character.id);
 		this.wander?.add(
 			character.id,
@@ -1637,10 +1522,6 @@ export class PlaceScene extends Phaser.Scene {
 		return figure;
 	}
 
-	/**
-	 * An agent may step out only while it stands about: not at work or asking, not waiting to show you what it finished
-	 * (you find it at its spot), not coming in or asleep at the inn.
-	 */
 	private mayWander(figure: Figure): boolean {
 		const { character } = figure;
 		return (
@@ -1652,7 +1533,6 @@ export class PlaceScene extends Phaser.Scene {
 		);
 	}
 
-	/** Where others stand (their spots, the host, the recruiter, townsfolk, floor fidgets): walked round by wanderers. */
 	private footprints(): Point[] {
 		return [
 			...this.present().map(({ spot }) => spot!),
@@ -1664,20 +1544,18 @@ export class PlaceScene extends Phaser.Scene {
 		];
 	}
 
-	/** The door characters come in and go out by (or `via`), and a point just inside its doorway where they appear. */
 	private doorway(via?: Door): { door: Door; inside: Point } {
 		const { place } = this.layout;
 		const door = via ?? place.doors.find((d) => d.name === place.enterBy) ?? place.doors[0];
 		const [x, y, w, h] = door.rect;
 		const [sx, sy] = door.standAt;
-		// From the stand point, a short step into the door's rect, toward its middle.
+
 		const mid: Point = [x + w / 2, y + h / 2];
 		const length = Math.hypot(mid[0] - sx, mid[1] - sy) || 1;
 		const step = Math.min(DOOR_FADE, length);
 		return { door, inside: [sx + ((mid[0] - sx) / length) * step, sy + ((mid[1] - sy) / length) * step] };
 	}
 
-	/** A newcomer comes through the door, fading in on the threshold, and walks to its spot. */
 	private enter(figure: Figure, via?: Door) {
 		const { door, inside } = this.doorway(via);
 		figure.walker.moveTo(inside);
@@ -1687,7 +1565,6 @@ export class PlaceScene extends Phaser.Scene {
 		figure.walker.walk([inside, door.standAt, ...onward.slice(1)], () => this.settle(figure));
 	}
 
-	/** Its session stopped or moved on: it walks to the door and fades through it, then is gone. */
 	private leave(figure: Figure, animate: boolean, via?: Door) {
 		figure.leaving = true;
 		this.wander?.remove(figure.character.id);
@@ -1710,13 +1587,11 @@ export class PlaceScene extends Phaser.Scene {
 		figure.walker.walk([...way, inside], gone);
 	}
 
-	/** Walk a figure from where it is to its spot. */
 	private walkToSpot(figure: Figure) {
 		const from: Point = [figure.walker.x, figure.walker.y];
 		figure.walker.walk(this.pathFor(figure, from, figure.spot!), () => this.settle(figure));
 	}
 
-	/** A path for a character, around furniture and everyone else's spot (not its own). */
 	private pathFor(figure: Figure, from: Point, to: Point): Point[] {
 		const others = this.present()
 			.filter((f) => f !== figure && f.spot)
@@ -1728,30 +1603,26 @@ export class PlaceScene extends Phaser.Scene {
 		return Math.hypot(last[0] - to[0], last[1] - to[1]) > 0.01 ? [...points, to] : points;
 	}
 
-	/** At its spot: face the room (seated and asking poses are drawn their own way). */
 	private settle(figure: Figure) {
 		figure.fade = undefined;
 		figure.walker.setAlpha(1);
 		figure.walker.face([figure.walker.x, figure.walker.y + 1]);
 	}
 
-	/** Out of doors (the square, the street): no desks, so those at work stand. */
 	private outdoors(): boolean {
 		return this.layout.ref.kind === "square" || this.layout.ref.kind === "street";
 	}
 
-	/** How many townsfolk stand in the square: its painted spots no agent holds (agents take spots first). */
 	private squareRoom(): number {
 		const square = this.theme.places.square;
 		return Math.max(0, square.spots.length - charactersIn({ kind: "square" }, this.store.get()).length);
 	}
 
-	/** Pose, badge, and the seated beat by the character's state; at the inn, asleep. */
 	private dress(figure: Figure) {
 		if (this.layout.ref.kind === "inn") return this.sleep(figure);
 		const { character, walker } = figure;
 		const pose = poseFor(character, this.outdoors());
-		// Called to work (or to ask) while out wandering: it walks back first, and sits or asks at its spot.
+
 		if (figure.spot && (pose !== "standing" || needsYou(character))) this.wander?.recall(figure.spot);
 		walker.setPose(pose);
 		walker.tempo = tempoFor(character);
@@ -1766,10 +1637,6 @@ export class PlaceScene extends Phaser.Scene {
 		}
 	}
 
-	/**
-	 * A sleeper dozes at its table (the seated frame, still) or lies in the bed whose spot it holds, with a "z" rising.
-	 * Both show once it has walked to its spot; the walker itself is hidden while it lies in bed.
-	 */
 	private sleep(figure: Figure) {
 		const bed = figure.spotIndex === undefined ? undefined : this.beds.get(figure.spotIndex);
 		figure.walker.setPose(bed ? "in-bed" : "dozing");
@@ -1777,7 +1644,7 @@ export class PlaceScene extends Phaser.Scene {
 		if (figure.sleep && !!figure.sleep.bed !== !!bed) this.wakeUp(figure);
 		if (figure.sleep) return;
 		const sprite = figure.walker.sprite.setTint(SLEEP_TINT);
-		// Breathing: the dozing figure rises and settles a touch, slowly.
+
 		const breath = bed
 			? undefined
 			: this.tweens.add({
@@ -1795,7 +1662,6 @@ export class PlaceScene extends Phaser.Scene {
 		};
 	}
 
-	/** The sleeper's head on the bed's pillow, tucked in under the quilt. */
 	private inBed(figure: Figure, slot: OverlaySlot, bed: Phaser.GameObjects.Image): InBed {
 		const { frame, baseline } = this.theme.looks[figure.look];
 		const scale = bed.scaleX;
@@ -1807,7 +1673,7 @@ export class PlaceScene extends Phaser.Scene {
 		const headScale = ((PERSON_TILES * TILE) / STANDING) * HEAD_SCALE;
 		const [above, tall] = HEAD_CUT;
 		const top = Math.max(0, baseline - above);
-		// The face looks out of the pillow: the cut's middle sits on the pillow's middle.
+
 		const head = this.add
 			.image(pillow[0] * TILE, pillow[1] * TILE, `look:${figure.look}`, 14)
 			.setCrop(0, top, frame[0], tall)
@@ -1828,7 +1694,6 @@ export class PlaceScene extends Phaser.Scene {
 		return { head, quilt, pillow, rect: [slot.at[0] - w / 2, slot.at[1] - h * 0.8, w, h * 0.8] };
 	}
 
-	/** Out of bed and no longer asleep: its "z" and its place in bed go. */
 	private wakeUp(figure: Figure) {
 		if (figure.sleep?.breath) {
 			figure.sleep.breath.remove();
@@ -1851,14 +1716,11 @@ export class PlaceScene extends Phaser.Scene {
 		figure.bark = undefined;
 	}
 
-	/** Let a bark go: it fades out, then is gone. */
 	private hushBark(figure: Figure) {
 		if (figure.bark) figure.bark.going = true;
 	}
 
-	/** Every frame: walk, fade in doorways, keep badges and barks over heads, and let those who need you bark. */
 	private liveCharacters(time: number, delta: number) {
-		// Badges and barks keep at least their own size on screen when the view zooms out, so they stay legible.
 		const ui = Math.max(1, UI_ZOOM / this.cameras.main.zoom);
 		for (const figure of this.figures.values()) {
 			const { walker } = figure;
@@ -1888,11 +1750,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.liveBarks(time, delta, ui);
 	}
 
-	/**
-	 * Barks: each over its speaker's head, fading in and out. A bark never covers another bark, the place's title, or
-	 * the interface's panels: its bubble slides sideways over the tail to find room, and with none it fades until room
-	 * returns. A new bark waits its turn when there is no room for it, and at most `BARKS_AT_ONCE` show.
-	 */
 	private liveBarks(time: number, delta: number, ui: number) {
 		const camera = this.cameras.main;
 		const scale = ui * camera.zoom;
@@ -1901,7 +1758,7 @@ export class PlaceScene extends Phaser.Scene {
 			const { walker } = figure;
 			return [walker.x, walker.y - BADGE_LIFT[walker.pose] - ((figure.badge ? 14 : 2) * ui) / TILE];
 		};
-		/** The first slide (px) at which the bark's bubble has room on screen, preferring where it already is. */
+
 		const room = (shape: BarkShape, at: Point, prefer: number): number | undefined => {
 			const [sx, sy] = this.toScreen(at);
 			const slides = [prefer, 0, -shape.slide / 2, shape.slide / 2, -shape.slide, shape.slide];
@@ -1950,7 +1807,6 @@ export class PlaceScene extends Phaser.Scene {
 			const shape = drawBark(this, line);
 			const slide = count < BARKS_AT_ONCE ? room(shape, anchor(figure), 0) : undefined;
 			if (slide === undefined) {
-				// No room now (or enough barks already): try again a little later.
 				shape.container.destroy();
 				figure.nextBark = time + BARK_RETRY_MS;
 				continue;
@@ -1963,11 +1819,6 @@ export class PlaceScene extends Phaser.Scene {
 		}
 	}
 
-	/**
-	 * The operator's avatar. Coming through a door, it steps in from the doorway, fading in, and walks on to the entry
-	 * for where it came from (kept clear of anyone standing there), facing into the room; laid out again, it stands
-	 * where it stood.
-	 */
 	private addAvatar() {
 		const name = avatarLookIn(this.theme, this.store.get());
 		this.avatarLook = name;
@@ -1995,14 +1846,12 @@ export class PlaceScene extends Phaser.Scene {
 		);
 	}
 
-	/** The door the avatar came in by: the one whose stand point is at (or near) where it arrives. */
 	private arrivalDoor([ax, ay]: Point): SceneDoor | undefined {
 		return this.doors
 			.filter(({ standAt: [x, y] }) => Math.hypot(x - ax, y - ay) < 1.6)
 			.sort((a, b) => dist(a.standAt, [ax, ay]) - dist(b.standAt, [ax, ay]))[0];
 	}
 
-	/** A point near `at` where the avatar stands clear of everyone at their spots (and the host), on open floor. */
 	private clearOfOthers(at: Point): Point {
 		const others = [
 			...this.present().map(({ spot }) => spot!),
@@ -2012,8 +1861,7 @@ export class PlaceScene extends Phaser.Scene {
 			...(this.ambient?.occupied() ?? []),
 			...floorFidgets(this.layout.place),
 		];
-		// Too close: beside them, or in front of them (south) by less than a body's height, where the avatar would cover
-		// them, or just behind them, where they would cover it.
+
 		const crowded = ([x, y]: Point) =>
 			others.some(([ox, oy]) => Math.abs(ox - x) < 0.95 && y - oy > -0.9 && y - oy < PERSON_TILES + 0.1);
 		if (!crowded(at)) return at;
@@ -2031,7 +1879,7 @@ export class PlaceScene extends Phaser.Scene {
 			}
 		return at;
 	}
-	/** The operator chose another look in Settings: the avatar wears it where it stands. */
+
 	private dressAvatar() {
 		const name = avatarLookIn(this.theme, this.store.get());
 		if (name === this.avatarLook) return;
@@ -2039,9 +1887,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.avatar.setLook(name, this.theme.looks[name]);
 	}
 
-	// What the pointer is over, and what can be done with it.
-
-	/** Characters under a point (front first), then doors whose rect holds it. Doors answer only over the door. */
 	private targetsAt([x, y]: Point): Target[] {
 		const scale = (PERSON_TILES * TILE) / STANDING / TILE;
 		const over = (walker: Walker) => {
@@ -2070,7 +1915,6 @@ export class PlaceScene extends Phaser.Scene {
 		return [...people, ...townsfolk, ...host, ...work, ...notices, ...fidgets, ...doors, ...banners, ...furniture];
 	}
 
-	/** A banner: its whole name, however short it had to be stitched. */
 	private bannerTarget(name: string): Target {
 		const ref = this.layout.ref;
 		const notices =
@@ -2128,7 +1972,6 @@ export class PlaceScene extends Phaser.Scene {
 		];
 	}
 
-	/** The host: talking to it opens its place's panel (the innkeeper's register). */
 	private hostTarget(): Target {
 		const host = this.host!;
 		const open = () => this.openHostPanel();
@@ -2139,7 +1982,6 @@ export class PlaceScene extends Phaser.Scene {
 		};
 	}
 
-	/** The square's recruiter: talking to it, or asking it at once, opens the form for an independent agent. */
 	private recruiterTarget(): Target {
 		const { name, at } = this.recruiter!;
 		const open = () => recruiting.open({ kind: "independent" });
@@ -2153,7 +1995,6 @@ export class PlaceScene extends Phaser.Scene {
 		};
 	}
 
-	/** Recruiting a worker for the coordinator of the headquarters the operator is in, while it is awake. */
 	private recruitWorker(): Action[] {
 		const ref = this.layout.ref;
 		const id = isOutside(ref) ? undefined : ref.headquarters;
@@ -2166,7 +2007,6 @@ export class PlaceScene extends Phaser.Scene {
 		];
 	}
 
-	/** The notepad of the coordinator whose headquarters the operator is in, while it is awake. */
 	private readNotes(): Action[] {
 		const ref = this.layout.ref;
 		const id = isOutside(ref) ? undefined : ref.headquarters;
@@ -2184,9 +2024,7 @@ export class PlaceScene extends Phaser.Scene {
 		if (this.layout.ref.kind === "library") atlassian.open({ kind: "librarian" });
 	}
 
-	/** Furniture that answers the pointer: asking at an inn table opens the innkeeper's register at once. */
 	private furnitureTarget(piece: { name: string; rect: Rect; use: string }): Target {
-		// The coordinator's desk recruits a worker (ticket 10).
 		if (piece.use === "recruit") return { name: piece.name, tone: "object", actions: this.recruitWorker() };
 		if (piece.use === "notes")
 			return { name: piece.name, tone: "object", actions: [...this.workplaceActions(), ...this.readNotes()] };
@@ -2206,10 +2044,6 @@ export class PlaceScene extends Phaser.Scene {
 		return { name: piece.name, tone: "object", actions };
 	}
 
-	/**
-	 * The quest office's board (the piece holding its notices) reads as the clerk's list; its counter and the library's
-	 * desks ask the host.
-	 */
 	private atlassianFurniture(piece: { name: string; rect: Rect; use: string }) {
 		const [x, y, w, h] = piece.rect;
 		const holdsNotices = this.layout.place.overlaySlots.some(
@@ -2219,7 +2053,6 @@ export class PlaceScene extends Phaser.Scene {
 		return [action(holdsNotices ? "Read" : "Ask at", () => atlassian.open(panel))];
 	}
 
-	/** A sleeper at the inn: read its last conversation (the default), or wake it. */
 	private sleeperTarget(character: Character): Target {
 		const name = character.name;
 		const agent = () => this.store.get()?.dormant?.find((sleeper) => sleeper.id === character.id);
@@ -2228,7 +2061,6 @@ export class PlaceScene extends Phaser.Scene {
 			name,
 			tone: "character",
 			actions: [
-				// Legacy former records are available for reading, not reactivation.
 				...(former ? [] : this.giveAction(character, false)),
 				action(
 					"Read last talk with",
@@ -2253,7 +2085,7 @@ export class PlaceScene extends Phaser.Scene {
 			tone: "character",
 			actions: [
 				...this.giveAction(character, true),
-				// The conversation panel and the interface's character card answer these intents.
+
 				action(
 					"Talk to",
 					() => this.walkUpTo(character, () => this.view.intend({ kind: "talk-to", character: character.id })),
@@ -2262,7 +2094,7 @@ export class PlaceScene extends Phaser.Scene {
 				),
 				action("Examine", () => this.view.intend({ kind: "examine", character: character.id }), name, "character"),
 				...(this.layout.ref.kind === "meeting-room" ? this.agendaAction() : []),
-				// A coordinator recruits workers who report to it (ticket 10).
+
 				...(character.role === "coordinator"
 					? [
 							action(say(this.theme, "recruit-worker"), () =>
@@ -2273,26 +2105,25 @@ export class PlaceScene extends Phaser.Scene {
 							action("Read the notes of", () => notepad.open({ id: character.id, name }), name, "character"),
 						]
 					: []),
-				// Renaming and retiring need no walk: each opens its form at once (ticket 12).
+
 				action("Rename", () => renaming.open(character), name, "character"),
 				...(character.facts?.title
 					? [action(say(this.theme, "retire"), () => retiring.open(character), name, "character")]
 					: []),
-				// Ending its session asks first while it is busy (the interface's confirmation).
+
 				action("End session of", () => void placeActions.endSession(character), name, "character"),
 			],
 		};
 	}
 
 	private doorTarget(door: SceneDoor): Target {
-		// The inn's stairs lead to the rooms of sleepers beyond its spots: the innkeeper keeps their list.
 		if (door.to === "rooms")
 			return {
 				name: door.name,
 				tone: "object",
 				actions: [action(say(this.theme, "ask-upstairs"), () => placePanels.open("innkeeper"), door.name, "object")],
 			};
-		// Between the square and the street there is no door to enter, only the way on.
+
 		const open = [this.layout.ref.kind, door.to].every((kind) => kind === "square" || kind === "street");
 		return {
 			name: door.name,
@@ -2304,7 +2135,6 @@ export class PlaceScene extends Phaser.Scene {
 		};
 	}
 
-	/** Every action at a point, the default first: the targets' actions, then walking there. */
 	private actionsAt(point: Point): Action[] {
 		return [
 			...this.targetsAt(point).flatMap((target) => target.actions),
@@ -2324,7 +2154,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.showCursor(actions.length > 1 ? "act" : this.blockedAt(at) ? "blocked" : "walk");
 	}
 
-	/** The pack's hand on the canvas: it taps over something to do, is a fist over walls, and points over floor. */
 	private showCursor(kind: CursorKind) {
 		const art = cursorArt(kind, this.time.now);
 		this.cursor = { kind, art };
@@ -2334,17 +2163,11 @@ export class PlaceScene extends Phaser.Scene {
 		this.input.setDefaultCursor(css);
 	}
 
-	/** Floor nobody can walk to: furniture, walls, or off the place (someone standing there does not count). */
 	private blockedAt(at: Point): boolean {
 		const cell = cellOf(this.walkable, at);
 		return cell < 0 || this.walkable.blocked[cell] === 1;
 	}
 
-	/**
-	 * The pointer over the world, in tiles; undefined when it is off the canvas or over the interface or a panel. A
-	 * panel opened under a still pointer sends the canvas no `gameout`, so the hover text and a piece's sign stayed
-	 * drawn under it; asking the page what is under the pointer catches that.
-	 */
 	private worldPointer(): Point | undefined {
 		const at = this.pointerAt;
 		if (!at) return undefined;
@@ -2354,14 +2177,10 @@ export class PlaceScene extends Phaser.Scene {
 		return this.toWorld(at);
 	}
 
-	// Walking.
-
-	/** Walk to a point, or the nearest open floor to it; `then` runs on arrival, with whether it got there. */
 	private walkTo(to: Point | Point[], then?: (reached: boolean, goal: Point) => void) {
 		this.walkToFirst([(Array.isArray(to[0]) ? to : [to]) as Point[]], then);
 	}
 
-	/** Walk to the first group of targets that can be reached (the quickest within it), else as near as possible. */
 	private walkToFirst(groups: Point[][], then?: (reached: boolean, goal: Point) => void) {
 		const from: Point = [this.avatar.x, this.avatar.y];
 		this.freeLook = undefined;
@@ -2378,16 +2197,13 @@ export class PlaceScene extends Phaser.Scene {
 		this.avatar.walk(points, then && (() => then(reached, goal)));
 	}
 
-	/** Walk up to a character, to whichever side is quickest, face it, and then act. */
 	private walkUpTo(character: Character, then?: () => void) {
 		const figure = this.figures.get(character.id);
 		if (!figure || figure.leaving) return;
 		this.approach(figure.spot ?? [figure.walker.x, figure.walker.y], then);
 	}
 
-	/** Walk up to whoever stands at `at`, to whichever side is quickest, face them, and then act. */
 	private approach(at: Point, then?: () => void) {
-		// Whoever belongs there and is out wandering comes back to meet the avatar.
 		this.wander?.recall(at);
 		const stands = TALK_OFFSETS.map((group) => group.map(([dx, dy]): Point => [at[0] + dx, at[1] + dy]));
 		this.walkToFirst(stands, (reached, goal) => {
@@ -2397,10 +2213,6 @@ export class PlaceScene extends Phaser.Scene {
 		});
 	}
 
-	/**
-	 * Walk to a door's stand point and on into it without stopping: going through starts as the avatar reaches the stand
-	 * point, and the view fades while it steps in. A door that leads nowhere yet stops it at the stand point.
-	 */
 	private useDoor(door: SceneDoor) {
 		const from: Point = [this.avatar.x, this.avatar.y];
 		this.freeLook = undefined;
@@ -2428,13 +2240,11 @@ export class PlaceScene extends Phaser.Scene {
 		);
 	}
 
-	// The pointer.
-
 	private pointerDown(pointerEvent: Phaser.Input.Pointer) {
 		if (this.leaving) return;
 		const at: Point = [pointerEvent.x, pointerEvent.y];
 		this.pointerAt = at;
-		// Clicking off an open menu only closes it, as in RuneScape.
+
 		const consumed = pointer.menuOpen();
 		pointer.closeMenu();
 		if (pointerEvent.rightButtonDown()) {
@@ -2466,7 +2276,7 @@ export class PlaceScene extends Phaser.Scene {
 		const at = this.toWorld([pointerEvent.x, pointerEvent.y]);
 		const actions = this.actionsAt(at);
 		actions[0].run();
-		// RuneScape's markers: a red X on what it acts on, a yellow X where the avatar is heading.
+
 		if (actions.length > 1) return this.marks.drop("act", at);
 		const path = this.avatar.view().path;
 		this.marks.drop("walk", this.avatar.moving ? path[path.length - 1] : at);
@@ -2482,13 +2292,6 @@ export class PlaceScene extends Phaser.Scene {
 		chosenZoom.set(this.layout.data, this.zoomTarget);
 	}
 
-	// What the interface asks of the world.
-
-	/**
-	 * The interface's walking intents: a minimap click walks there, Go to walks up to a character (travelling to its
-	 * place first), and Settings shows the walk grid. Travel, talking from the panel, examining, and the terminal are
-	 * carried out where the interface wires them (main.tsx and the interface itself).
-	 */
 	private intended(intent: WorldIntent) {
 		if (intent.kind === "walk-to" && intent.place === this.layout.key && !this.leaving) this.walkTo(intent.at);
 		if (intent.kind === "walk-grid") this.setGrid(intent.shown);
@@ -2501,15 +2304,12 @@ export class PlaceScene extends Phaser.Scene {
 		}
 	}
 
-	// The world changing under the view.
-
 	private worldChanged() {
 		if (this.leaving) return;
 		this.dressAvatar();
 		const world = this.store.get();
 		const next = layoutFor(this.layout.ref, world, this.theme);
 		if (!next) {
-			// Its headquarters closed: go where the world opens now.
 			this.travel(startPlace(world));
 			return;
 		}
@@ -2526,9 +2326,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.flyNewMail();
 	}
 
-	// Travel.
-
-	/** Go through a door; false when it leads nowhere yet. */
 	private openDoor(door: SceneDoor): boolean {
 		const here = this.layout.ref;
 		const headquarters = isOutside(here) ? lastHeadquarters : here.headquarters;
@@ -2577,10 +2374,6 @@ export class PlaceScene extends Phaser.Scene {
 		return false;
 	}
 
-	/**
-	 * Leave for another place with a short fade; the avatar arrives at the entry for where it came from. Asked again
-	 * for the same place while leaving (the interface and the world both answering a Go to), it only adds `goTo`.
-	 */
 	travel(ref: PlaceRef, goTo?: string): boolean {
 		if (this.leaving) {
 			if (goTo && this.departure?.ref && placeKey(this.departure.ref) === placeKey(ref)) this.departure.goTo = goTo;
@@ -2598,7 +2391,6 @@ export class PlaceScene extends Phaser.Scene {
 		return true;
 	}
 
-	/** Where the avatar arrives: the entry for where it came from, a wing's own door, or the place's start. */
 	private arrival(): Point {
 		const { place, niches } = this.layout;
 		if (niches && this.from) {
@@ -2613,7 +2405,6 @@ export class PlaceScene extends Phaser.Scene {
 		return (this.from && place.entries[this.from]) || place.entries.start || [place.cols / 2, place.rows / 2];
 	}
 
-	/** Arriving through a door, the avatar faces away from it, into the room. */
 	private arrivalFacing([ax, ay]: Point, door: Door): Facing {
 		const [x, y, w, h] = door.rect;
 		const dx = ax - (x + w / 2);
@@ -2621,19 +2412,11 @@ export class PlaceScene extends Phaser.Scene {
 		return Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "left" : "right") : dy < 0 ? "up" : "down";
 	}
 
-	// The camera.
-
-	/**
-	 * The whole place fits the window at the smallest zoom: a place of another shape than the window then shows the
-	 * backdrop beside it, as RuneScape shows the void past the map's edge. Only the operator's wheel goes there; the
-	 * default zoom and the camera's follow always fill the window.
-	 */
 	private minZoom(): number {
 		const { cols, rows } = this.layout.place;
 		return Math.min(this.scale.width / (cols * TILE), this.scale.height / (rows * TILE));
 	}
 
-	/** The zoom at which the place just fills the window. */
 	private coverZoom(): number {
 		const { cols, rows } = this.layout.place;
 		return Math.max(this.scale.width / (cols * TILE), this.scale.height / (rows * TILE));
@@ -2643,7 +2426,6 @@ export class PlaceScene extends Phaser.Scene {
 		return Math.max(MAX_ZOOM, this.coverZoom());
 	}
 
-	/** At first, the place fills the window, and never smaller than the painting's own size. */
 	private defaultZoom(): number {
 		return Math.max(1, this.coverZoom());
 	}
@@ -2659,12 +2441,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.applyCamera();
 	}
 
-	/**
-	 * Where the view centres to follow the avatar: on it, kept on the painting (a side the whole place fits stays
-	 * centred). Only where a panel covers the avatar does the painting slide out from under the panel, as far as it
-	 * takes to bring the avatar into the open and no further than the panel reaches; so near an edge the painting still
-	 * fills the window, and a room seen whole does not drift with every step.
-	 */
 	private followMid(zoom: number): Point {
 		const { cols, rows } = this.layout.place;
 		const { width, height } = this.scale;
@@ -2674,9 +2450,9 @@ export class PlaceScene extends Phaser.Scene {
 		const [ax0, ay0] = this.avatarMid();
 		let mx = onPainting(ax0, cols * TILE, width / zoom);
 		let my = onPainting(ay0, rows * TILE, height / zoom);
-		// The avatar's box on screen (CSS px) with the view at (mx, my); it stays this far inside the uncovered part.
+
 		const margin = 16;
-		// What must show: the avatar, and a door it stands at (walking up to a door under a panel brings it out).
+
 		const { x, y } = this.avatar;
 		let [x0, y0, x1, y1] = [x - 0.5, y - PERSON_TILES, x + 0.5, y + 0.25];
 		const door = this.doors.find(({ standAt }) => dist(standAt, [x, y]) <= 0.6);
@@ -2702,7 +2478,7 @@ export class PlaceScene extends Phaser.Scene {
 			else if (panel.edge === "right") mx += (b.right - (panel.left - margin)) / zoom;
 			else my -= (panel.bottom + margin - b.top) / zoom;
 		}
-		// No further than the panels reach.
+
 		const reach = (v: number, size: number, view: number, low: number, high: number) => {
 			const centred = size <= view;
 			const least = centred ? size / 2 - Math.max(0, low / zoom - (view - size) / 2) : view / 2 - low / zoom;
@@ -2716,10 +2492,6 @@ export class PlaceScene extends Phaser.Scene {
 		return [this.avatar.x * TILE, (this.avatar.y - FOLLOW_LIFT) * TILE];
 	}
 
-	/**
-	 * Keep the view on the painting; a place smaller than the view sits in its middle. At an edge the interface covers,
-	 * the painting may slide out from under it, so a door or a character there can be brought into the open.
-	 */
 	private clampMid([x, y]: Point, zoom: number): Point {
 		const { cols, rows } = this.layout.place;
 		const { top, right, bottom, left } = this.insets;
@@ -2745,7 +2517,6 @@ export class PlaceScene extends Phaser.Scene {
 		);
 	}
 
-	/** Ease the zoom to the wheel's choice and the view to the avatar (or where the operator is looking). */
 	private followCamera(delta: number) {
 		const camera = this.cameras.main;
 		const seconds = Math.min(delta, 100) / 1000;
@@ -2759,10 +2530,6 @@ export class PlaceScene extends Phaser.Scene {
 		this.applyCamera();
 	}
 
-	/**
-	 * Scroll to `mid`, rounded so the painting lands on whole screen pixels: as the view eases, the picture moves by
-	 * whole pixels instead of being resampled at a new fraction each frame, which made fine pixel art shimmer.
-	 */
 	private applyCamera() {
 		const camera = this.cameras.main;
 		const { zoom, width, height } = camera;
@@ -2777,11 +2544,10 @@ interface Insets {
 	right: number;
 	bottom: number;
 	left: number;
-	/** Each panel at an edge, in CSS px, with the edge it reaches: the view slides only for what it covers. */
+
 	panels: { edge: "top" | "right" | "bottom"; left: number; top: number; right: number; bottom: number }[];
 }
 
-/** A box on screen, in CSS px. */
 export interface Box {
 	left: number;
 	top: number;
@@ -2793,7 +2559,6 @@ const dist = ([ax, ay]: Point, [bx, by]: Point) => Math.hypot(ax - bx, ay - by);
 
 const overlaps = (a: Box, b: Box) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
-/** What of the HTML interface covers the world: panels, the place's title, notices, and the hover text. */
 function interfaceBoxes(): Box[] {
 	const selector = ".place-title, .aw-side, .aw-top-right, .aw-chat, .aw-card, .notice, .pointer-hover";
 	return [...document.querySelectorAll(selector)]
@@ -2802,10 +2567,6 @@ function interfaceBoxes(): Box[] {
 		.map((r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom }));
 }
 
-/**
- * How far the HTML interface reaches into the window from each edge (CSS px): the side panel and minimap on the
- * right, the chatbox at the bottom, the place's title at the top. Panels that are folded reach less far.
- */
 function interfaceInsets(): Insets {
 	const width = window.innerWidth;
 	const height = window.innerHeight;
@@ -2831,7 +2592,6 @@ function interfaceInsets(): Insets {
 	};
 }
 
-/** A name's pieces, each with the separator after it; a one- or two-letter piece ("a-") stays with the next. */
 function bannerParts(name: string): string[] {
 	const parts: string[] = [];
 	for (const part of name.split(/(?<=[-_./ ])/)) {
@@ -2842,7 +2602,6 @@ function bannerParts(name: string): string[] {
 	return parts;
 }
 
-/** The pieces on one to `most` lines, broken between pieces; undefined when none fits. */
 function bannerLines(parts: string[], fits: (line: string) => boolean, most = 4): string[] | undefined {
 	const whole = parts.join("");
 	if (fits(whole)) return [whole];
@@ -2853,7 +2612,6 @@ function bannerLines(parts: string[], fits: (line: string) => boolean, most = 4)
 	return undefined;
 }
 
-/** Join `parts` into `count` lines that all fit, the longest line as short as possible; undefined when none do. */
 function splitInto(parts: string[], count: number, fits: (line: string) => boolean): string[] | undefined {
 	if (count === 1) {
 		const line = parts.join("");

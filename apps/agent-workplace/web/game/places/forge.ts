@@ -1,9 +1,3 @@
-// The forge's benches (ticket 21): each open pull request that involves the operator or his agents lies on a workbench
-// as a piece of work in the theme's art (a blade, a device, a robot), in its CI state: passing, failing, or running
-// (the quench). They fill the forge's `work` slots in the backend's order (newest first); the rest wait "on the rack",
-// counted under the place's title, and in the smith's list. Hovering a piece names it on a small sign; looking it over walks up
-// to the bench and opens its card. The list is read on entering and every minute while the operator is here
-// (`forge-state.ts`).
 import * as Phaser from "phaser";
 import type { CiState, PullRequest } from "../../../src/integrations.js";
 import { forge, prKey } from "../../overlay/places/forge-state.js";
@@ -12,20 +6,19 @@ import { worn } from "../../theme-store.js";
 import { action, type Target } from "../actions.js";
 import { drawTag } from "../character-life.js";
 
-/** The art each CI state wears; a pull request without checks lies there plain, as a passing one, a little dimmer. */
 const ART: Record<CiState, string> = {
 	passing: "overlay:blade-passing",
 	failing: "overlay:blade-failing",
 	running: "overlay:blade-running",
 	none: "overlay:blade-passing",
 };
-/** How a piece comes onto its bench, or goes (ms). */
+
 const FADE_MS = 420;
-/** The sign over a hovered piece, in tiles above the piece's top. */
+
 const SIGN_LIFT = 0.12;
-/** Longest title on the sign before it is cut. */
+
 const SIGN_TITLE = 42;
-/** How thick a turned (diagonal) piece is, in tiles, beyond its diagonal. */
+
 const TURNED_THICKNESS = 0.3;
 
 export interface WorkView {
@@ -33,13 +26,13 @@ export interface WorkView {
 	repo: string;
 	number: number;
 	ci: CiState;
-	/** Its bottom centre, in tiles. */
+
 	x: number;
 	y: number;
-	/** The art it wears (`blade-passing`...). */
+
 	art: string;
 	alpha: number;
-	/** Its sign shows (the pointer is over it). */
+
 	sign: boolean;
 }
 
@@ -55,17 +48,13 @@ interface Piece {
 
 export interface ForgeHost {
 	place(): PlaceData;
-	/** Walk up to a point (the floor in front of a bench), face it, then act. */
+
 	walkUp(at: Point, then: () => void): void;
-	/** Where the pointer is over the world, in tiles. */
+
 	pointer(): Point | undefined;
-	/**
-	 * Say under the place's title how many wait on the rack (or that GitHub cannot be read); undefined says nothing. A
-	 * tag over the smith was off screen at the default zoom (the view follows the avatar in at the south door) and,
-	 * looking north, sat under the title or the minimap; the title is always in view.
-	 */
+
 	caption(line: string | undefined): void;
-	/** The view's zoom correction for things drawn at a steady size on screen. */
+
 	uiScale(): number;
 }
 
@@ -92,19 +81,17 @@ export class ForgeBenches {
 		forge.leave();
 	}
 
-	/** The `work` slots, in the order they fill. */
 	private slots(): OverlaySlot[] {
 		return this.host.place().overlaySlots.filter((slot) => slot.kind === "work");
 	}
 
-	/** Lay the listed pull requests on the benches: keep each one's place, swap its art when its CI changed. */
 	private lay(animate = true) {
 		const list = forge.get().list;
 		const slots = this.slots();
 		const shown = list.pullRequests.slice(0, slots.length);
 		const keys = new Set(shown.map(prKey));
 		for (const [key, piece] of this.pieces) if (!keys.has(key)) this.remove(key, piece, animate);
-		// Pieces already on a bench stay on it; newcomers take the free slots in order.
+
 		const taken = new Set([...this.pieces.values()].filter((p) => !p.going).map((p) => p.slot));
 		const free = slots.filter((slot) => !taken.has(slot));
 		for (const pr of shown) {
@@ -121,7 +108,6 @@ export class ForgeBenches {
 		this.showRack(list.pullRequests.length - shown.length, list.state === "failed" && !list.pullRequests.length);
 	}
 
-	/** The bench a slot lies on: the foreground piece holding it, whose feet line its piece is drawn just above. */
 	private benchFeet([x, y]: Point): number {
 		const bench = this.host
 			.place()
@@ -149,18 +135,13 @@ export class ForgeBenches {
 		}
 	}
 
-	/**
-	 * Lay a piece in its slot: turned by the slot's `turn`, its bounds' bottom centre on `at`; its rect (tiles) is
-	 * those bounds, where it answers the pointer.
-	 */
 	private place(piece: Piece) {
 		const { image, slot } = piece;
 		const [x, y] = slot.at;
 		const turn = Phaser.Math.DegToRad(slot.turn ?? 0);
 		const w = image.displayWidth / TILE;
 		const h = image.displayHeight / TILE;
-		// A turned piece is a diagonal one (a blade from its pommel at the bottom left to its tip at the top right): its
-		// bounds are the turned diagonal's, with a little thickness, not the turned image's, which would reach the floor.
+
 		const across = turn ? w * Math.abs(Math.cos(turn)) + h * Math.abs(Math.sin(turn)) : w;
 		const down = turn ? Math.abs(h * Math.cos(turn) - w * Math.sin(turn)) + TURNED_THICKNESS : h;
 		image.setOrigin(0.5).setRotation(turn);
@@ -188,7 +169,6 @@ export class ForgeBenches {
 		});
 	}
 
-	/** Its art for its CI state; a draft lies a little faded; running work glows and pulses as if just out of the fire. */
 	private dress(piece: Piece) {
 		const { pr, image } = piece;
 		if (image.texture.key !== ART[pr.ci]) {
@@ -231,7 +211,6 @@ export class ForgeBenches {
 		}
 	}
 
-	/** A soft round light, white so each state tints it. */
 	private glowTexture(): string {
 		const key = "glow:work";
 		if (this.scene.textures.exists(key)) return key;
@@ -250,7 +229,6 @@ export class ForgeBenches {
 		return key;
 	}
 
-	/** "4 more on the rack" under the title when the benches are full; "GitHub can't be read" when the list failed. */
 	private showRack(more: number, failed: boolean) {
 		const line = failed ? "GitHub can\u2019t be read" : more > 0 ? say(worn(), "forge-more", { count: more }) : "";
 		if (this.rack === line) return;
@@ -264,7 +242,6 @@ export class ForgeBenches {
 			.sort((a, b) => b.slot.at[1] - a.slot.at[1]);
 	}
 
-	/** Every piece under a point: look it over (the default: walk up and open its card), review it, open it on GitHub. */
 	targetsAt(point: Point): Target[] {
 		return this.piecesAt(point).map(({ pr, slot }) => {
 			const name = `#${pr.number} ${cut(pr.title, SIGN_TITLE)}`;
@@ -281,7 +258,6 @@ export class ForgeBenches {
 		});
 	}
 
-	/** Each frame: the sign over the piece under the pointer, kept a steady size on screen. */
 	update() {
 		const at = this.host.pointer();
 		const over = at ? this.piecesAt(at)[0] : undefined;

@@ -1,5 +1,8 @@
 ## file
 
+Overlapping light rectangles clear earlier rectangles' pixels from later pieces. Falling particles over roofs/walls fade behind the obstruction rather than settling visibly on it.
+Why: overlapping regions must light a painting pixel once, and airborne decoration must respect the painted occlusion.
+
 Effects move only at `lifePace()`, which is 0 under webdriver unless the page sets `window.agentWorldLife`. Every effect must still be drawn the moment a place opens: falling particles start part-way through their life so `shown` is never empty.
 Why: headless screenshots and tests run with life still. An effect that only appears once it moves is invisible there, and world-atmosphere.test.ts fails on `shown` being 0.
 

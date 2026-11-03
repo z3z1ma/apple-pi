@@ -1,5 +1,8 @@
 ## file
 
+A displayed pull request keeps its bench slot while still listed; newcomers take free slots in order.
+Why: refreshing CI or adding another request must not reshuffle the existing pieces.
+
 Pieces are drawn at the depth of the bench's own foreground piece plus 0.2 (the foreground piece whose rect holds the slot's `at`), as the rookery's letters are: drawn at their slot's own `y` they would sink behind the bench that the foreground pass draws again over anyone north of its feet line.
 Coupled: apps/agent-workplace/themes/fantasy/places/forge.json, apps/agent-workplace/themes/tech-office/places/forge.json, apps/agent-workplace/themes/anime-school/places/forge.json
 

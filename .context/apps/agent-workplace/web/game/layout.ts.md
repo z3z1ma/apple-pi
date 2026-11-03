@@ -1,3 +1,11 @@
+## file
+
+Composed gallery strips omit foreground pieces from the uncut painting and transform overlay slots with each repeated strip.
+Why: original foreground coordinates no longer match the composed texture, and repeated niches need their own lights.
+
+Dormant character projections retain last task/repository context but project idle, not asking/unseen/working facts.
+Why: the conversation panel needs historical work without implying a sleeping person currently needs attention.
+
 ## symbol:layoutFor
 
 A wing uses `wing-large` exactly when its headcount exceeds the number of spots in `wing-small.json`, so adding or removing a spot there moves the switch point.

@@ -1,18 +1,10 @@
-// How a character shows its state in the world (ticket 07): its pose, the badge over its head, and the short speech
-// bubbles (barks) of characters that need the operator. Everything here follows observed facts (decision 06); the
-// seated beat following the last tool is decorative.
 import type * as Phaser from "phaser";
 import type { Character } from "../../src/world.js";
 import { worn } from "../theme-store.js";
 import type { Pose } from "./walker.js";
 
-/** What the badge over a head says: at work, asking you something, or finished and not seen yet. */
 export type BadgeKind = "working" | "asking" | "unseen";
 
-/**
- * Indoors a working character sits at its desk (its seated frames bring the stool); outdoors there are no desks, so it
- * stands at work, busy on its feet, with the same badge.
- */
 export function poseFor(character: Character, outdoors = false): Pose {
 	const status = character.facts?.status;
 	if (status === "asking") return "asking";
@@ -28,13 +20,11 @@ export function badgeFor(character: Character): BadgeKind | null {
 	return null;
 }
 
-/** Only characters that need the operator bark. */
 export function needsYou(character: Character): boolean {
 	const kind = badgeFor(character);
 	return kind === "asking" || kind === "unseen";
 }
 
-/** Tools that keep hands busy (writing, running) beat quicker at the desk; reading is slower. Decorative only. */
 export function tempoFor(character: Character): number {
 	const tool = character.facts?.tool?.name ?? "";
 	if (/^(edit|write|bash|pi_exec)$/.test(tool)) return 1.9;
@@ -45,10 +35,9 @@ export function tempoFor(character: Character): number {
 const FINISHED_LINES = ["I'm done. Come and see!", "Finished! Take a look?", "All done here.", "Ready when you are."];
 const ASKING_LINES = ["I have a question for you.", "Could you help me decide?", "I need your answer."];
 const BARK_TEXT_MAX = 46;
-/** The longest bark kept on one line, in px. */
+
 const BARK_LINE = 170;
 
-/** A short line for a character that needs the operator: its open question when the runtime has its text. */
 export function barkFor(character: Character, turn: number): string | undefined {
 	const facts = character.facts;
 	if (!facts || !needsYou(character)) return undefined;
@@ -61,25 +50,18 @@ export function barkFor(character: Character, turn: number): string | undefined 
 	return FINISHED_LINES[turn % FINISHED_LINES.length];
 }
 
-/**
- * How fast life goes by (ticket 06 and 07): idles and wandering run their timers this many times faster; 0 stops them.
- * The page may set `window.agentWorldLife = { pace }`; under a driven browser (the headless tests) life is still unless
- * a test asks for it, so the tests that read where everyone stands and which frame shows stay exact.
- */
 export function lifePace(): number {
 	const life = (globalThis as { agentWorldLife?: { pace?: number } }).agentWorldLife;
 	if (typeof life?.pace === "number" && Number.isFinite(life.pace)) return Math.max(0, life.pace);
 	return typeof navigator !== "undefined" && navigator.webdriver ? 0 : 1;
 }
 
-/** A string's 32-bit hash, the seed of someone's own rhythm. */
 function hashOf(text: string): number {
 	let h = 2166136261;
 	for (const char of text) h = Math.imul(h ^ char.charCodeAt(0), 16777619) >>> 0;
 	return h;
 }
 
-/** A random source seeded by `seed` (mulberry32): the same character always has the same rhythm, others another. */
 export function seeded(seed: string): () => number {
 	let state = hashOf(seed) || 1;
 	return () => {
@@ -91,13 +73,8 @@ export function seeded(seed: string): () => number {
 	};
 }
 
-/** A step of an idle: a frame of the look's idle sheet (`IDLE_POSES`), or -1 for the standing frame, held this long (ms). */
 export type IdleStep = readonly [frame: number, ms: number];
 
-/**
- * The idles someone standing about plays: short held poses that come back to standing. The sheet's frames are, in
- * order, looking left, looking right, a stretch, a wave, a laugh, a shrug, a nod, and a yawn.
- */
 export const IDLES = {
 	"look-around": [
 		[0, 1100],
@@ -128,14 +105,10 @@ export const IDLES = {
 
 export type IdleName = keyof typeof IDLES;
 const IDLE_NAMES = Object.keys(IDLES) as IdleName[];
-/** The first idle comes this long after someone stands still (ms), then one every so often: never on a beat. */
+
 const FIRST_IDLE_MS = [1500, 11_000] as const;
 const IDLE_EVERY_MS = [7000, 21_000] as const;
 
-/**
- * When someone standing about plays an idle, and which: its own seeded rhythm, so two neighbours never start the same
- * idle together, and never the same idle twice in a row. `tick` runs with each frame's time while it stands.
- */
 export class IdleClock {
 	private readonly random: () => number;
 	private wait: number;
@@ -146,10 +119,6 @@ export class IdleClock {
 		this.wait = this.between(FIRST_IDLE_MS);
 	}
 
-	/**
-	 * The idle to play now, if its time has come (`deltaMs` of standing has passed since the last call): never one that
-	 * someone else is playing (`playing`), so two neighbours never start the same idle together.
-	 */
 	tick(
 		deltaMs: number,
 		pace = lifePace(),
@@ -161,10 +130,6 @@ export class IdleClock {
 		return this.pick(playing);
 	}
 
-	/**
-	 * The next idle, now (a wanderer pausing at a point of interest): its clock starts the wait again. None when every
-	 * idle but its last is being played by someone else (more people stand about than there are idles): it waits.
-	 */
 	pick(playing: Pick<ReadonlySet<IdleName>, "has"> = new Set()): IdleName | undefined {
 		this.wait = this.between(IDLE_EVERY_MS);
 		const fresh = IDLE_NAMES.filter((name) => name !== this.last && !playing.has(name));
@@ -173,7 +138,6 @@ export class IdleClock {
 		return this.last;
 	}
 
-	/** Something else kept it from playing (it walked, or sat down): the next idle waits a while again. */
 	putOff() {
 		this.wait = Math.max(this.wait, this.between(FIRST_IDLE_MS));
 	}
@@ -183,12 +147,10 @@ export class IdleClock {
 	}
 }
 
-/** A `#rrggbb` colour as a number, for Phaser's fills. */
 const hex = (colour: string) => Number.parseInt(colour.slice(1), 16);
 
 export const BADGE_RADIUS = 11.5;
 
-/** A badge, centred on (0, 0) of its container. Working shows three dots that pulse in turn. */
 export function drawBadge(scene: Phaser.Scene, kind: BadgeKind): Phaser.GameObjects.Container {
 	const { world } = worn();
 	const style = world.badge[kind === "unseen" ? "unseen" : kind];
@@ -208,7 +170,7 @@ export function drawBadge(scene: Phaser.Scene, kind: BadgeKind): Phaser.GameObje
 			.text(0, 0, "?", { fontFamily: world.font, fontStyle: "bold", fontSize: "16px", color: inkCss })
 			.setOrigin(0.5)
 			.setResolution(4);
-		// Centre the glyph's ink, not its line box: Georgia's line box sits low under "?".
+
 		text.setY(-0.5);
 		mark.add(text);
 	} else if (kind === "unseen") {
@@ -236,7 +198,7 @@ export function drawBadge(scene: Phaser.Scene, kind: BadgeKind): Phaser.GameObje
 				ease: "Sine.inOut",
 			});
 	}
-	// Those that need you pulse gently; the outer container is left for the scene to place and scale.
+
 	if (kind !== "working")
 		scene.tweens.add({
 			targets: mark,
@@ -249,19 +211,17 @@ export function drawBadge(scene: Phaser.Scene, kind: BadgeKind): Phaser.GameObje
 	return scene.add.container(0, 0, [mark]);
 }
 
-/** A bark as drawn: its container (the tail's tip at its (0, 0)), the bubble that can slide sideways, and its size. */
 export interface BarkShape {
 	container: Phaser.GameObjects.Container;
-	/** The bubble and its text, without the tail: slid sideways (local px) to keep clear of others and the interface. */
+
 	body: Phaser.GameObjects.Container;
-	/** The bubble's width and height, and how far it may slide either way while the tail still meets it. */
+
 	width: number;
 	height: number;
 	slide: number;
 	tail: number;
 }
 
-/** A speech bubble whose tail's tip is at (0, 0) of its container, the text wrapped to a few words a line. */
 export function drawBark(scene: Phaser.Scene, line: string): BarkShape {
 	const { font, bark } = worn().world;
 	const [INK, PAPER] = [hex(bark.outline), hex(bark.paper)];
@@ -276,7 +236,7 @@ export function drawBark(scene: Phaser.Scene, line: string): BarkShape {
 		})
 		.setResolution(4)
 		.setOrigin(0.5, 1);
-	// One line when it is short; otherwise two lines of about equal length, not a long line and a lone word.
+
 	const single = text.width;
 	if (single > BARK_LINE) text.setWordWrapWidth(Math.max(110, single / 2 + 26));
 	const padX = 9;
@@ -295,7 +255,7 @@ export function drawBark(scene: Phaser.Scene, line: string): BarkShape {
 	paper.fillStyle(PAPER, 1).fillRoundedRect(-w / 2, top, w, h, 7);
 	text.setPosition(0, -tail - padY + 0.5);
 	const body = scene.add.container(0, 0, [bubble, paper, text]);
-	// The tail sits over the bubble's outline and under its paper, so the two read as one shape wherever it slides.
+
 	const container = scene.add.container(0, 0, [body, tip]);
 	container.bringToTop(tip);
 	body.bringToTop(paper);
@@ -303,10 +263,6 @@ export function drawBark(scene: Phaser.Scene, line: string): BarkShape {
 	return { container, body, width: w + 3, height: h + tail + 3, slide: Math.max(0, w / 2 - 14), tail };
 }
 
-/**
- * A sleeper's "z": small letters that rise and fade above its head one after another, slowly, so a room of sleepers
- * breathes rather than flickers. Its container's (0, 0) is where the first letter starts.
- */
 export function drawZzz(scene: Phaser.Scene): Phaser.GameObjects.Container {
 	const { font, sleep } = worn().world;
 	const container = scene.add.container(0, 0);
@@ -347,7 +303,6 @@ export function drawZzz(scene: Phaser.Scene): Phaser.GameObjects.Container {
 	return container;
 }
 
-/** A small wooden tag (the inn's stairs: how many more sleep upstairs), its bottom centre at (0, 0). */
 export function drawTag(scene: Phaser.Scene, line: string): Phaser.GameObjects.Container {
 	const { font, tag } = worn().world;
 	const text = scene.add

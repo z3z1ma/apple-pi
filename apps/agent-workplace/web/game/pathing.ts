@@ -1,40 +1,32 @@
-// Click-to-walk paths over a place's half-tile walk grid: A* that prefers the middle of aisles, then string-pulled
-// into straight runs that keep a body's width from furniture wherever the floor allows it. Pure, so it is tested
-// directly; coordinates are in tiles (fractions allowed), like the place data.
 import type { PlaceData, Point } from "../theme.js";
 import { walkGrid } from "./layout.js";
 
-/** Cells per tile: the walk grid is twice as fine as the tiles. */
 const CELLS = 2;
 const CELL = 1 / CELLS;
-/** A body's half-width plus a margin: a straight run keeps this far from blocked cells where the floor allows. */
+
 export const BODY_CLEARANCE = 0.5;
-/** How far from furniture A* prefers to walk, so the raw path already runs down the middle of aisles. */
+
 const PREFERRED_CLEARANCE = 0.8;
-/** Extra cost per step at zero clearance, falling to none at the preferred clearance. */
+
 const HUG_COST = 2.5;
-/**
- * A step through someone's footprint costs this many times more: the walk goes round people where there is room,
- * and squeezes past them only where they stand in the way (a character in a narrow aisle never cuts a room off).
- */
+
 const PAST_SOMEONE = 8;
-/** Clearance is measured only this far; beyond it, the floor is simply open. */
+
 const CLEARANCE_CAP = 1.5;
-const SAMPLE = 0.08; // tiles between clearance samples along a straight run
+const SAMPLE = 0.08;
 const SQRT2 = Math.SQRT2;
 
 export interface Grid {
 	cols: number;
 	rows: number;
-	/** Furniture and walls, traced in the place data: never walked on. */
+
 	blocked: Uint8Array;
-	/** Characters' footprints: walked round, or through only when there is no other way, and never stopped on. */
+
 	occupied: Uint8Array;
-	/** Distance in tiles from each cell's centre to the nearest blocked cell or the edge, capped. */
+
 	clearance: Float32Array;
 }
 
-/** A place's walk grid, with other characters standing at `occupants` (their feet), each covering its own footprint. */
 export function gridFor(place: PlaceData, occupants: Point[] = []): Grid {
 	const base = walkGrid(place);
 	const blocked = Uint8Array.from(base.blocked, (b) => (b ? 1 : 0));
@@ -44,7 +36,6 @@ export function gridFor(place: PlaceData, occupants: Point[] = []): Grid {
 	return withClearance({ cols: base.cols, rows: base.rows, blocked, occupied, clearance: new Float32Array(0) });
 }
 
-/** The cells a standing character's feet cover: those whose centres lie within half a tile across, a third deep. */
 function footprint(x: number, y: number, cols: number, rows: number): number[] {
 	const cells: number[] = [];
 	for (let row = Math.floor((y - 0.35) * CELLS); row <= Math.floor((y + 0.35) * CELLS); row++)
@@ -79,27 +70,22 @@ const centre = (grid: Grid, cell: number): Point => [
 	(Math.floor(cell / grid.cols) + 0.5) * CELL,
 ];
 
-/** Whether a cell has furniture or someone standing on it. */
 const taken = (grid: Grid, cell: number): boolean => grid.blocked[cell] === 1 || grid.occupied[cell] === 1;
 
-/** Open floor: no furniture, and nobody standing there. */
 export const isOpen = (grid: Grid, point: Point): boolean => {
 	const cell = cellOf(grid, point);
 	return cell >= 0 && !taken(grid, cell);
 };
 
-/** Distance in tiles from `point` to the nearest furniture or the place's edge, capped at CLEARANCE_CAP. */
 export function clearanceAt(grid: Grid, point: Point): number {
 	return distance(grid, point, false);
 }
 
-/** Whether `point` is inside someone's footprint. */
 const pastSomeone = (grid: Grid, point: Point): boolean => {
 	const cell = cellOf(grid, point);
 	return cell >= 0 && grid.occupied[cell] === 1;
 };
 
-/** Distance in tiles from `point` to the nearest furniture (and with `people`, footprint) or the edge, capped. */
 function distance(grid: Grid, [x, y]: Point, people: boolean): number {
 	let best = Math.min(CLEARANCE_CAP, x, y, grid.cols * CELL - x, grid.rows * CELL - y);
 	if (best <= 0) return 0;
@@ -132,7 +118,6 @@ const NEIGHBOURS: [number, number, number][] = [
 	[-1, -1, SQRT2],
 ];
 
-/** A binary min-heap of cells keyed by priority. */
 class Heap {
 	private cells: number[] = [];
 	private keys: number[] = [];
@@ -179,10 +164,6 @@ class Heap {
 	}
 }
 
-/**
- * A* from `start` (a free cell) over 8 neighbours, never cutting a blocked corner. Steps near furniture cost more, so
- * the path keeps to the middle of aisles. With `goal`, it stops there; without, it floods every reachable cell.
- */
 function search(grid: Grid, start: number, goal?: number): { cost: Float64Array; parent: Int32Array } {
 	const n = grid.cols * grid.rows;
 	const cost = new Float64Array(n).fill(Number.POSITIVE_INFINITY);
@@ -224,7 +205,6 @@ function search(grid: Grid, start: number, goal?: number): { cost: Float64Array;
 	return { cost, parent };
 }
 
-/** The cell without furniture nearest `point` (by straight distance), so a walk can start from off the floor. */
 function nearestFree(grid: Grid, point: Point): number {
 	let best = -1;
 	let bestDistance = Number.POSITIVE_INFINITY;
@@ -241,17 +221,11 @@ function nearestFree(grid: Grid, point: Point): number {
 }
 
 export interface Path {
-	/** Waypoints from the start (included) to the goal (included): straight runs between them. */
 	points: Point[];
-	/** Where the walk ends: the clicked point when it is open floor, or the nearest open floor reachable. */
+
 	goal: Point;
 }
 
-/**
- * The walk from `from` to `to`, or to whichever of several targets is cheapest to reach (a character's stand points).
- * An open, reachable target is reached exactly; when none is (furniture, or out of reach), the walk ends at the centre
- * of the reachable cell nearest the first target. Undefined only when there is no open floor at all.
- */
 export function findPath(grid: Grid, from: Point, to: Point | Point[]): Path | undefined {
 	const targets = (Array.isArray(to[0]) ? to : [to]) as Point[];
 	const fromCell = cellOf(grid, from);
@@ -266,7 +240,6 @@ export function findPath(grid: Grid, from: Point, to: Point | Point[]): Path | u
 		if (Number.isFinite(found.cost[candidate.cell]) && (!goal || found.cost[candidate.cell] < found.cost[goal.cell]))
 			goal = candidate;
 	if (!goal) {
-		// Furniture or out of reach: flood what is reachable, and go to the cell nearest the (first) target.
 		if (goals.length === 1) found = search(grid, startCell);
 		const [tx, ty] = targets[0];
 		let best = startCell;
@@ -295,7 +268,7 @@ function pathFrom(
 	const cells: number[] = [];
 	for (let cell = goal.cell; cell !== -1 && cell !== startCell; cell = parent[cell]) cells.push(cell);
 	cells.reverse();
-	// The raw path: the exact start, the cells' centres in between, the exact goal.
+
 	const raw: Point[] = [from];
 	if (cellOf(grid, from) !== startCell) raw.push(centre(grid, startCell));
 	for (const cell of cells.slice(0, -1)) raw.push(centre(grid, cell));
@@ -303,17 +276,10 @@ function pathFrom(
 	return { points: pull(grid, unjog(grid, pull(grid, raw))), goal: goal.point };
 }
 
-/** A run shorter than this (tiles) between two corners reads as a jog: a sidestep of a cell or so. */
 const JOG = 1;
-/** How much closer to furniture (tiles) the run that replaces a jog may pass than the jog did: a couple of pixels. */
+
 const JOG_SLACK = 0.05;
 
-/**
- * Drop the small jogs grid paths take round doorways, corners, and people: a corner with a short run on either side goes
- * when the straight run that replaces it keeps (within a couple of pixels) as far from furniture as the two runs it
- * replaces did at their tightest (and passes someone's footprint only where they did). Short runs only, so a long run never grazes a wall at the
- * width of the narrowest gap on its way.
- */
 function unjog(grid: Grid, points: Point[]): Point[] {
 	const out = points.slice();
 	for (let changed = true; changed; ) {
@@ -332,7 +298,6 @@ function unjog(grid: Grid, points: Point[]): Point[] {
 	return out;
 }
 
-/** The least clearance from furniture along a straight run. */
 function tightest(grid: Grid, a: Point, b: Point): number {
 	const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / SAMPLE));
 	let least = Number.POSITIVE_INFINITY;
@@ -344,7 +309,6 @@ function tightest(grid: Grid, a: Point, b: Point): number {
 	return least;
 }
 
-/** Whether a straight run passes through someone's footprint. */
 function crosses(grid: Grid, a: Point, b: Point): boolean {
 	const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / SAMPLE));
 	for (let i = 0; i <= steps; i++)
@@ -352,12 +316,6 @@ function crosses(grid: Grid, a: Point, b: Point): boolean {
 	return false;
 }
 
-/**
- * String-pulling with clearance: from each waypoint, run straight to the farthest later waypoint whose straight line
- * keeps clear of furniture. Along the line, the floor must be as clear as a body needs, or, where the raw path itself
- * squeezes by something (a gap between desks, a start beside a table), as clear as the raw path is at the line's two
- * ends, blended between them.
- */
 export function pull(grid: Grid, raw: Point[]): Point[] {
 	if (raw.length <= 2) return dedupe(raw);
 	const need = raw.map((point) => Math.min(BODY_CLEARANCE, clearanceAt(grid, point)));
@@ -381,10 +339,6 @@ export function pull(grid: Grid, raw: Point[]): Point[] {
 	return dedupe(out);
 }
 
-/**
- * Whether a straight walk from `a` to `b` keeps the blended clearance `needA`..`needB` from furniture, and passes
- * nobody's footprint unless the walk it replaces squeezes past someone there too.
- */
 export function clearRun(grid: Grid, a: Point, b: Point, needA: number, needB: number, squeezing = false): boolean {
 	const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
 	const steps = Math.max(1, Math.ceil(length / SAMPLE));
@@ -402,6 +356,5 @@ function dedupe(points: Point[]): Point[] {
 	return points.filter((p, i) => i === 0 || Math.hypot(p[0] - points[i - 1][0], p[1] - points[i - 1][1]) > 1e-6);
 }
 
-/** The total length of a path, in tiles. */
 export const pathLength = (points: Point[]): number =>
 	points.reduce((sum, p, i) => (i ? sum + Math.hypot(p[0] - points[i - 1][0], p[1] - points[i - 1][1]) : 0), 0);

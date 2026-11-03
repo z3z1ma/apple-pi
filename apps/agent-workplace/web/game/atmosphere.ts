@@ -1,34 +1,26 @@
-// What moves in a place besides its characters (ticket 11 of the alive pass): dust motes in the light, leaves or petals
-// drifting down, birds or a plane crossing the sky, steam from cups and troughs, sparks from a forge, blinking lights,
-// flickering screens, glints on water; and out of doors the light of the time of day, with lit windows and brighter
-// lamps after dark. Each place names its own in its data (`atmosphere`); everything is drawn here in code, small and
-// slow so it never pulls the eye from the characters. It moves on `lifePace()` like idles and strolls, so the headless
-// suites see it still (but drawn) unless a test asks for life.
 import * as Phaser from "phaser";
 import type { Atmosphere, OverlaySlot, PlaceData, Point, Rect } from "../theme.js";
 import { TILE } from "../theme.js";
 import { lifePace, seeded } from "./character-life.js";
 import { type Daylight, daylightAt, hex } from "./daylight.js";
 
-/** What the atmosphere asks of the scene. */
 export interface AtmosphereHost {
 	place(): PlaceData;
-	/** The layout's key: each place's motion has its own seeded rhythm. */
+
 	key(): string;
-	/** The painting's texture key, for the lit windows and the water under glints. */
+
 	painting(): string;
-	/** Out of doors (the square, the street): the light follows the time of day. */
+
 	outdoors(): boolean;
-	/** Open floor, where a falling leaf may come to rest. */
+
 	open(at: Point): boolean;
-	/** Turn the place's lamps to this share of their own strength. */
+
 	lamps(share: number): void;
-	/** The local time now. */
+
 	now(): Date;
 }
 
 export interface AtmosphereView {
-	/** Out of doors, the light now; null indoors. */
 	daylight: {
 		phase: Daylight["phase"];
 		hour: number;
@@ -36,33 +28,29 @@ export interface AtmosphereView {
 		lamps: number;
 		windows: number;
 	} | null;
-	/** Each effect the place names, with where its particles are drawn now (tiles). */
+
 	effects: { kind: Atmosphere["kind"]; what: string | null; shown: Point[] }[];
-	/** Out of doors, each piece of the painting's lit windows and lamps: its rect, and how lit it is (0 to 1). */
+
 	lights: { rect: Rect; alpha: number }[];
-	/** The night on the world's sprites: the tint each is multiplied by, and how many carry it now. */
+
 	shade: { tint: string; sprites: number };
-	/** The mean time (ms) one update of every effect has taken, and how many updates that covers. */
+
 	cost: { mean: number; updates: number };
 }
 
-/**
- * The tint out of doors: over the painting and what lies flat in it (its seams, water, the square's sign plates), under
- * everything that stands on it. Whatever is drawn above it, up to `NIGHT_TOP`, is tinted sprite by sprite instead.
- */
 const TINT_DEPTH = -0.95;
-/** Sprites from the tint up to here are darkened by the light one by one; the badges, tags, and bubbles above are not. */
+
 const NIGHT_TOP = 8e4;
-/** Things in the air over the place's characters, under the badges. */
+
 const AIR_DEPTH = 7.5e4;
-/** A lit piece of the painting lies just over a foreground piece with the same feet line, under anyone standing on it. */
+
 const LIT_OVER_FEET = 0.45;
 const WHITE = 0xffffff;
-/** On the floor, over the painting and its water, under everyone. */
+
 const FLOOR_DEPTH = -0.9;
-/** How often the light of the time of day is looked at again, ms. */
+
 const DAYLIGHT_EVERY_MS = 1000;
-/** World px per pixel of a drawn particle's pattern: about a painting's pixel. */
+
 const PX = 1.2;
 
 interface Particle {
@@ -75,13 +63,12 @@ interface Particle {
 	life: number;
 	phase: number;
 	peak: number;
-	/** A leaf's spin (degrees per second), where it comes to rest, and how long it has lain there. */
+
 	spin?: number;
 	ground?: number;
 	lain?: number;
 }
 
-/** One kind of motion in a place. */
 interface Effect {
 	readonly kind: Atmosphere["kind"];
 	readonly what: string | null;
@@ -92,17 +79,12 @@ interface Effect {
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
-/** Lights: drawn as they are, never darkened by the night (the painting's lit windows, the lamps' and candles' glow). */
 const LIT = new WeakSet<object>();
 export function keepLit<T extends object>(object: T): T {
 	LIT.add(object);
 	return object;
 }
 
-/**
- * Where a glow at `at` is drawn: over the furniture piece it sits on and over the lit windows of a facade it hangs on,
- * else at its own line; so anyone standing south of what it belongs to is drawn over its halo.
- */
 export function glowDepth(place: PlaceData, [x, y]: Point): number {
 	const inside = ([rx, ry, rw, rh]: Rect) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
 	const piece = place.foreground?.find(({ rect }) => inside(rect));
@@ -116,7 +98,6 @@ export function glowDepth(place: PlaceData, [x, y]: Point): number {
 	);
 }
 
-/** Two colours multiplied channel by channel, as the GPU tints a sprite. */
 function multiply(a: number, b: number): number {
 	const channel = (shift: number) => Math.round((((a >> shift) & 255) * ((b >> shift) & 255)) / 255);
 	return (channel(16) << 16) | (channel(8) << 8) | channel(0);
@@ -127,7 +108,6 @@ const tinted = (object: Phaser.GameObjects.GameObject): object is Tinted =>
 	typeof (object as Partial<Tinted>).tintTopLeft === "number" &&
 	typeof (object as Partial<Tinted>).setTint === "function";
 
-/** A painting's lit piece: its windows and lamps inside one `lights` rect, with their halo. */
 interface LitPiece {
 	rect: Rect;
 	image: Phaser.GameObjects.Image;
@@ -141,7 +121,7 @@ export class AtmosphereLayer {
 	private tint?: Phaser.GameObjects.Rectangle;
 	private lights: LitPiece[] = [];
 	private daylight?: Daylight;
-	/** Each sprite the night tints: its own tint (what its code set), and the tint it shows. */
+
 	private readonly shaded = new WeakMap<object, { own: number; shown: number }>();
 	private shadedCount = 0;
 	private sinceDaylight = 0;
@@ -168,7 +148,7 @@ export class AtmosphereLayer {
 			const lit = (place.atmosphere ?? []).find((effect) => effect.kind === "lights");
 			if (lit?.rects?.length) this.lights = this.addLights(lit.rects);
 			this.refreshDaylight();
-			// Just before each frame is drawn, so a sprite made or re-tinted this frame shows the night already.
+
 			scene.events.on(Phaser.Scenes.Events.PRE_RENDER, this.shade);
 			scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
 				scene.events.off(Phaser.Scenes.Events.PRE_RENDER, this.shade),
@@ -176,12 +156,6 @@ export class AtmosphereLayer {
 		}
 	}
 
-	/**
-	 * Out of doors, the light on everything standing in the place: each sprite drawn above the tint (people, pets,
-	 * fidgets, furniture pieces, the overlays, the particles) is multiplied by the daylight colour, as the tint multiplies
-	 * the painting under it, over whatever tint its own code gave it. Lights (`keepLit`) stay as drawn. One pass over
-	 * the display list each frame: only what changed is touched, and nothing at all while the light is as painted.
-	 */
 	private readonly shade = () => {
 		const tint = this.daylight?.tint ?? WHITE;
 		if (tint === WHITE && this.shadedCount === 0) return;
@@ -194,7 +168,7 @@ export class AtmosphereLayer {
 			if (!tinted(object)) return;
 			const shown = object.tintTopLeft;
 			const before = this.shaded.get(object);
-			// A tint other than the one given here was set by the sprite's own code since: that is its own now.
+
 			const own = before && shown === before.shown ? before.own : shown;
 			const wanted = night && !LIT.has(object) ? multiply(own, tint) : own;
 			if (wanted !== shown) object.setTint(wanted);
@@ -238,7 +212,6 @@ export class AtmosphereLayer {
 		}
 	}
 
-	/** Just over what something lies on: the foreground piece (a table, a bench) under `at`, else the floor line at it. */
 	private depthOn([x, y]: Point): number {
 		const piece = this.host
 			.place()
@@ -246,7 +219,6 @@ export class AtmosphereLayer {
 		return (piece ? piece.feet : y) * TILE + 0.1;
 	}
 
-	/** Glints lie on the water: over a basin's water overlay when there is one, else just over the painting. */
 	private waterDepth([x, y, w, h]: Rect): number {
 		const [cx, cy] = [x + w / 2, y + h / 2];
 		const basin = this.host
@@ -255,7 +227,6 @@ export class AtmosphereLayer {
 		return basin ? basin.feet * TILE - 0.35 : FLOOR_DEPTH;
 	}
 
-	/** Where a glint may show: inside a water slot's oval (clear of its hole), or where the painting is water-blue. */
 	private waterTest(rect: Rect): (at: Point) => boolean {
 		const pools = this.host.place().overlaySlots.filter((slot) => slot.kind === "water");
 		const source = this.scene.textures.get(this.host.painting()).getSourceImage() as HTMLImageElement;
@@ -278,11 +249,6 @@ export class AtmosphereLayer {
 		};
 	}
 
-	/**
-	 * The painting's lit windows and lamps inside `rects` (its bright, warm pixels), drawn over the tint as painted, with
-	 * a soft halo added around them: after dark they glow while the rest of the place dims. Each rect is its own piece,
-	 * sorted by its bottom edge like a foreground piece, so anyone standing south of it is drawn over it and its halo.
-	 */
 	private addLights(rects: Rect[]): LitPiece[] {
 		const key = `atmosphere:lights:${this.host.painting()}`;
 		const source = this.scene.textures.get(this.host.painting()).getSourceImage() as HTMLImageElement;
@@ -309,7 +275,7 @@ export class AtmosphereLayer {
 				}
 				ctx.putImageData(image, sx, sy);
 			}
-			// Each rect's piece, with what an earlier rect already holds cleared, so overlapping rects light a pixel once.
+
 			rects.forEach((rect, i) => {
 				const [sx, sy, sw, sh] = px(rect);
 				const piece = document.createElement("canvas");
@@ -404,7 +370,6 @@ export class AtmosphereLayer {
 	}
 }
 
-/** Inside a water slot's oval and outside its hole (a fountain's pillar). */
 function inPool(slot: OverlaySlot, [x, y]: Point): boolean {
 	const [cx, cy] = slot.at;
 	const rx = slot.rx ?? 2;
@@ -424,7 +389,6 @@ function inPool(slot: OverlaySlot, [x, y]: Point): boolean {
 const between = (random: () => number, low: number, high: number) => low + (high - low) * random();
 const pick = <T>(random: () => number, items: readonly T[]): T => items[Math.floor(random() * items.length)];
 
-/** Particles that live and die in turn: each, when its life is over, is born again elsewhere. */
 abstract class Particles implements Effect {
 	abstract readonly kind: Atmosphere["kind"];
 	readonly what: string | null = null;
@@ -470,7 +434,6 @@ abstract class Particles implements Effect {
 	}
 }
 
-/** Dust drifting in the light: soft specks that wander slowly and come and go. */
 class Motes extends Particles {
 	readonly kind = "motes";
 	private readonly rect: Rect;
@@ -507,7 +470,6 @@ class Motes extends Particles {
 	}
 }
 
-/** Leaves or petals drifting down on the wind, swaying and turning, to lie a while on open floor. */
 class Fall extends Particles {
 	readonly kind = "fall";
 	readonly what: string;
@@ -542,7 +504,7 @@ class Fall extends Particles {
 		p.phase = this.random() * Math.PI * 2;
 		p.peak = between(this.random, 0.8, 1);
 		p.life = 60;
-		// Those in the air on arrival are already in full view.
+
 		p.age = first ? 1 + this.random() : 0;
 		p.lain = undefined;
 		p.image.setDepth(AIR_DEPTH).setAngle(this.random() * 360);
@@ -557,7 +519,7 @@ class Fall extends Particles {
 				if (this.open([p.x, p.y])) {
 					p.lain = 0;
 					p.image.setDepth(FLOOR_DEPTH);
-				} else p.lain = -1; // over a roof or a wall: it fades on its way down, behind
+				} else p.lain = -1;
 			}
 		} else if (p.lain >= 0) p.lain += seconds;
 		else {
@@ -565,7 +527,7 @@ class Fall extends Particles {
 			p.y += p.vy * seconds;
 		}
 		const sway = p.lain === undefined || p.lain < 0 ? Math.sin(p.age * 1.3 + p.phase) * 0.35 : 0;
-		// It fades in where it is born, lies a few seconds once down, and fades away.
+
 		const fadeIn = clamp01(p.age / 0.8);
 		const fadeOut =
 			p.lain === undefined
@@ -578,7 +540,6 @@ class Fall extends Particles {
 	}
 }
 
-/** A small flock of birds, or a plane with its trail, crossing high over the place now and then. */
 class Sky implements Effect {
 	readonly kind = "sky";
 	readonly what: string;
@@ -601,7 +562,7 @@ class Sky implements Effect {
 		this.random = random;
 		this.rect = rect;
 		this.what = effect.what ?? "birds";
-		// The first soon after arriving, so a visit sees one.
+
 		this.wait = between(random, 3, 8);
 	}
 
@@ -635,10 +596,10 @@ class Sky implements Effect {
 					.image(0, 0, birds ? "overlay:bird-1" : "atmosphere:bird")
 					.setDepth(AIR_DEPTH + 2)
 					.setFlipX(leftward);
-				// About half a tile across: birds high overhead, smaller than a messenger landing by someone.
+
 				image.setScale(birds ? (0.5 * TILE) / 403 : PX);
 				const shadow = this.scene.add.ellipse(0, 0, TILE * 0.3, TILE * 0.1, 0x000000, 0.14).setDepth(FLOOR_DEPTH);
-				// A loose V: each behind and to one side of the one before.
+
 				const rank = Math.ceil(i / 2);
 				const side = i % 2 ? 1 : -1;
 				members.push({
@@ -674,14 +635,14 @@ class Sky implements Effect {
 			member.image.setPosition((x + ox) * TILE, (y + oy + bob) * TILE);
 			if (this.what === "birds") {
 				member.beat += seconds * 11;
-				// Flapping, with a glide now and then.
+
 				const glide = Math.sin(flight.age * 0.9 + member.beat * 0.05) > 0.55;
 				member.image.setTexture(
 					this.scene.textures.exists("overlay:bird-1")
 						? `overlay:bird-${glide ? 1 : Math.floor(member.beat) % 4}`
 						: "atmosphere:bird",
 				);
-				// Their shadows on the ground, well south of the birds high above.
+
 				member.shadow?.setPosition((x + ox + 1.2) * TILE, (y + oy + 4.5) * TILE);
 			}
 		}
@@ -732,7 +693,6 @@ class Sky implements Effect {
 	}
 }
 
-/** Wisps rising from a cup, a kettle, or a trough: soft, slow, and faint. */
 class Steam extends Particles {
 	readonly kind = "steam";
 	private readonly at: Point;
@@ -768,7 +728,6 @@ class Steam extends Particles {
 	}
 }
 
-/** Embers rising quick and bright from a forge's fire, flickering out. */
 class Sparks extends Particles {
 	readonly kind = "sparks";
 	private readonly at: Point;
@@ -796,7 +755,7 @@ class Sparks extends Particles {
 		p.y = this.at[1] - 0.2;
 		p.vx = between(this.random, -0.35, 0.35);
 		p.vy = -between(this.random, 0.9, 1.7);
-		// Now and then a pause between embers, so they come in little bursts.
+
 		p.life = between(this.random, 0.6, 1.3) + (this.random() < 0.3 ? between(this.random, 0.5, 1.5) : 0);
 		p.age = first ? this.random() * p.life : 0;
 		p.phase = this.random() * Math.PI * 2;
@@ -813,7 +772,6 @@ class Sparks extends Particles {
 	}
 }
 
-/** Small lights blinking each in its own rhythm: a server rack's LEDs, a console's lamps. */
 class Blink implements Effect {
 	readonly kind = "blink";
 	readonly what = null;
@@ -866,7 +824,6 @@ class Blink implements Effect {
 	}
 }
 
-/** Each screen's soft light, breathing a little and flickering now and then. */
 class Screens implements Effect {
 	readonly kind = "screens";
 	readonly what = null;
@@ -906,7 +863,6 @@ class Screens implements Effect {
 			screen.age += seconds;
 			screen.next -= seconds;
 			if (screen.next <= 0) {
-				// A flicker: a moment dimmer, as a screen changes what it shows.
 				screen.dip = between(this.random, 0.08, 0.18);
 				screen.next = between(this.random, 3, 11);
 			}
@@ -925,7 +881,6 @@ class Screens implements Effect {
 	}
 }
 
-/** Glints of light on water: little stars that wink and are gone. */
 class Shimmer extends Particles {
 	readonly kind = "shimmer";
 	private readonly rect: Rect;
@@ -947,7 +902,7 @@ class Shimmer extends Particles {
 
 	protected born(p: Particle, first: boolean) {
 		const [x, y, w, h] = this.rect;
-		// A few tries for a point on water; a glint with none waits its turn unseen.
+
 		p.peak = 0;
 		for (let tries = 0; tries < 8; tries++) {
 			const at: Point = [x + this.random() * w, y + this.random() * h];
@@ -958,7 +913,7 @@ class Shimmer extends Particles {
 			}
 		}
 		p.life = between(this.random, 0.5, 1.1) + between(this.random, 0.2, 1.6);
-		p.phase = between(this.random, 0.5, 1.1); // how long it shows; the rest of its life it waits
+		p.phase = between(this.random, 0.5, 1.1);
 		p.age = first ? this.random() * p.life : 0;
 	}
 
@@ -975,11 +930,6 @@ class Shimmer extends Particles {
 const LEAF_COLOURS = ["#c8582a", "#e3a03c", "#a9442a", "#d9b44a", "#b86a2c"];
 const PETAL_COLOURS = ["#f8c9d6", "#f4b0c4", "#fde3ea", "#f9bfd0"];
 
-/**
- * The particles' little sprites, drawn once: pixel patterns in the art's manner (a dark tone of the fill as outline,
- * never black) for leaves, petals, the plane, a spark, and an LED; soft round gradients for motes, steam, glints, and
- * screens' light. Leaves and petals are drawn in white shades and tinted.
- */
 function drawTextures(scene: Phaser.Scene) {
 	const pattern = (key: string, rows: string[], colours: Record<string, string>) => {
 		if (scene.textures.exists(key)) return;
@@ -1010,7 +960,7 @@ function drawTextures(scene: Phaser.Scene) {
 		ctx.fillRect(0, 0, size, size);
 		scene.textures.addCanvas(key, canvas);
 	};
-	// Tinted at draw time: W the leaf, L its light side, D its dark edge.
+
 	pattern("atmosphere:leaf", ["....DD.", "..DDWLD", ".DWWWLD", "DWWWLD.", ".DWDD..", "D......"], {
 		D: "#8c8c8c",
 		W: "#e6e6e6",

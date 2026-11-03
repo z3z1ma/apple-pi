@@ -1,8 +1,3 @@
-// Fidget objects (ticket 29, decision 27): things to play with in every place, designed with the place: pet the cat,
-// ring the bell, light the candles, spin the globe. Pure play: a fidget never changes work, sends no command, makes
-// no outside call, and stores nothing in the runtime. What it is doing (a light left on, a box left open) lasts while
-// the app runs, here in the world UI. Each answers the pointer as any thing in the world does: hover text, its default
-// play on a left click, every play and Examine on a right click; the avatar walks up first.
 import * as Phaser from "phaser";
 import { chatLines } from "../overlay/interface/chat-lines.js";
 import {
@@ -26,9 +21,7 @@ import { drawTag } from "./character-life.js";
 import { fidgetScale, fidgetSlots, onFloor, standPoints, surfaceOf } from "./fidget-spots.js";
 import { PERSON_TILES } from "./walker.js";
 
-/** A soft light the scene draws (its lantern glow), whose brightness a fidget turns up and down. */
 export interface Glow {
-	/** Ease its brightness to `level` (0 is dark) over `ms`. */
 	level(level: number, ms?: number): void;
 	destroy(): void;
 	readonly image: Phaser.GameObjects.Image;
@@ -36,14 +29,14 @@ export interface Glow {
 
 export interface FidgetHost {
 	place(): PlaceData;
-	/** The place's key: what a fidget left on or open is remembered under. */
+
 	placeKey(): string;
-	/** Walk up to the first group of stand points that can be reached, face `at`, then play. */
+
 	walkUp(stands: Point[][], at: Point, then: () => void): void;
-	/** The scene's warm glow at a point (tiles), `r` tiles across its halo, drawn at `depth` (just over its fidget). */
+
 	glow(at: Point, r: number, level: number, depth: number): Glow;
 	notify(text: string): void;
-	/** The view's zoom correction for things drawn at a steady size on screen. */
+
 	uiScale(): number;
 }
 
@@ -51,36 +44,34 @@ export interface FidgetView {
 	index: number;
 	kind: FidgetKind;
 	name: string;
-	/** Its bottom centre, in tiles, and its size. */
+
 	x: number;
 	y: number;
 	w: number;
 	h: number;
-	/** The sprite it shows (`pet-1`, `light-on`). */
+
 	art: string;
-	/** A pet's look (`hound`), null for the kind's own sprites or another kind; and whether it rests asleep. */
+
 	look: string | null;
 	asleep: boolean;
-	/** A light on, a box open. */
+
 	on: boolean;
-	/** The play under way, or null at rest. */
+
 	playing: string | null;
-	/** Its turn in degrees (a swinging handbell) and how fast a spinner turns (frames per second). */
+
 	angle: number;
 	speed: number;
-	/** Little drawn things it gives off, in the air now (hearts, notes). */
+
 	particles: number;
-	/** Its light's brightness, when it has one. */
+
 	glow: number | null;
-	/** The line a tome shows, while it shows. */
+
 	line: string | null;
 	onFloor: boolean;
 }
 
-/** What a fidget left on or open stays, per theme, place, and slot, while the app runs. */
 const kept = new Map<string, boolean>();
 
-/** The particle each kind gives off by default; a pack may name its own for the main play. */
 const PARTICLE: Record<FidgetKind, FidgetParticle> = {
 	pet: "hearts",
 	spin: "sparkles",
@@ -92,11 +83,11 @@ const PARTICLE: Record<FidgetKind, FidgetParticle> = {
 	candle: "smoke",
 	tome: "sparkles",
 };
-/** A spinner's spin: frames per second added by a spin and by a nudge, the most, and how fast it slows (per second). */
+
 const SPIN = { spin: 15, nudge: 5, most: 24, slowing: 0.62, rest: 0.5 } as const;
-/** World px per pixel of a particle's pattern. */
+
 const FX_PX = 1.7;
-/** Rising over the place's characters and furniture (puffs and sparkles in the air), under the signs. */
+
 const FX_DEPTH = 9.3e4;
 
 interface Fidget {
@@ -106,26 +97,26 @@ interface Fidget {
 	style: FidgetStyle;
 	name: string;
 	image: Phaser.GameObjects.Image;
-	/** A pet's sprites by what each shows, and the one it shows at rest (a pet asleep, its sleep sprite). */
+
 	frames: Partial<Record<PetFrame, string>>;
 	rest: string;
-	/** A pet curled up asleep at rest: play wakes it for a while. */
+
 	asleep: boolean;
-	/** World px per px of sprite, from its first frame, so every frame keeps one pixel size. */
+
 	scale: number;
 	depth: number;
 	onFloor: boolean;
 	on: boolean;
 	playing: string | null;
-	/** When the current play is over (scene time, ms), and what happens then. */
+
 	timers: Phaser.Time.TimerEvent[];
 	tweens: Phaser.Tweens.Tween[];
 	spin: { phase: number; speed: number };
 	glow?: Glow;
-	/** A tome's line on its sign, and which line comes next. */
+
 	sign?: { line: string; tag: Phaser.GameObjects.Container };
 	next: number;
-	/** When it fidgets on its own next (a cat licking its paw, a sleeper's "z"). */
+
 	idleAt: number;
 	bob?: Phaser.Tweens.Tween;
 }
@@ -134,7 +125,7 @@ export class Fidgets {
 	private readonly scene: Phaser.Scene;
 	private readonly host: FidgetHost;
 	private fidgets: Fidget[] = [];
-	/** The particles in the air, by the fidget giving them off. */
+
 	private particles = new Map<Phaser.GameObjects.Image, Fidget>();
 
 	constructor(scene: Phaser.Scene, host: FidgetHost) {
@@ -145,7 +136,7 @@ export class Fidgets {
 		fidgetSlots(place).forEach((slot, index) => {
 			const kind = slot.fidget!;
 			const style = worn().fidgets[kind];
-			// A pet wears its look's sprites, name, and reactions (`pet-hound-0`, "Hound").
+
 			const art = kind === "pet" ? petArt(slot.look) : [...FIDGETS[kind].art];
 			if (!style || !scene.textures.exists(`overlay:${art[0]}`)) return;
 			this.fidgets.push(this.add(index, slot, kind, slotStyle(style, slot), art, place));
@@ -170,14 +161,13 @@ export class Fidgets {
 	): Fidget {
 		const [x, y] = slot.at;
 		const first = this.scene.textures.get(`overlay:${art[0]}`).getSourceImage() as HTMLImageElement;
-		// A pet to scale with the characters (a cat about a third of one standing); other things by their width.
+
 		const scale = fidgetScale(kind, style, slot, first, PERSON_TILES) * TILE;
 		const frames: Fidget["frames"] =
 			kind === "pet" ? Object.fromEntries((style.frames ?? PET_FRAME_ORDER).map((frame, i) => [frame, art[i]])) : {};
 		const asleep = kind === "pet" && !!slot.asleep && !!frames.sleep;
 		const rest = asleep ? frames.sleep! : art[0];
-		// On a piece of furniture it lies just over that piece (which the foreground pass draws again); on the floor it
-		// stands among the characters by its feet.
+
 		const surface = surfaceOf(place, slot.at);
 		const depth = surface ? surface.feet * TILE + 0.2 : y * TILE;
 		const on = kept.get(`${worn().id}:${this.host.placeKey()}:${index}`) ?? slot.on ?? false;
@@ -208,14 +198,12 @@ export class Fidgets {
 			idleAt: this.scene.time.now + Phaser.Math.Between(2500, 9000),
 		};
 		if (kind === "handbell") {
-			// Swung from its grip: turned about the top of the handle, standing where it would.
 			image.setOrigin(0.5, 0.12).setY((y - (image.displayHeight * 0.88) / TILE) * TILE);
 		}
 		this.dress(fidget);
 		return fidget;
 	}
 
-	/** Its look at rest for its state: a light on or off (with its glow), a box open or shut, a sleeper breathing. */
 	private dress(fidget: Fidget) {
 		const { kind, image } = fidget;
 		const [x, y] = fidget.slot.at;
@@ -241,18 +229,15 @@ export class Fidgets {
 		return fidget.image.displayWidth / TILE;
 	}
 
-	/** Its height at rest, in tiles. */
 	private height(fidget: Fidget) {
 		const rest = this.scene.textures.get(`overlay:${fidget.rest}`).getSourceImage() as HTMLImageElement;
 		return (rest.height * fidget.scale) / TILE;
 	}
 
-	/** Show one of its sprites, keeping one pixel size across them. */
 	private show(fidget: Fidget, art: string) {
 		fidget.image.setTexture(`overlay:${art}`);
 	}
 
-	/** Where it answers the pointer (tiles): the sprite's box, never smaller than a small hand's width. */
 	private rectOf(fidget: Fidget): Rect {
 		const [x, y] = fidget.slot.at;
 		const w = Math.max(0.5, this.width(fidget));
@@ -260,9 +245,6 @@ export class Fidgets {
 		return [x - w / 2, y - h, w, h];
 	}
 
-	// What the pointer offers.
-
-	/** Every fidget under a point, the front one first: its default play, its other plays, and Examine. */
 	targetsAt([px, py]: Point): Target[] {
 		return this.fidgets
 			.filter((fidget) => {
@@ -299,9 +281,6 @@ export class Fidgets {
 		this.host.notify(line);
 	}
 
-	// Plays.
-
-	/** Play with it: each kind its own way; a new play cuts the last one short. */
 	play(fidget: Fidget, play: string) {
 		const kind = fidget.kind;
 		if (kind !== "spin") this.settle(fidget);
@@ -317,7 +296,6 @@ export class Fidgets {
 		if (kind === "tome") return this.leaf(fidget);
 	}
 
-	/** Back at rest at once: its timers and tweens stopped, its first sprite (or its state's) shown. */
 	private settle(fidget: Fidget) {
 		for (const timer of fidget.timers) timer.remove();
 		for (const tween of fidget.tweens) tween.remove();
@@ -335,7 +313,6 @@ export class Fidgets {
 		fidget.playing = null;
 	}
 
-	/** The scene is going: its images are already gone, so only the timers and tweens are stopped. */
 	private stop(fidget: Fidget) {
 		for (const timer of fidget.timers) timer.remove();
 		for (const tween of fidget.tweens) tween.remove();
@@ -356,10 +333,6 @@ export class Fidgets {
 		this.after(fidget, ms, () => this.settle(fidget));
 	}
 
-	/**
-	 * Petted: it leans into the hand, eyes closed, purring (a little shiver), hearts rise; then it stretches, if it does,
-	 * and sits again. Asleep, it purrs in its sleep and sleeps on.
-	 */
 	private pet(fidget: Fidget, particle: FidgetParticle) {
 		const { frames } = fidget;
 		if (fidget.asleep) {
@@ -389,10 +362,6 @@ export class Fidgets {
 		this.done(fidget, 2400);
 	}
 
-	/**
-	 * Played with: its playful pose, hopping twice (as high as it is small or big), with a sparkle. Asleep, it wakes
-	 * first (sits up with a start), plays, and curls up again.
-	 */
 	private romp(fidget: Fidget) {
 		const { frames } = fidget;
 		const rest = fidget.image.y;
@@ -423,13 +392,11 @@ export class Fidgets {
 		this.done(fidget, 3200);
 	}
 
-	/** Spun: it turns fast and slows down to rest (`update` turns it). A nudge turns it gently. */
 	private twirl(fidget: Fidget, push: number, particle: FidgetParticle) {
 		fidget.spin.speed = Math.min(SPIN.most, fidget.spin.speed + push);
 		this.burst(fidget, particle, push > SPIN.nudge ? 3 : 1, 0.6);
 	}
 
-	/** Rung: the ringing sprite with a shake (a handbell swings), sparkles at the top; a peal rings three times. */
 	private ring(fidget: Fidget, times: number, particle: FidgetParticle) {
 		const once = (at: number) =>
 			this.after(fidget, at, () => {
@@ -458,7 +425,6 @@ export class Fidgets {
 		kept.set(this.keyOf(fidget), fidget.on);
 	}
 
-	/** Lit or put out: its sprite and its glow, fading; a wisp of smoke as it goes out. */
 	private toggleLight(fidget: Fidget, on: boolean) {
 		fidget.on = on;
 		this.keep(fidget);
@@ -469,7 +435,6 @@ export class Fidgets {
 		this.done(fidget, 500);
 	}
 
-	/** Opened or shut: its sprite with a little pop; open, it gives off notes (or steam, or sparkles) until shut. */
 	private toggleBox(fidget: Fidget, open: boolean, particle: FidgetParticle) {
 		fidget.on = open;
 		this.keep(fidget);
@@ -479,7 +444,6 @@ export class Fidgets {
 		this.done(fidget, 400);
 	}
 
-	/** A little squash and rebound, as something handled does. */
 	private pop(fidget: Fidget) {
 		this.tween(fidget, {
 			targets: fidget.image,
@@ -490,7 +454,6 @@ export class Fidgets {
 		});
 	}
 
-	/** A sleeper stroked: it purrs (a soft shiver) with hearts, and sleeps on. */
 	private stroke(fidget: Fidget) {
 		const x = fidget.image.x;
 		this.tween(fidget, { targets: fidget.image, x: x + 0.7, duration: 55, yoyo: true, repeat: 11 });
@@ -498,7 +461,6 @@ export class Fidgets {
 		this.done(fidget, 1500);
 	}
 
-	/** A sleeper booped: it startles (squash and rebound), a sparkle, and settles back to sleep. */
 	private boop(fidget: Fidget) {
 		fidget.bob?.remove();
 		this.tween(fidget, {
@@ -514,7 +476,6 @@ export class Fidgets {
 		this.done(fidget, 900);
 	}
 
-	/** A candle blown on: its light gutters low and steadies again, with a wisp of smoke. */
 	private blow(fidget: Fidget) {
 		fidget.glow?.level(0.1, 140);
 		this.tween(fidget, { targets: fidget.image, angle: -3, duration: 160, yoyo: true, ease: "Sine.out" });
@@ -523,7 +484,6 @@ export class Fidgets {
 		this.done(fidget, 1400);
 	}
 
-	/** Hands cupped round a candle: its light swells warm, then settles. */
 	private cup(fidget: Fidget) {
 		fidget.glow?.level(0.95, 400);
 		this.burst(fidget, "sparkles", 2, 0.9);
@@ -531,7 +491,6 @@ export class Fidgets {
 		this.done(fidget, 2300);
 	}
 
-	/** A tome leafed through: it ruffles (two quick squashes), sparkles, and shows one of its lines on a sign. */
 	private leaf(fidget: Fidget) {
 		this.tween(fidget, {
 			targets: fidget.image,
@@ -561,8 +520,6 @@ export class Fidgets {
 		this.done(fidget, 600);
 	}
 
-	// Each frame.
-
 	update(time: number, delta: number) {
 		const seconds = Math.min(delta, 100) / 1000;
 		for (const fidget of this.fidgets) {
@@ -580,7 +537,6 @@ export class Fidgets {
 		}
 	}
 
-	/** A pet awake now and then plays, stretches, or closes its eyes by itself; one that curls up naps a while. */
 	private idle(fidget: Fidget, time: number) {
 		const { frames } = fidget;
 		fidget.idleAt = time + Phaser.Math.Between(8000, 15_000);
@@ -596,7 +552,6 @@ export class Fidgets {
 		this.done(fidget, art === frames.play ? 1300 : 900);
 	}
 
-	/** A spinner turns by its speed, slowing to rest on a frame. */
 	private turn(fidget: Fidget, seconds: number) {
 		const spin = fidget.spin;
 		if (spin.speed <= 0) return;
@@ -607,13 +562,10 @@ export class Fidgets {
 			fidget.playing = null;
 		}
 		this.show(fidget, FIDGETS.spin.art[Math.floor(spin.phase) % 4]);
-		// Wobbling a little on its stand while it turns fast.
+
 		fidget.image.setAngle(Math.sin(spin.phase * Math.PI * 2) * Math.min(1.6, spin.speed / 10));
 	}
 
-	// Particles.
-
-	/** `count` little drawn things rising from the fidget, from `lift` of its height (0 its feet, 1 its top). */
 	private burst(fidget: Fidget, particle: FidgetParticle, count: number, lift: number) {
 		const [x, y] = fidget.slot.at;
 		const top = y - this.height(fidget) * lift;
@@ -644,7 +596,6 @@ export class Fidgets {
 		}
 	}
 
-	/** Every particle's little pixel sprite, drawn once per scene from a pattern in the pack's outline style. */
 	private particleTextures() {
 		for (const [name, { rows, colours }] of Object.entries(PATTERNS)) {
 			const key = `overlay:fx-${name}`;
@@ -674,7 +625,7 @@ export class Fidgets {
 			x: fidget.slot.at[0],
 			y: fidget.slot.at[1],
 			w: this.width(fidget),
-			// What it shows now, at its pixel size (a pet sitting up: its sitting height).
+
 			h: (fidget.image.height * fidget.scale) / TILE,
 			art: fidget.image.texture.key.replace(/^overlay:/, ""),
 			look: fidget.slot.look ?? null,
@@ -691,10 +642,6 @@ export class Fidgets {
 	}
 }
 
-/**
- * Particles as pixel patterns: `K` the dark outline (a deep tone, never black), the rest their colours. Steam and
- * smoke are soft puffs.
- */
 const PATTERNS: Record<FidgetParticle, { rows: string[]; colours: Record<string, string> }> = {
 	hearts: {
 		rows: [".KK...KK.", "KRRK.KRLK", "KRRRKRRLK", "KRRRRRRRK", ".KRRRRRK.", "..KRRRK..", "...KRK...", "....K...."],

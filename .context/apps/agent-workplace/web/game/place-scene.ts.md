@@ -1,5 +1,8 @@
 ## file
 
+Lay out characters before choosing avatar arrival so the entry can avoid occupied sprite footprints. Basin water sorts above its supporting foreground piece; basins have no standing positions. Crop gallery doors' side/bottom fringe by one pixel.
+Why: depth order alone cannot prevent an arrival covering another character, a basin piece otherwise covers its own water, and the anime-school door sprites contain a magenta keying fringe along those edges.
+
 The read-only methods (`placeKey`, `figureViews`, `avatarView`, `doorViews`, `toScreen`, `toWorld`, `zoomView`, `galleryView`, `overlayViews`, `bannerViews`, `paintingFrames`, `filterView`, `walkGridShown`, `lookAt`, `hostView`, `townsfolkViews`, `signViews`, `noticeViews`, `workViews`, `fidgetViews`, `pointerView`, `recruiterView`, `ambientViews`) are the surface the headless tests use through `window.agentWorldView`, and the interface's minimap reads `placeKey`, `figureViews`, `townsfolkViews`, `avatarView`, `toWorld`, and `walkGridShown` through `overlay/interface/world-link.ts`. Renaming one breaks them without a type error, because the tests reach it through `page.evaluate`.
 Coupled: apps/agent-workplace/web/main.tsx, apps/agent-workplace/web/overlay/interface/world-link.ts
 Verify: apps/agent-workplace/tests/world-ui.test.ts, apps/agent-workplace/tests/world-movement.test.ts, apps/agent-workplace/tests/world-places.test.ts

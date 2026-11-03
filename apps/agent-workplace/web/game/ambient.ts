@@ -1,9 +1,3 @@
-// Ambient characters (ticket 08): each pack's cast of people who are there only for fun and immersion (a bard, a
-// sleepy guard, a barista, a lunch lady), written in its manifest (`theme.json`'s `ambient`) and placed in its places'
-// data (`PlaceData.ambient`). They stand about with the world's own life (idles, and strolls to the place's points of
-// interest unless posted), answer the pointer like anyone else (Talk to, Examine), say their lines in turn in the small
-// dialogue box, react when clicked several times in a row, and now and then say something to nobody in a speech
-// bubble. They are presentation only: nothing here sends a command or calls anything outside the page.
 import type * as Phaser from "phaser";
 import type { AmbientMember, AmbientPlacement } from "../../src/theme-pack.js";
 import type { PlaceData, Point } from "../theme.js";
@@ -14,32 +8,25 @@ import { type BarkShape, drawBark, lifePace, seeded } from "./character-life.js"
 import { PERSON_TILES, Walker } from "./walker.js";
 import type { Wander, WanderView } from "./wander.js";
 
-/** Clicks on a cast member each within this long of the one before (ms) count as clicking it again and again. */
 export const STREAK_MS = 1500;
-/** The click in a row that gets a reaction instead of its next line (and every click in the row after it). */
+
 export const REACT_AFTER = 3;
-/** A bark comes this long after the place opens (ms of life), then one every so often, and lasts this long (ms). */
+
 const FIRST_BARK = [9000, 32_000] as const;
 const BARK_EVERY = [35_000, 80_000] as const;
 const BARK_MS = 4200;
-/** A bark that has no room now tries again this much later (ms of life). */
+
 const BARK_RETRY = 4000;
 const BARK_FADE_MS = 320;
 const BARK_RISE = 5;
 const BARK_MARGIN = 6;
-/** Where a bark's tail points, in tiles above the feet (just over the head, as an agent's bark). */
+
 const BARK_LIFT = 2.12;
 const STANDING = 120;
 
-/** Where each cast member is in its lines and reactions, per theme and cast name, for as long as the app runs. */
 type Said = { line: number; reaction: number };
 const said = new Map<string, Said>();
 
-/**
- * What a cast member says next: its lines in turn, round and round (remembered across visits), and one of its
- * reactions once it has been clicked `REACT_AFTER` times in a row. Clicks are counted as they are made (`click`), even
- * while the avatar is still walking up, and what to say is chosen when it arrives (`next`).
- */
 export class Patter {
 	private readonly key: string;
 	private readonly member: Pick<AmbientMember, "lines" | "reactions">;
@@ -53,7 +40,6 @@ export class Patter {
 		this.memory = memory;
 	}
 
-	/** The operator clicked Talk to at `now` (ms). */
 	click(now: number) {
 		this.streak = now - this.last <= STREAK_MS ? this.streak + 1 : 1;
 		this.last = now;
@@ -69,7 +55,6 @@ export class Patter {
 	}
 }
 
-/** A bark's bubble on screen, in CSS px. */
 export interface ScreenBox {
 	left: number;
 	top: number;
@@ -77,27 +62,25 @@ export interface ScreenBox {
 	bottom: number;
 }
 
-/** What the scene gives its cast. */
 export interface AmbientHooks {
 	place(): PlaceData;
-	/** Walk up to whoever stands at `at`, then act. */
+
 	approach(at: Point, then: () => void): void;
-	/** Show a line in the small dialogue box. */
+
 	notify(text: string): void;
-	/** Where the avatar is. */
+
 	avatar(): Point | undefined;
-	/** A point in tiles, on screen in CSS px; and the camera's zoom. */
+
 	toScreen(at: Point): Point;
 	zoom(): number;
-	/** The screen's size, and whether a box on it is covered by the interface or by another bark. */
+
 	screen(): { width: number; height: number };
 	covered(box: ScreenBox): boolean;
-	/** The place's wandering: those not posted stroll between its points of interest and come back. */
+
 	wander?: Wander;
 }
 
 export interface AmbientView {
-	/** Its cast name in the pack (`bard`). */
 	id: string;
 	name: string;
 	look: string;
@@ -105,12 +88,12 @@ export interface AmbientView {
 	y: number;
 	moving: boolean;
 	idle: string | null;
-	/** Where it is in a stroll (always home when posted). */
+
 	wander: WanderView["state"];
 	interest: string | null;
-	/** The bark showing over its head. */
+
 	bark: string | null;
-	/** Where it belongs. */
+
 	home: Point;
 	stays: boolean;
 }
@@ -118,7 +101,7 @@ export interface AmbientView {
 interface Bark {
 	line: string;
 	shape: BarkShape;
-	/** Ms of the bark left before it fades, how much of it shows, and whether it is going. */
+
 	left: number;
 	shown: number;
 	going: boolean;
@@ -131,13 +114,12 @@ interface Member {
 	walker: Walker;
 	patter: Patter;
 	random: () => number;
-	/** Ms of life until it barks next. */
+
 	nextBark: number;
 	barks: number;
 	bark?: Bark;
 }
 
-/** The cast standing in one place; the scene owns one while it shows the place. */
 export class AmbientCast {
 	private readonly scene: Phaser.Scene;
 	private readonly hooks: AmbientHooks;
@@ -166,13 +148,12 @@ export class AmbientCast {
 				barks: 0,
 			};
 			this.members.push(one);
-			// Standing about it idles now and then; unless posted, it strolls to the place's points of interest (06, 07).
+
 			walker.live(`ambient:${id}`);
 			if (!placement.stay) hooks.wander?.add(`ambient:${id}`, "townsfolk", walker, () => placement.at);
 		}
 	}
 
-	/** Where the cast belongs: the avatar and everyone else walk round them, as round anyone at their spot. */
 	occupied(): Point[] {
 		return this.members.map(({ placement }) => placement.at);
 	}
@@ -185,7 +166,6 @@ export class AmbientCast {
 		}
 	}
 
-	/** Cast members under a point, front first, with what can be done with each. */
 	targetsAt([x, y]: Point): Target[] {
 		const scale = (PERSON_TILES * TILE) / STANDING / TILE;
 		return this.members
@@ -217,7 +197,6 @@ export class AmbientCast {
 		});
 	}
 
-	/** Where the cast's barks are on screen, so the agents' barks keep clear of them. */
 	barkBoxes(): ScreenBox[] {
 		return this.members.flatMap((one) => {
 			const box = one.bark && one.bark.shown > 0 ? this.barkBox(one, one.bark.shape) : undefined;
@@ -246,7 +225,6 @@ export class AmbientCast {
 		};
 	}
 
-	/** Walk up and hear its next line (or, clicked again and again, its reaction). */
 	private talk(one: Member) {
 		one.patter.click(this.scene.time.now);
 		this.hooks.approach(one.placement.at, () => this.say(one));
@@ -258,7 +236,6 @@ export class AmbientCast {
 		const { walker } = one;
 		if (walker.moving) return;
 		if (reaction) {
-			// Pestered, it turns to the room and shows it: a shrug, a laugh, the guard's yawn.
 			walker.face([walker.x, walker.y + 1]);
 			walker.playIdle(one.member.gesture ?? "shrug");
 			return;
@@ -267,10 +244,6 @@ export class AmbientCast {
 		if (avatar) walker.face(avatar);
 	}
 
-	/**
-	 * Now and then, standing still, it says one of its barks to nobody in a speech bubble over its head, where the bubble
-	 * has room on screen (clear of the interface and of other barks), one cast member at a time.
-	 */
 	private liveBark(one: Member, delta: number, life: number, ui: number) {
 		const { walker } = one;
 		const anchor: Point = [walker.x, walker.y - BARK_LIFT - (2 * ui) / TILE];
@@ -318,7 +291,6 @@ export class AmbientCast {
 		one.nextBark = between(one.random, BARK_EVERY);
 	}
 
-	/** A bark's bubble on screen over its speaker's head (with its margin, unless asked without); none off screen. */
 	private barkBox(one: Member, shape: BarkShape, margin = true): ScreenBox | undefined {
 		const { walker } = one;
 		const ui = shape.container.scaleX || 1;
@@ -332,7 +304,7 @@ export class AmbientCast {
 			bottom: sy + pad,
 		};
 		const { width, height } = this.hooks.screen();
-		// Off screen, nobody hears it.
+
 		return box.left < 0 || box.top < 0 || box.right > width || box.bottom > height ? undefined : box;
 	}
 }

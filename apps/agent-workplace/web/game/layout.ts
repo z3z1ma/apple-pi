@@ -1,38 +1,33 @@
-// Where things go in a place: which painting and data a place uses, the gallery cut to its number of wings, the walk
-// grid, and which spot each character stands on. Pure, so the scene only draws.
 import type { Character, DormantAgent, Headquarters, PlaceRef, Wing, WorldSnapshot } from "../../src/world.js";
 import { isOutside, placeKey } from "../../src/world.js";
 import type { PlaceData, Point, Rect, Theme } from "../theme.js";
 
-/** A vertical strip of the painting, in tiles: source columns `from`..`to`, drawn starting at `at`. */
 export interface Strip {
 	from: number;
 	to: number;
 	at: number;
 }
 
-/** A room door in the gallery, in the composed place's tiles. */
 export interface NicheDoor {
 	name: string;
 	title: string;
 	to: PlaceRef;
 	door: "open" | "closed" | "boarded";
-	/** The niche's centre. */
+
 	x: number;
 }
 
-/** A place ready to draw: its data in its own tiles, and for the gallery, how the painting is cut. */
 export interface Layout {
 	ref: PlaceRef;
 	key: string;
-	/** The data file it uses, such as `wing-large`. */
+
 	data: string;
 	place: PlaceData;
 	title: string;
 	subtitle?: string;
 	strips?: Strip[];
 	niches?: NicheDoor[];
-	/** Changes when the place must be laid out again (a wing added, boarded, or outgrowing the small room). */
+
 	signature: string;
 }
 
@@ -46,7 +41,6 @@ const inStrip = (x: number, strip: Strip, last: boolean) =>
 	x >= strip.from && (x < strip.to || (last && x <= strip.to));
 const shift = ([x, y]: Point, strip: Strip): Point => [x - strip.from + strip.at, y];
 
-/** The strips that show `count` niches of a growing place (at least one). */
 export function stripsFor(niches: NonNullable<PlaceData["niches"]>, count: number): Strip[] {
 	const sizes = Object.keys(niches.layouts)
 		.map(Number)
@@ -56,7 +50,6 @@ export function stripsFor(niches: NonNullable<PlaceData["niches"]>, count: numbe
 	let cuts: [number, number][];
 	if (n <= largest) cuts = niches.layouts[String(sizes.find((size) => size >= n))];
 	else {
-		// Cut the largest layout at the repeat's right edge and insert the repeat once per extra niche.
 		const [from, to] = niches.repeat;
 		cuts = [];
 		for (const [a, b] of niches.layouts[String(largest)]) {
@@ -75,7 +68,6 @@ export function stripsFor(niches: NonNullable<PlaceData["niches"]>, count: numbe
 	});
 }
 
-/** The place's data moved into the strips' coordinates: what falls in a dropped part of the painting is gone. */
 export function composeStrips(place: PlaceData, strips: Strip[]): PlaceData {
 	const last = strips.length - 1;
 	const pointIn = (point: Point): Point | undefined => {
@@ -101,9 +93,9 @@ export function composeStrips(place: PlaceData, strips: Strip[]): PlaceData {
 			if (!at || !stand) return [];
 			return [{ ...door, rect: [at[0] - door.rect[2] / 2, door.rect[1], door.rect[2], door.rect[3]], standAt: stand }];
 		}),
-		// Pieces are cut from one painting; a cut painting draws none.
+
 		foreground: [],
-		// Slots repeat with the strip they are in, so a repeated niche keeps its lantern's glow.
+
 		overlaySlots: strips.flatMap((strip, i) =>
 			place.overlaySlots
 				.filter((slot) => inStrip(slot.at[0], strip, i === last))
@@ -112,18 +104,15 @@ export function composeStrips(place: PlaceData, strips: Strip[]): PlaceData {
 	};
 }
 
-/** A wing's door in the gallery: open while agents work there, closed while they sleep, boarded with nobody. */
 export function doorOf(wing: Wing): "open" | "closed" | "boarded" {
 	if (wing.headcount > 0) return "open";
 	return wing.dormant ? "closed" : "boarded";
 }
 
-/** The headquarters a place belongs to, if any. */
 export function headquartersOf(ref: PlaceRef, world: WorldSnapshot | undefined): Headquarters | undefined {
 	return isOutside(ref) ? undefined : world?.headquarters.find((hq) => hq.id === ref.headquarters);
 }
 
-/** How to draw `ref` now; undefined when it no longer exists (its headquarters closed). */
 export function layoutFor(ref: PlaceRef, world: WorldSnapshot | undefined, theme: Theme): Layout | undefined {
 	const key = placeKey(ref);
 	const labels = theme.labels;
@@ -190,13 +179,11 @@ export function layoutFor(ref: PlaceRef, world: WorldSnapshot | undefined, theme
 	};
 }
 
-/** Where the world opens: the first headquarters' hall, or the square when no coordinator runs. */
 export function startPlace(world: WorldSnapshot | undefined): PlaceRef {
 	const first = world?.headquarters[0];
 	return first ? { kind: "headquarters", headquarters: first.id } : { kind: "square" };
 }
 
-/** A dormant agent as the inn shows it: a character asleep there. */
 export function sleeperCharacter(agent: DormantAgent): Character {
 	return {
 		id: agent.id,
@@ -206,7 +193,7 @@ export function sleeperCharacter(agent: DormantAgent): Character {
 		hiredAt: agent.hiredAt,
 		specialization: agent.specialization,
 		startedAt: agent.startedAt,
-		// What the conversation panel shows of it: where it worked and its last task. Asleep, it needs nobody.
+
 		facts: {
 			run: "idle",
 			status: "idle",
@@ -230,17 +217,12 @@ export function sleeperCharacter(agent: DormantAgent): Character {
 	};
 }
 
-/**
- * The characters in a place, in the snapshot's order (by session start). At the inn, the dormant agents who sleep
- * there visibly, the most recently stopped first, as many as it has spots (`room`); the rest are upstairs.
- */
 export function charactersIn(ref: PlaceRef, world: WorldSnapshot | undefined, room = Infinity): Character[] {
 	if (ref.kind === "inn") return (world?.dormant ?? []).slice(0, room).map(sleeperCharacter);
 	const key = placeKey(ref);
 	return (world?.characters ?? []).filter((character) => placeKey(character.place) === key);
 }
 
-/** The walk grid: half-tile cells, true where blocked. A cell is blocked when its centre is inside a blocked rect. */
 export function walkGrid(place: PlaceData): { cols: number; rows: number; blocked: boolean[] } {
 	const cols = Math.round(place.cols * 2);
 	const rows = Math.round(place.rows * 2);
@@ -255,10 +237,6 @@ export function walkGrid(place: PlaceData): { cols: number; rows: number; blocke
 	return { cols, rows, blocked };
 }
 
-/**
- * Keep each character on the spot it had while it stays, so nobody moves when another leaves; newcomers take the
- * first free spots in order. Characters beyond the spots stand on free floor near the place's start.
- */
 export function assignSpots(
 	place: PlaceData,
 	characters: Character[],
@@ -296,7 +274,6 @@ export function assignSpots(
 	return { spots, positions };
 }
 
-/** Open floor near the place's start, at least a body's width from anyone already standing. */
 function freeFloor(place: PlaceData, used: Point[], seed: number): Point {
 	const grid = walkGrid(place);
 	const [sx, sy] = place.entries.start ?? [place.cols / 2, place.rows / 2];

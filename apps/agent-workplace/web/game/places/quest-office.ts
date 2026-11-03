@@ -1,9 +1,3 @@
-// The quest office's board (ticket 24): each Jira issue assigned to the operator is a notice pinned on the board in the
-// theme's art, as pressing as it is (`notice-urgent` for a high priority, `notice-progress` once work started,
-// `notice-done`, else `notice-open`). Notices fill the place's `notice` slots, the most pressing first; the rest wait
-// at the counter (a tag over the clerk, and the clerk's list). Before sign-in the board stays bare and says so. Hovering
-// a notice names it on a small sign; reading it walks to the board and opens the issue. The list is read on entering and
-// every minute while the operator is here.
 import type * as Phaser from "phaser";
 import type { JiraIssue } from "../../../src/integrations.js";
 import { atlassian, type NoticeKind, noticeOf } from "../../overlay/places/atlassian-state.js";
@@ -12,41 +6,40 @@ import { worn } from "../../theme-store.js";
 import { action, type Target } from "../actions.js";
 import { drawTag } from "../character-life.js";
 
-/** How often the board is read again while the operator is in the office (ms). */
 const REFRESH_MS = 60_000;
-/** How a notice is pinned up, or taken down (ms). */
+
 const PIN_MS = 380;
-/** The sign over a hovered notice, in tiles above its top; longest summary on it. */
+
 const SIGN_LIFT = 0.1;
 const SIGN_SUMMARY = 38;
-/** The tag for issues beyond the board: how far below the lowest notices (tiles), whose height is about this × width. */
+
 const COUNTER_DROP = 0.42;
 const NOTICE_ASPECT = 1.3;
-/** How wide the key's slip may be at most, as a part of the notice's width. */
+
 const KEY_SLIP = 1.3;
-/** How far a notice tilts at most (radians), by its key, so the board looks pinned by hand. */
+
 const TILT = 0.045;
 
 export interface NoticeView {
 	key: string;
 	kind: NoticeKind;
-	/** Its centre, in tiles. */
+
 	x: number;
 	y: number;
-	/** The paper as drawn, in tiles: its opaque bounds (pins included), unturned and unlifted. */
+
 	paper: Rect;
 	alpha: number;
-	/** Its sign shows (the pointer is over it). */
+
 	sign: boolean;
 }
 
 export interface QuestOfficeHost {
 	place(): PlaceData;
-	/** Walk to the floor nearest a point (under the board), face it, then act. */
+
 	walkUp(at: Point, then: () => void): void;
-	/** Where the pointer is over the world, in tiles. */
+
 	pointer(): Point | undefined;
-	/** The view's zoom correction for things drawn at a steady size on screen. */
+
 	uiScale(): number;
 }
 
@@ -63,13 +56,8 @@ interface Notice {
 const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}\u2026` : text);
 const hash = (text: string) => [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7);
 
-/** Each notice texture's opaque part, as fractions of it: what shows of the notice on the board. */
 const opaque = new Map<string, Rect>();
 
-/**
- * The notice sprite as pinned: the pack's `world.notice.paper` part of it, with the board around the paper cut away
- * when the pack asks (`cutOut`: whatever touches the part's edge and looks like the board). Made once per pack.
- */
 function noticeTexture(scene: Phaser.Scene, kind: NoticeKind): string {
 	const key = `notice:${kind}`;
 	if (scene.textures.exists(key)) return key;
@@ -106,10 +94,6 @@ function opaqueBounds(ctx: CanvasRenderingContext2D, w: number, h: number): Rect
 	return [left / w, top / h, (right + 1 - left) / w, (bottom + 1 - top) / h];
 }
 
-/**
- * Clear the board around a notice: from every edge pixel, flood through pixels near the edge's own colour (the board
- * painted around the paper) and darker than the paper, and make them transparent.
- */
 function cutAway(ctx: CanvasRenderingContext2D, w: number, h: number) {
 	const image = ctx.getImageData(0, 0, w, h);
 	const px = image.data;
@@ -189,7 +173,6 @@ export class QuestBoard {
 		return this.host.place().overlaySlots.filter((slot) => slot.kind === "notice");
 	}
 
-	/** Pin the assigned issues: a notice keeps its place while it stays; its art follows its state. */
 	private pin(animate = true) {
 		const { assigned, signedIn } = atlassian.get();
 		const signedOut = signedIn === null || assigned.state === "signed-out";
@@ -245,15 +228,13 @@ export class QuestBoard {
 		}
 	}
 
-	/** The issue's key on a small slip across the notice, so the board reads at a glance. */
 	private keyLabel(key: string, w: number): Phaser.GameObjects.Container {
 		const { font, tag } = worn().world;
 		const text = this.scene.add
 			.text(0, 0, key, { fontFamily: font, fontSize: "9px", fontStyle: "bold", color: tag.ink })
 			.setResolution(4)
 			.setOrigin(0.5, 0.5);
-		// A key longer than the paper may stick out a little past its sides, as a slip pinned across it would (notices
-		// sized to their board are too narrow for a legible key); longer than that, it is drawn smaller.
+
 		const room = w * TILE * KEY_SLIP - 6;
 		if (text.width > room) text.setScale(room / text.width);
 		const width = Math.ceil(text.displayWidth + 6);
@@ -286,7 +267,6 @@ export class QuestBoard {
 		});
 	}
 
-	/** Its art for how pressing it is now. */
 	private dress(notice: Notice) {
 		const kind = noticeOf(notice.issue);
 		if (kind === notice.kind) return;
@@ -296,10 +276,6 @@ export class QuestBoard {
 		notice.image.setScale(width / notice.image.width);
 	}
 
-	/**
-	 * Under the board: how many more issues wait at the counter than the board has room for. (Over the clerk it hid
-	 * under the side panel, which stands on the east side where every pack puts the counter.)
-	 */
 	private showCounter(line: string) {
 		if (this.counter?.line === line) return;
 		this.counter?.tag.destroy();
@@ -307,7 +283,7 @@ export class QuestBoard {
 		const slots = this.slots();
 		if (!line || !slots.length) return;
 		const xs = slots.map((slot) => slot.at[0]);
-		// Under the notices as drawn (each pack's are their own shape), else under where they would be.
+
 		const pinned = [...this.notices.values()].filter((notice) => !notice.going);
 		const bottom = pinned.length
 			? Math.max(...pinned.map(({ rect }) => rect[1] + rect[3]))
@@ -317,7 +293,6 @@ export class QuestBoard {
 		this.counter = { line, tag };
 	}
 
-	/** On the bare board: why it is bare (not signed in, or Jira could not be read). */
 	private showBoard(line: string) {
 		if (this.board?.line === line) return;
 		this.board?.tag.destroy();
@@ -339,7 +314,6 @@ export class QuestBoard {
 		);
 	}
 
-	/** Every notice under a point: read it (the default: walk to the board and open the issue), or open it in Jira. */
 	targetsAt(point: Point): Target[] {
 		return this.noticesAt(point).map(({ issue, slot }) => {
 			const name = `${issue.key} ${cut(issue.summary, SIGN_SUMMARY)}`;
@@ -359,7 +333,6 @@ export class QuestBoard {
 		});
 	}
 
-	/** Each frame: the sign over the notice under the pointer, which lifts a little; tags kept a steady size. */
 	update() {
 		const at = this.host.pointer();
 		const over = at ? this.noticesAt(at)[0] : undefined;
@@ -379,7 +352,6 @@ export class QuestBoard {
 		this.board?.tag.setScale(scale);
 	}
 
-	/** A hovered notice comes forward a little, brighter. */
 	private lift(notice: Notice, up: boolean) {
 		const base = ((notice.slot.w ?? 1) * TILE) / notice.image.width;
 		this.scene.tweens.add({

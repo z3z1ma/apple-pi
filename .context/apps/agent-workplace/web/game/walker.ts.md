@@ -1,5 +1,8 @@
 ## file
 
+Advance stride by distance, preserve it when replacing a path, and spend the remaining frame distance across corners. Resting directions use passing frames because the sheet has a true standing pose only facing front; mirror only walking and sideways-resting poses. Desynchronize seated beats, preserve facing near diagonal runs, and anchor busy breathing at the feet.
+Why: these constraints prevent sliding feet, corner stalls, mirrored authored poses, synchronized rooms, diagonal flicker and sprites lifting off the floor.
+
 An idle shows a frame of the look's idle sheet, a separate texture (`look:<look>:idle`, loaded by `boot-scene.ts` when the look has `idle`), with its own frame size and baseline; the walker swaps texture and origin for it and back. `view().frame` keeps reporting the main sheet's frame (14 while an idle plays) and `idle`/`idleFrame` say what shows, so tests that expect frame 14 for standing stay true. An idle plays only standing still facing down (the poses are drawn facing the viewer), never seated, busy, asking, or asleep, and anything that moves or turns the walker ends it.
 Coupled: apps/agent-workplace/web/game/boot-scene.ts, apps/agent-workplace/themes/fantasy/characters/looks.json
 
