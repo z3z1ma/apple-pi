@@ -4,7 +4,7 @@
 Why: Electron keeps the single-instance lock in the userData directory; taking it first would lock the default "Electron" directory, so a `/workplace` with another agent directory or the default one would not find the running window.
 
 Chromium's `LocalNetworkAccessChecks` feature is switched off before the app is ready.
-Why: a person's browser page (sign-off, explanation) is served on `127.0.0.1` and shown in an iframe in their DM. Chromium's local-network checks block that frame from the app's origin with `ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`; headless Chrome 156 reproduced the block, and the same switch lifts it. The window loads only `app://` and those loopback pages, so the checks protect nothing here.
+Why: a person's browser page (sign-off, explanation) is served on `127.0.0.1` and shown in an iframe in their DM. Chromium's local-network checks block that frame from the app's origin with `ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`; headless Chrome 156 reproduced the block, and the same switch lifts it. The window loads only `app://` and those loopback pages, so the checks protect nothing here. Electron 44 itself loads the frame with or without the switch (probed by running the installed Electron binary on a throwaway `main.mjs` with a temporary `userData`, a hidden window and an `app://` page, printing `webContents.mainFrame.frames`); the switch guards against a later Chromium that enforces the checks. The renderer CSP in `web/index.html` must also allow the frame (`frame-src http://127.0.0.1:*`).
 Verify: apps/agent-workplace/tests/world-conversation.test.ts
 
 `appDir` assumes this file runs as `dist/electron/main.js` and the preload as `dist/electron/preload.cjs`.

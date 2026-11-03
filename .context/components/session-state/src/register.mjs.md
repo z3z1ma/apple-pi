@@ -6,5 +6,7 @@ Why: the package imports `.js` (the ESM path) while the file on disk is `.ts`. N
 When a bare specifier cannot be found and `PI_HOST_PACKAGE_DIR` is set, the hook resolves it again as if imported from the Pi package that launched us.
 Why: Pi installs packages with `--omit=peer`, because its extension loader supplies Pi's libraries (`@earendil-works/*`, `typebox`) in process. Separate processes the package starts (the runtime, Workplace's Electron) have no such loader, so in an installed package those imports fail. Every spawner sets the variable from `getPackageDir()`; a development checkout resolves them from its own `node_modules` and never reaches the fallback.
 
+To reproduce an installed-package fault, run `npm pack`, unpack the tarball into a plain directory, and run `npm install --omit=dev --omit=peer` there. Do not unpack it under `node_modules`: Node refuses type stripping there, so that simulation fails for a different reason.
+
 Coupled: components/session-state/src/runtime-main.runtime.ts, components/session-state/src/client.ts, apps/agent-workplace/src/launch.ts, apps/agent-workplace/src/electron/start.mjs
 Verify: components/session-state/tests/singleton.test.ts, apps/agent-workplace/tests/installed-package.test.ts

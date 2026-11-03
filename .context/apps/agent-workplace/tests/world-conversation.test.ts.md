@@ -3,6 +3,11 @@
 Working uses the thinking portrait, asking the worried one, idle the neutral one, and a finished turn keeps the happy portrait while the conversation stays open. The reply box has focus on opening so typing does not walk the world or toggle the walk grid. Stop asks first; Escape sends nothing. A question has no reply box. Tool calls fold their result onto one line and omit the working-directory `cd`. Missing transcript entries are one quiet note. After Escape, G pressed and released in the same frame must keep the walk grid shown.
 Why: Phaser handles its key queue again for each new key event within a frame, so G's press was handled a second time on release and the grid went back off.
 
+The DM fixture ignores `textOnly`, but the runtime's text-only paging (`readEntries` in `components/session-state/src/runtime.ts`) drops every entry without written words, except tool calls to the browser-page tools. A DM feature that depends on what text-only mode returns needs a runtime query test (`components/session-state/tests/history.test.ts`) as well as this UI test.
+Why: the inline page card passed here and showed nothing in the real app until the runtime query also kept those entries.
+
+Playwright `page.route` matches the whole URL, query included: route loopback page URLs with a trailing `*`, since `?theme=` is appended. Patch fixture APIs with `page.addInitScript`; a `page.evaluate` patch is lost when the test navigates from World to Workplace.
+
 Chrome launches with `--disable-features=LocalNetworkAccessChecks`, the same switch Electron's main process sets. Without it the inline browser-page frame on `127.0.0.1` fails with `ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`. The theme-sync case serves a real markdown review page through `openPageSession`, so it checks both sides of the theme message.
 
 These browser checks load built Agent Workplace assets and replace the preload API with an in-memory bridge. Build after production-source edits; keep replies in the fixture's returned history so a successful post must become visible through the real reader. Channel membership tests here check the UI's command choices and response handling; the runtime and backend suites own authorization, persistence, read cursors, and crash recovery.

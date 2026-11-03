@@ -31,6 +31,9 @@ Why: a diff request is not a file edit, and moving the preview out of the narrow
 Keep my draft explicitly adopts the observed external text/hash as the save base while preserving the editor text. It clears the conflict without issuing a write; only a later Save can replace that reviewed version, and the backend must still reject a newer disk hash. The adjacent consequence text is part of this decision, while the existing discard action replaces the draft with disk content.
 Why: conflict recovery must preserve operator work without silently treating stale draft text as newer disk state or bypassing the write guard.
 
+Word wrap is off by default, as in VS Code, and toggles through the editor action "View: Toggle Word Wrap" (F1 palette, Alt+Z). Add further editor options the same way: VS Code's default plus an action in Monaco's own palette, not a fixed setting. Tests open the palette with F1, type the label, wait for the option and press Enter.
+Why: operator decision 2026-11-03; he first asked for wrap, then rejected it always on.
+
 The editor sets `useShadowDOM: false`, and the theme maps Monaco's menu, widget and quick-input colors to `--wp-*` variables.
 Why: Monaco's theme defines its `--vscode-*` colors in a document stylesheet scoped to `.monaco-component`. A context menu rendered in a shadow root cannot see them, so the right-click menu painted fully transparent.
 
