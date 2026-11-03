@@ -1,3 +1,8 @@
+## file
+
+Pane IDs are unique only within a server; a window linked into several sessions yields one pane row per session. `openWindow` resolves the supplied pane to its window before calling `new-window`.
+Why: treating pane IDs as global or using a pane as the new-window target misidentifies the server topology or placement.
+
 ## symbol:listPanes
 
 The deadline is an abort signal, not execFile's `timeout` option.

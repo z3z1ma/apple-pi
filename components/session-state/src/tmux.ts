@@ -6,10 +6,6 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-/**
- * One row of `list-panes -a`: a pane as seen through one session. A window linked into several sessions
- * appears once per session. Ids are only unique within a server.
- */
 export interface PaneRow {
 	sessionId: string;
 	sessionName: string;
@@ -41,12 +37,9 @@ const FIELDS = [
 	"pane_dead",
 	"pane_start_command",
 ];
-// tmux prints a tab written in the format as is, but escapes control characters inside values (a tab in a
-// session name comes out as \011), so a tab cannot appear inside a field.
 const SEP = "\t";
 const FORMAT = FIELDS.map((field) => `#{${field}}`).join(SEP);
 
-/** One path per socket: macOS reaches `/tmp` through `/private/tmp`, and tmux reports the resolved path. */
 export function canonicalSocket(path: string): string {
 	try {
 		return realpathSync(path);
@@ -55,12 +48,10 @@ export function canonicalSocket(path: string): string {
 	}
 }
 
-/** The directory where tmux keeps this user's server sockets, by tmux's own rule. */
 export function socketDir(): string {
 	return join(process.env.TMUX_TMPDIR || "/tmp", `tmux-${process.getuid?.() ?? 0}`);
 }
 
-/** Socket files in the tmux socket directory; a file may be stale, which `listPanes` reveals. */
 export async function socketFiles(): Promise<string[]> {
 	const dir = canonicalSocket(socketDir());
 	let names: string[];
@@ -76,29 +67,22 @@ export async function socketFiles(): Promise<string[]> {
 		try {
 			if ((await lstat(path)).isSocket()) found.push(path);
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; // removed while we looked
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 		}
 	}
 	return found;
 }
 
-/** tmux's own words for "nothing listens on this socket": a stale file, or no file at all. */
 function noServer(stderr: string): boolean {
 	return /no server running|error connecting to .*\((No such file or directory|Connection refused)\)/i.test(stderr);
 }
 
-/**
- * Every pane row of the server at `socket`, or "absent" when tmux says no server is there. Any other failure
- * (a timeout, no permission, no tmux) throws: it proves nothing about the server.
- */
 export async function listPanes(
 	socket: string,
 	options: { timeout: number; signal: AbortSignal },
 ): Promise<PaneRow[] | "absent"> {
 	let stdout: string;
 	try {
-		// A deadline through an abort signal, not execFile's `timeout`: a tmux client killed on timeout exits 0
-		// with no output, which would read as a server with no panes. An aborted call always rejects.
 		({ stdout } = await run("tmux", ["-S", socket, "list-panes", "-a", "-F", FORMAT], {
 			encoding: "utf8",
 			signal: AbortSignal.any([options.signal, AbortSignal.timeout(options.timeout)]),
@@ -130,7 +114,6 @@ export async function listPanes(
 		});
 }
 
-/** The attached clients of a server and the pane each one shows; none when no server runs there. */
 export async function listClients(
 	socket: string,
 	options: { timeout: number; signal: AbortSignal },
@@ -154,7 +137,6 @@ export async function listClients(
 		});
 }
 
-/** Set global options on a server and redraw each client's status line, in one tmux call. */
 export async function setServerOptions(
 	socket: string,
 	options: Record<string, string>,
@@ -171,10 +153,8 @@ export async function setServerOptions(
 	});
 }
 
-/** Remove an owned pane after its process stops, including a dead pane kept by remain-on-exit. */
 export async function killPane(socket: string, pane: string, pid: number, signal: AbortSignal): Promise<void> {
 	try {
-		// -F evaluates and selects the command in the server, without a shell job or a client-side check/kill gap.
 		await run(
 			"tmux",
 			[
@@ -195,14 +175,12 @@ export async function killPane(socket: string, pane: string, pid: number, signal
 	}
 }
 
-/** Open a window after `pane`'s window on server `socket`, running `command` in `cwd`; returns the new pane's id. */
 export async function openWindow(
 	socket: string,
 	pane: string,
 	window: { cwd: string; name?: string; command: string[]; env?: Record<string, string> },
 	signal: AbortSignal,
 ): Promise<string> {
-	// new-window takes a window, not a pane, as its target.
 	const { stdout: target } = await run("tmux", ["-S", socket, "display-message", "-p", "-t", pane, "#{window_id}"], {
 		encoding: "utf8",
 		signal,
