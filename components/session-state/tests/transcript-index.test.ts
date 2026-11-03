@@ -3,7 +3,7 @@ import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { countIndex, indexTranscript, openIndex, searchIndex } from "../src/transcript-index.js";
+import { countIndex, indexTranscript, openIndex, searchIndex } from "../src/transcript-index.hot.js";
 import { fakeBridge, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 const dir = mkdtempSync(join(tmpdir(), "transcript-index-"));

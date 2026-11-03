@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { statePaths } from "./paths.js";
 import { type Command, lineReader, type Receipt } from "./protocol.js";
 
-const RUNTIME_MAIN = fileURLToPath(new URL("./runtime-main.ts", import.meta.url));
+const RUNTIME_MAIN = fileURLToPath(new URL("./runtime-main.runtime.ts", import.meta.url));
 const REGISTER = new URL("./register.mjs", import.meta.url).href;
 export const RETRY_MS = 250;
 

@@ -41,7 +41,7 @@ Why: a poll that resumed after shutdown otherwise wrote to a closed database.
 
 A daemon restart interrupts its headless people, including ordinary lasting colleagues outside program scopes. Graceful shutdown explicitly terminates the headless map; bypassing it with SIGKILL still closes the parent-owned stdin pipes created by `launchSession`. Detached process groups do not establish worker survival. Plan recovery under the same identities and existing assignments, and verify their replacement processes and bridges rather than promise a transparent restart. Socket connectivity alone does not establish that the intended replacement PID or schema is running.
 Why: an authorized live restart lost all four headless colleagues despite bypassing `stop`; they required explicit reopening. Checking only program scopes missed those ordinary children, and a connection did not by itself prove replacement-daemon readiness.
-Coupled: components/session-state/src/runtime-main.ts, components/session-state/src/client.ts
+Coupled: components/session-state/src/runtime-main.runtime.ts, components/session-state/src/client.ts
 
 ## symbol:Runtime.checkLiveness
 
@@ -49,21 +49,14 @@ Liveness covers every incarnation whose process state is still alive or alive wi
 Why: filtering on `ended_at` left superseded incarnations reading as alive forever after their process died, and treating a failed `ps` as death permanently ended live sessions.
 Verify: components/session-state/tests/liveness.test.ts
 
-## symbol:Runtime.relay
-
-Reply streams are never awaited on a subscriber: a client whose socket needs draining is written nothing more until its `drain`, and meanwhile holds per session only the newest stream's text (one coalesced delta) and the last end. Even a client that reads promptly can be held during a burst, so an end keeps its own stream's held text; only a newer stream drops an older one's text.
-Why: writing every delta to a stalled client queued an entire reply per client in the runtime's memory; dropping held text at the end truncated replies for clients that were merely behind a burst (seen as `seq` 367 of 400).
-Coupled: components/session-state/src/bridge.ts, docs/session-state.md
-Verify: components/session-state/tests/streaming.test.ts
-
 ## symbol:Runtime.readEntries
 
-A page is the newest `limit` index rows before the cursor, read through `messages_by_time` with `limit + 1` (never the whole session's ids), ordered by `at`, then `rowid`. `textOnly` keeps only rows a text-only view draws (`user`/`assistant` with `size > 0`, the text length the bridge indexed), so a DM whose agent works through tools does not page through thousands of hidden entries. `read_entries`, `read_entry` and the reaction notice read the transcript backwards from its end (`transcript-read.ts`) and stop once the wanted entries are found or a line is older than the oldest of them. Byte offsets were deliberately not added: the JSONL is Pi's, and offsets would have to survive appends and rewrites.
+A page is the newest `limit` index rows before the cursor, read through `messages_by_time` with `limit + 1` (never the whole session's ids), ordered by `at`, then `rowid`. `textOnly` keeps only rows a text-only view draws (`user`/`assistant` with `size > 0`, the text length the bridge indexed), so a DM whose agent works through tools does not page through thousands of hidden entries. `read_entries`, `read_entry` and the reaction notice read the transcript backwards from its end (`transcript-read.hot.ts`) and stop once the wanted entries are found or a line is older than the oldest of them. Byte offsets were deliberately not added: the JSONL is Pi's, and offsets would have to survive appends and rewrites.
 `read_entry` with a `caller` (recall drill-down) refuses another person's entry outside every task span the caller may search (`mayReadEntry`); without `caller` (Workplace's reads) it is unchanged. Permission refusals in `read_entry` and `search_transcripts` carry `refused: true` beside their `error`; any other `error` is a failure to read or search.
 Why: search_session shows a refusal as an ordinary answer but raises a native tool error for a failure; without the marker it would have to recognize policy by message text.
 `search_transcripts` answers with each hit's transcript file, person name and, for task searches, the task, plus a `total` under the same eligibility.
 Coupled: components/session-state/src/protocol.ts
-Coupled: components/session-state/src/focus-spans.ts, components/session-state/src/transcript-index.ts
+Coupled: components/session-state/src/focus-spans.ts, components/session-state/src/transcript-index.hot.ts
 Why: every page used to stream the whole file from the start (0.4-0.6 s on the 200 MB coordinator transcript), and a text-only DM's first page held nothing visible, so opening it loaded page after page through hours of tool work. A newest page now reads about 1 MB in a few milliseconds. Reading the file as one string failed with "Invalid string length" on a 390 MB session.
 Verify: components/session-state/tests/history.test.ts
 

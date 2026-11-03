@@ -1,7 +1,7 @@
 // A full-text index of every session's transcript, so recall is one indexed query instead of reading and parsing a
 // whole transcript per search. Pi's JSONL stays the source of truth: the index holds each entry's searchable text and
 // its address (session, entry id, time); readers drill into the file for the entry itself. The index lives in its own
-// database beside the runtime's, written only by the indexer worker (`transcript-indexer.ts`), read by the runtime.
+// database beside the runtime's, written only by the indexer worker (`transcript-indexer.worker.ts`), read by the runtime.
 import { open } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { Worker } from "node:worker_threads";
@@ -351,7 +351,7 @@ function eligibility(request: SearchRequest): { where: string; params: (string |
 }
 
 /**
- * The runtime's side of the index: a worker thread (`transcript-indexer.ts`) keeps it current, so tokenizing gigabytes
+ * The runtime's side of the index: a worker thread (`transcript-indexer.worker.ts`) keeps it current, so tokenizing gigabytes
  * of transcript never holds the runtime's own thread, and searches read it through a separate read-only connection.
  */
 export class TranscriptIndexer {
@@ -361,7 +361,7 @@ export class TranscriptIndexer {
 
 	constructor(path: string) {
 		this.path = path;
-		this.worker = new Worker(new URL("./transcript-indexer.ts", import.meta.url), { workerData: { path } });
+		this.worker = new Worker(new URL("./transcript-indexer.worker.ts", import.meta.url), { workerData: { path } });
 		this.worker.on("error", (error) => console.error(`transcript index: ${error.stack ?? error}`));
 		this.worker.on("message", (message: { type: string; sessionId?: string; message?: string }) => {
 			if (message.type === "error") console.error(`transcript index ${message.sessionId}: ${message.message}`);

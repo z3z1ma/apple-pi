@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { readTranscriptEntries } from "../src/transcript-read.js";
+import { readTranscriptEntries } from "../src/transcript-read.hot.js";
 
 const dirs: string[] = [];
 afterEach(() => {

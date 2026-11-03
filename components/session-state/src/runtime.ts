@@ -82,6 +82,7 @@ import { recordLink, resolveLink } from "./links.js";
 import { removeNote, writeNote } from "./notes.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
 import { entryReaction, react, reactionsOf } from "./reactions.js";
+import { type ReplySubscriber, relayReply } from "./reply-relay.hot.js";
 import { reviewScope } from "./review-attempt.js";
 import { ReviewJobs, type ReviewNotify } from "./review-jobs.js";
 import { cancelSchedule, createSchedule, dueSchedules, markFired } from "./schedules.js";
@@ -97,8 +98,8 @@ import {
 	setServerOptions,
 	socketFiles,
 } from "./tmux.js";
-import { type SearchHit, TranscriptIndexer } from "./transcript-index.js";
-import { readTranscriptEntries } from "./transcript-read.js";
+import { type SearchHit, TranscriptIndexer } from "./transcript-index.hot.js";
+import { readTranscriptEntries } from "./transcript-read.hot.js";
 import {
 	changeWork,
 	cleanMovedBundles,
@@ -153,20 +154,12 @@ const TOPOLOGY = [
 	},
 ];
 
-interface Connection {
-	socket: Socket;
+interface Connection extends ReplySubscriber {
 	sessionId?: string;
 	generation?: number;
 	lastSeen: number;
 	shutdown: boolean;
 	observedIdentity?: { person: string; pid: number; startedAt: number };
-	/** The sessions whose live replies this client subscribed to. */
-	subscriptions?: Set<string>;
-	/**
-	 * Stream messages held back while the client's socket needs draining, per session: the last end, and the newest
-	 * stream's text coalesced into one delta.
-	 */
-	held?: Map<string, { end?: ReplyEnd; delta?: ReplyDelta }>;
 	heldTurns?: Map<string, Extract<BridgeMessage, { type: "turn_progress" }>>;
 	turnsAwaitingDrain?: boolean;
 	program?: {
@@ -497,7 +490,8 @@ export class Runtime {
 		if (sessionId === undefined || generation === undefined) return;
 		if (message.type === "reply_delta" || message.type === "reply_end") {
 			// Transient: relayed to subscribers of the current generation, never written to the database.
-			if (this.isCurrent(sessionId, generation)) this.relay({ ...message, sessionId } as ReplyDelta | ReplyEnd);
+			if (this.isCurrent(sessionId, generation))
+				relayReply(this.connections, { ...message, sessionId } as ReplyDelta | ReplyEnd);
 			return;
 		}
 		if (message.type === "run") this.setRunState(sessionId, generation, message.run);
@@ -3299,53 +3293,6 @@ export class Runtime {
 		}
 		if (found.has(request.entryId)) return void reply({ entry: found.get(request.entryId) });
 		reply({ error: "entry not found" });
-	}
-
-	/**
-	 * Send a stream message to every subscriber without ever waiting on one. A client whose socket needs draining gets
-	 * nothing more written until it drains; meanwhile, per session, its deltas are coalesced into one and only the last
-	 * end is kept. When a newer stream starts, the older stream's held text is dropped (its end, if any, stays), so what
-	 * is held per session is at most one reply's text and one end.
-	 */
-	private relay(message: ReplyDelta | ReplyEnd): void {
-		for (const client of this.connections) {
-			if (!client.subscriptions?.has(message.sessionId)) continue;
-			if (!client.held && !client.socket.writableNeedDrain) {
-				client.socket.write(`${JSON.stringify(message)}\n`);
-				continue;
-			}
-			if (!client.held) {
-				client.held = new Map();
-				client.socket.once("drain", () => this.flushHeld(client));
-			}
-			const held = client.held.get(message.sessionId) ?? {};
-			client.held.set(message.sessionId, held);
-			if (message.type === "reply_end") {
-				held.end = message; // it also ends every earlier stream of the session
-				if (held.delta && held.delta.streamId !== message.streamId) held.delta = undefined;
-			} else if (held.delta?.streamId === message.streamId)
-				held.delta = { ...held.delta, seq: message.seq, delta: held.delta.delta + message.delta };
-			else held.delta = message;
-		}
-	}
-
-	/** Write what a client's drained socket was held back from, in stream order. */
-	private flushHeld(client: Connection): void {
-		const held = client.held;
-		client.held = undefined;
-		if (!held || client.socket.destroyed) return;
-		const write = (message: ReplyDelta | ReplyEnd | undefined) =>
-			message && client.socket.write(`${JSON.stringify(message)}\n`);
-		for (const { end, delta } of held.values()) {
-			// An end of the held stream comes after its text; an end of an older stream comes first.
-			if (end && delta?.streamId === end.streamId) {
-				write(delta);
-				write(end);
-			} else {
-				write(end);
-				write(delta);
-			}
-		}
 	}
 
 	/** A page of a session's entries, in the order its `messages` index holds them, newest page first. */

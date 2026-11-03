@@ -10,7 +10,7 @@ const state = tempStateDir();
 afterAll(() => stopRuntime(state));
 
 test("runtimes started at the same moment leave exactly one running", async () => {
-	const main = new URL("../src/runtime-main.ts", import.meta.url).pathname;
+	const main = new URL("../src/runtime-main.runtime.ts", import.meta.url).pathname;
 	const register = new URL("../src/register.mjs", import.meta.url).href;
 	const exits = Array.from({ length: 4 }, () => {
 		const child = spawn(process.execPath, ["--import", register, main], { stdio: "ignore", env: process.env });

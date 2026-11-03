@@ -2,7 +2,7 @@
 // session and its transcript file; the worker brings that session's rows up to date, one session at a time, coalescing
 // repeated requests for a session that is already waiting.
 import { parentPort, workerData } from "node:worker_threads";
-import { indexTranscript, openIndex } from "./transcript-index.js";
+import { indexTranscript, openIndex } from "./transcript-index.hot.js";
 
 const db = openIndex((workerData as { path: string }).path);
 const waiting = new Map<string, string>();

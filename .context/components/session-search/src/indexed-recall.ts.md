@@ -8,5 +8,5 @@ Caller lineage and issuer IDs go to SQL before ranking and paging. Other people'
 
 Selected JSONL bodies use indexed UTF-8 byte offsets/lengths and verify the parsed entry ID. An identity mismatch uses the backward reader for that hit without changing output. I/O failures stay failures. The caller's already-loaded entries supply ancestry. Stored ordinals count original message records, including skipped and off-lineage records. State-only extension data remains outside both discovery and source rendering. Match highlighting may locate a stemmed word form; the source renderer supplies evidence labels.
 
-Coupled: components/session-search/src/tool.ts, components/session-search/src/load-messages.ts, components/session-search/src/format-recall.ts, components/session-state/src/protocol.ts, components/session-state/src/transcript-index.ts, components/session-state/src/runtime.ts
+Coupled: components/session-search/src/tool.ts, components/session-search/src/load-messages.ts, components/session-search/src/format-recall.ts, components/session-state/src/protocol.ts, components/session-state/src/transcript-index.hot.ts, components/session-state/src/runtime.ts
 Verify: components/session-search/tests/indexed-recall.test.ts, components/session-search/tests/nested-recall.test.ts

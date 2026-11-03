@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { statePaths } from "../../session-state/src/paths.js";
 import { migrate } from "../../session-state/src/schema.js";
-import { indexTranscript, openIndex } from "../../session-state/src/transcript-index.js";
+import { indexTranscript, openIndex } from "../../session-state/src/transcript-index.hot.js";
 import { startRuntime, stopRuntime, tempStateDir } from "../../session-state/tests/helpers.js";
 import type { RecallRecord } from "../src/indexed-recall.js";
 import { sessionSearchTool } from "../src/tool.js";

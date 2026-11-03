@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { vi } from "vitest";
 import { statePaths } from "../../session-state/src/paths.js";
 import { migrate } from "../../session-state/src/schema.js";
-import { indexTranscript, openIndex } from "../../session-state/src/transcript-index.js";
+import { indexTranscript, openIndex } from "../../session-state/src/transcript-index.hot.js";
 import { startRuntime, stopRuntime, tempStateDir } from "../../session-state/tests/helpers.js";
 
 /** Give an existing tool scenario its own runtime and indexed prefix, with no live state or model calls. */

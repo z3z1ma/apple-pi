@@ -43,7 +43,7 @@ export async function close(run: {
 }
 
 export async function startRuntime(socketPath: string) {
-	const main = new URL("../src/runtime-main.ts", import.meta.url).pathname;
+	const main = new URL("../src/runtime-main.runtime.ts", import.meta.url).pathname;
 	const register = new URL("../src/register.mjs", import.meta.url).href;
 	spawn(process.execPath, ["--import", register, main], { detached: true, stdio: "ignore", env: process.env }).unref();
 	await vi.waitFor(() => expect(existsSync(socketPath)).toBe(true), { timeout: 10000 });

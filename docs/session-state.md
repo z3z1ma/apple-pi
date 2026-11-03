@@ -262,7 +262,7 @@ An incarnation is `alive` while its bridge is connected and heard within the las
 
 ## Running from source
 
-The runtime runs this package's TypeScript directly: `node --import register.mjs runtime-main.ts`, using Node's built-in type stripping (on by default from Node 22.18) and a resolve hook that maps `./x.js` imports to `./x.ts`. Node does not strip types inside `node_modules`, so this works for a local checkout and a Pi git package, the two install paths the README documents.
+The runtime runs this package's TypeScript directly: `node --import register.mjs runtime-main.runtime.ts`, using Node's built-in type stripping (on by default from Node 22.18) and a resolve hook that maps `./x.js` imports to `./x.ts`. Node does not strip types inside `node_modules`, so this works for a local checkout and a Pi git package, the two install paths the README documents.
 
 ## Environment variables
 
