@@ -6,7 +6,7 @@ These are apple-pi's own TLA+ models of its runtime. They live in this repositor
 npx vitest run tests/formal-verification.test.ts tests/lifecycle-models.test.ts --maxWorkers=1
 ```
 
-The tool and the tests share `components/tlc/src/tlc.ts`. It pins [TLA+ tools v1.7.4](https://github.com/tlaplus/tlaplus/releases/tag/v1.7.4), checks the JAR's SHA-256 on every run and downloads it on first use into `$XDG_CACHE_HOME/apple-pi/tla2tools/1.7.4/` or `~/.cache/apple-pi/tla2tools/1.7.4/`. It stages each spec under its declared module name (`CommandJournal`), since TLA+ identifiers cannot contain the hyphen in `command-journal.tla`, and removes its scratch directory afterwards.
+The tool and the tests share `components/tla/src/tlc.ts`. It pins [TLA+ tools v1.7.4](https://github.com/tlaplus/tlaplus/releases/tag/v1.7.4), checks the JAR's SHA-256 on every run and downloads it on first use into `$XDG_CACHE_HOME/apple-pi/tla2tools/1.7.4/` or `~/.cache/apple-pi/tla2tools/1.7.4/`. It stages each spec under its declared module name (`CommandJournal`), since TLA+ identifiers cannot contain the hyphen in `command-journal.tla`, and removes its scratch directory afterwards.
 
 ## Command journal
 

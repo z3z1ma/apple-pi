@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import { createTlcTool } from "../src/index.js";
-import { configWith, parseTlcOutput, runTlc, type TlcResult } from "../src/tlc.js";
+import { parseTlcOutput, runTlc } from "../src/tlc.js";
+import { configWith, type TlaResult } from "../src/toolchain.js";
 
 const dir = mkdtempSync(join(tmpdir(), "tlc-test-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -119,7 +120,7 @@ test("the tool reports a violation with the shortest trace, each state with its 
 	const run = await createTlcTool().execute("call", { spec: "Breaks/spec.tla", workers: 1 }, undefined, undefined, {
 		cwd: dir,
 	} as never);
-	const details = run.details as TlcResult;
+	const details = run.details as TlaResult;
 	expect(details).toMatchObject({ verdict: "violation", property: "Small" });
 	const last = details.trace.at(-1)!.variables;
 	expect(Number(last.x) + Number(last.y)).toBe(4);

@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
-import { runTlc } from "../components/tlc/src/tlc.js";
+import { runTlc } from "../components/tla/src/tlc.js";
 
 for (const model of ["review-lifecycle", "departure-lifecycle"]) {
 	test(`${model} exhausts its finite safety model`, async () => {

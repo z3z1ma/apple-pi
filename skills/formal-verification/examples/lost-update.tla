@@ -6,7 +6,14 @@ EXTENDS Naturals
 
 Workers == {"a", "b"}
 
-VARIABLES counter, seen, pc
+\* The @type comments are Apalache's type annotations; TLC ignores them.
+VARIABLES
+    \* @type: Int;
+    counter,
+    \* @type: Str -> Int;
+    seen,
+    \* @type: Str -> Str;
+    pc
 
 Init ==
     /\ counter = 0

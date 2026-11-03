@@ -1,6 +1,6 @@
 ---
 name: formal-verification
-description: "Model-check a state machine with TLA+ and TLC. Use for crash recovery, replay, concurrent lifecycle transitions, or an invariant whose failure depends on an ordering of events."
+description: "Model-check or prove a state machine with TLA+, using TLC and Apalache. Use for crash recovery, replay, concurrent lifecycle transitions, or an invariant whose failure depends on an ordering of events."
 ---
 
 # Formal verification
@@ -28,6 +28,15 @@ Call `tlc_check` with the `.tla` path (and `config` when the `.cfg` is not besid
 Grow confidence by growing bounds. Start at the smallest instance that separates the cases, then raise `constants` run by run (`{"Workers": "{w1, w2, w3}"}`) under a `timeLimit`, without editing the `.cfg`. When a state space is too large to exhaust, `mode: "simulate"` samples long random behaviors and `mode: "depth-first"` checks every behavior up to `depth` steps; both report `incomplete` when they find nothing. Pass extra `invariants` or `properties` to check a new claim against the same model.
 
 [`examples/lost-update.tla`](examples/lost-update.tla) is a small model to try first: two workers read a counter and write back the value plus one, and `tlc_check` finds the interleaving that loses an update.
+
+### Beyond finite bounds
+
+TLC enumerates states, so it checks only the finite instance you configure. Call `tla_symbolic_check` (Apalache) when that is not enough: large or unbounded integers, constants that should range over every value, or a claim that must hold for behaviors of any length. It reads the same spec and `.cfg`, but needs a type annotation before every `CONSTANT` and `VARIABLE`, such as `\* @type: Int;` or `\* @type: Str -> Set(Int);`; the example shows them.
+
+- **Bounded** (default): every behavior up to `length` steps, for every constant value a `constInit` operator allows (`ConstInit == N \in Nat /\ N > 0`). It returns `pass` only when no behavior is longer than `length`.
+- **Inductive**: a proof for every reachable state and every behavior length. Write an inductive invariant that constrains every variable with `=` or `\in`, holds initially, is preserved by every step and implies the target invariant; pass it as `inductive` and the target as `invariants`. A counterexample from the step check starts from a state that may be unreachable: strengthen the inductive invariant to exclude that state, or, if the state is reachable, you have found a real bug.
+
+Use TLC first: it is faster on small instances and needs no annotations. Move to the inductive proof when a property matters enough to hold for every size.
 
 Require a `pass`, not an `incomplete` search or a parsed spec. Treat any action listed as never taking a step as a modelling error: an invariant that holds because nothing happens proves nothing. Retain the spec, configuration, tool version, state counts and verdict. A deliberately broken model should come back as a violation with a trace; this checks that the check can detect violations rather than accept every model.
 

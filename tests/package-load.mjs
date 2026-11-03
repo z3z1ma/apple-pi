@@ -224,6 +224,7 @@ try {
 		"context_lint",
 		"repo_rules",
 		"tlc_check",
+		"tla_symbolic_check",
 		"task",
 		"bash",
 		"search_branches",

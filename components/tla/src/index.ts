@@ -1,12 +1,15 @@
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { resolveToolPath } from "../../shared/src/tool-path.js";
-import { runTlc, type TlcResult } from "./tlc.js";
+import { runApalache } from "./apalache.js";
+import { runTlc } from "./tlc.js";
+import type { TlaResult } from "./toolchain.js";
 
 export const TLC_TOOL_NAME = "tlc_check";
+export const SYMBOLIC_TOOL_NAME = "tla_symbolic_check";
 
-function report(result: TlcResult, spec: string): string {
-	const lines = [`TLC ${result.version} on ${spec}: ${result.verdict.toUpperCase()}. ${result.message}`];
+function report(engine: string, result: TlaResult, spec: string): string {
+	const lines = [`${engine} ${result.version} on ${spec}: ${result.verdict.toUpperCase()}. ${result.message}`];
 	const stats = result.stats;
 	if (stats)
 		lines.push(
@@ -31,7 +34,7 @@ function report(result: TlcResult, spec: string): string {
 			for (const [name, value] of Object.entries(state.variables)) lines.push(`  ${name} = ${value}`);
 		}
 	}
-	if (result.verdict === "error") lines.push("", "TLC output:", result.output.trimEnd());
+	if (result.verdict === "error") lines.push("", `${engine} output:`, result.output.trimEnd());
 	return lines.join("\n");
 }
 
@@ -100,11 +103,73 @@ export function createTlcTool() {
 				},
 			});
 			const { output: _output, ...details } = result;
-			return { content: [{ type: "text", text: report(result, params.spec) }], details };
+			return { content: [{ type: "text", text: report("TLC", result, params.spec) }], details };
 		},
 	});
 }
 
-export default function installTlc(pi: ExtensionAPI): void {
+export function createSymbolicTool() {
+	return defineTool({
+		name: SYMBOLIC_TOOL_NAME,
+		label: "Apalache symbolic check",
+		description:
+			"Check a TLA+ specification symbolically with Apalache (SMT), without enumerating states: integers need no bounds, constants can range over whole sets such as Nat, and an inductive invariant proves a property for behaviors of any length. Returns the same verdicts as tlc_check: pass, violation with its counterexample trace, deadlock, incomplete, or error. Downloads a pinned, checksummed Apalache (192 MB) on first use; needs Java 17.",
+		promptSnippet:
+			"Prove or refute TLA+ invariants symbolically with Apalache, for unbounded values and any behavior length",
+		promptGuidelines: [
+			"Use tla_symbolic_check when tlc_check's finite bounds are not enough: large or unbounded integers, constants that should range over every value, or a claim that must hold for behaviors of any length. Use tlc_check first for fast exhaustive search of small instances.",
+			'Apalache needs a type annotation on every CONSTANT and VARIABLE, written as a comment just before the name, for example `\\* @type: Int;`, `\\* @type: Set(Str);`, `\\* @type: Str -> Int;` or `\\* @type: Seq(Int);`. Model values become strings such as "a" or typed constants.',
+			"Choose constants with `constInit`, an operator such as `ConstInit == N \\in Nat /\\ N > 0` that assigns each constant with `=` or `\\in`, so one check covers every value it allows; or pass fixed `constants`.",
+			'mode "bounded" (default) checks every behavior up to `length` steps (default 10). It returns `pass` only when every behavior ends within that length; otherwise `incomplete`.',
+			'mode "inductive" proves `invariants` for every reachable state and every length: pass `inductive`, an invariant that Init establishes, every Next step preserves, and that implies them. It must constrain every variable with `=` or `\\in` (start it with a type conjunct such as `x \\in Int`). A violation in the step check starts from a state that may be unreachable: strengthen `inductive` to exclude it.',
+		],
+		parameters: Type.Object({
+			spec: Type.String({ description: "Path to the .tla file" }),
+			config: Type.Optional(
+				Type.String({ description: "Path to a TLC-format .cfg; defaults to the spec's .cfg when it exists" }),
+			),
+			mode: Type.Optional(
+				Type.Union([Type.Literal("bounded"), Type.Literal("inductive")], {
+					description: "bounded (default): every behavior up to `length` steps. inductive: a proof for every length",
+				}),
+			),
+			invariants: Type.Optional(
+				Type.Array(Type.String(), { description: "Invariants to check or prove; defaults to the .cfg's INVARIANT" }),
+			),
+			inductive: Type.Optional(Type.String({ description: "inductive: the inductive invariant operator" })),
+			length: Type.Optional(Type.Integer({ minimum: 0, description: "bounded: the most steps to check (default 10)" })),
+			constInit: Type.Optional(
+				Type.String({ description: "Operator that assigns the constants, such as ConstInit == N \\in Nat" }),
+			),
+			constants: Type.Optional(
+				Type.Record(Type.String(), Type.String(), { description: "Fixed constant values in .cfg syntax" }),
+			),
+			init: Type.Optional(Type.String({ description: "Initial-state operator (default Init)" })),
+			next: Type.Optional(Type.String({ description: "Next-state operator (default Next)" })),
+			temporal: Type.Optional(Type.Array(Type.String(), { description: "bounded: temporal properties to check" })),
+			checkDeadlock: Type.Optional(
+				Type.Boolean({ description: "bounded: report deadlock; defaults to the .cfg's CHECK_DEADLOCK, else on" }),
+			),
+			timeLimit: Type.Optional(Type.Integer({ minimum: 1, description: "Seconds before the check stops" })),
+		}),
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			const result = await runApalache({
+				...params,
+				spec: resolveToolPath(params.spec, ctx.cwd),
+				config: params.config ? resolveToolPath(params.config, ctx.cwd) : undefined,
+				signal,
+				onLine: (line) => {
+					if (/^Downloading|^State \d+: Checking|^PASS #\d+: BoundedChecker/.test(line))
+						onUpdate?.({ content: [{ type: "text", text: line.replace(/\s+I@[\d:.]+$/, "") }], details: undefined });
+				},
+			});
+			const { output: _output, ...details } = result;
+			return { content: [{ type: "text", text: report("Apalache", result, params.spec) }], details };
+		},
+	});
+}
+
+export default function installTla(pi: ExtensionAPI): void {
 	pi.registerTool(createTlcTool());
+	pi.registerTool(createSymbolicTool());
 }
