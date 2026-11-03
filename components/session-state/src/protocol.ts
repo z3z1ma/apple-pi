@@ -123,6 +123,10 @@ export interface SearchTranscripts {
 	requestId: string;
 	query: string;
 	sessions?: string[];
+	/** Search these tasks' spans, across everyone who focused them; `caller` must be allowed to (`maySearchTask`). */
+	tasks?: string[];
+	/** Who asks: a session id, or "operator". */
+	caller?: string;
 	fields?: "words" | "all";
 	limit?: number;
 }

@@ -473,6 +473,32 @@ const MIGRATIONS = [
 	create index canvases_updated on canvases (updated_at);`,
 	// A conversation page is the newest entries before a cursor: read in time order without sorting a whole session.
 	`create index messages_by_time on messages (session_id, part, at);`,
+	// Who worked on which task when: one span per stretch of a person's focus, written by triggers on `work_focus` so
+	// every path that changes focus records it. A person's entries between `started_at` and `ended_at` are that task's
+	// part of their transcript. `reconstructed` spans were replayed from earlier work changes (runtime startup).
+	`create table focus_spans (
+		person text not null,
+		task_id text not null,
+		started_at integer not null,
+		ended_at integer,
+		reconstructed integer not null default 0
+	) strict;
+	create index focus_spans_by_task on focus_spans (task_id);
+	create index focus_spans_by_person on focus_spans (person, started_at);
+	create trigger focus_span_open after insert on work_focus begin
+		insert into focus_spans (person, task_id, started_at)
+		values (new.person, new.task_id, cast(unixepoch('subsec') * 1000 as integer));
+	end;
+	create trigger focus_span_move after update of task_id on work_focus when old.task_id != new.task_id begin
+		update focus_spans set ended_at = cast(unixepoch('subsec') * 1000 as integer)
+		where person = old.person and ended_at is null;
+		insert into focus_spans (person, task_id, started_at)
+		values (new.person, new.task_id, cast(unixepoch('subsec') * 1000 as integer));
+	end;
+	create trigger focus_span_close after delete on work_focus begin
+		update focus_spans set ended_at = cast(unixepoch('subsec') * 1000 as integer)
+		where person = old.person and ended_at is null;
+	end;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

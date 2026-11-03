@@ -77,6 +77,7 @@ import {
 	saveHandoff,
 } from "./departures.js";
 import { type ExternalCommand, type ExternalCommit, ExternalThreads } from "./external-threads.js";
+import { maySearchTask, reconstructSpans, taskSpans } from "./focus-spans.js";
 import { recordLink, resolveLink } from "./links.js";
 import { removeNote, writeNote } from "./notes.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
@@ -306,6 +307,7 @@ export class Runtime {
 		this.db = new DatabaseSync(this.paths.db);
 		this.db.exec("pragma journal_mode = wal");
 		migrate(this.db);
+		reconstructSpans(this.db, Date.now());
 		this.transcripts = new TranscriptIndexer(this.paths.transcriptIndex);
 		// Bring every transcript's index up to date in the background; afterwards each `index` report extends it.
 		for (const row of this.db
@@ -3196,20 +3198,41 @@ export class Runtime {
 
 	/** Ranked transcript entries from the full-text index. */
 	private searchTranscripts(connection: Connection, request: SearchTranscripts): void {
-		const reply = (body: { hits: SearchHit[] } | { error: string }) =>
+		const reply = (body: { hits: (SearchHit & { task?: string })[] } | { error: string }) =>
 			connection.socket.write(
 				`${JSON.stringify({ type: "transcript_hits", requestId: request.requestId, ...body })}\n`,
 			);
 		if (typeof request.query !== "string") return void reply({ error: "query must be a string" });
+		const db = this.db;
+		if (!db) return;
 		try {
+			const tasks = Array.isArray(request.tasks) ? request.tasks.filter((id) => typeof id === "string") : [];
+			const refused = tasks.filter((task) => !maySearchTask(db, String(request.caller ?? ""), task));
+			if (refused.length)
+				return void reply({
+					error: `Only people assigned to a task, and managers above anyone who worked on it, may search it: ${refused.join(", ")}`,
+				});
+			const spans = taskSpans(db, tasks);
+			if (tasks.length && !spans.length) return void reply({ hits: [] });
+			const now = Date.now();
+			const hits = this.transcripts!.search({
+				query: request.query,
+				...(Array.isArray(request.sessions)
+					? { sessions: request.sessions.filter((id) => typeof id === "string") }
+					: {}),
+				...(spans.length
+					? { spans: spans.map((span) => ({ session: span.person, from: span.from, to: span.to ?? now })) }
+					: {}),
+				fields: request.fields === "words" ? "words" : "all",
+				...(Number.isInteger(request.limit) ? { limit: request.limit } : {}),
+			});
+			// Name the task each hit was written under.
 			reply({
-				hits: this.transcripts!.search({
-					query: request.query,
-					...(Array.isArray(request.sessions)
-						? { sessions: request.sessions.filter((id) => typeof id === "string") }
-						: {}),
-					fields: request.fields === "words" ? "words" : "all",
-					...(Number.isInteger(request.limit) ? { limit: request.limit } : {}),
+				hits: hits.map((hit) => {
+					const span = spans.find(
+						(each) => each.person === hit.session && hit.at >= each.from && hit.at <= (each.to ?? now),
+					);
+					return span ? { ...hit, task: span.task } : hit;
 				}),
 			});
 		} catch (error) {
