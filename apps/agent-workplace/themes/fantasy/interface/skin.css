@@ -1,7 +1,3 @@
-/* The fantasy theme's skin: how the world's HTML looks. The world UI's own CSS lays everything out; this sheet gives
-   it the guild's look: carved wood frames with brass inlay around warm parchment, and the conversation panel as an
-   open book. Loaded after the UI's CSS, so its rules win over layout at equal specificity. Tokens (`theme.json`
-   `style`) are set on the root element. */
 
 /* ---- styles ---- */
 
@@ -37,7 +33,6 @@ body {
 	color: #f3e2b8;
 }
 
-/* A broken theme pack: the same dark slate, edged in warning red, with a brass button to dismiss it. */
 .notice-lasting {
 	border-color: #8a3a22;
 	box-shadow: 0 8px 22px rgb(0 0 0 / 50%);
@@ -103,11 +98,6 @@ body {
 	box-shadow: 0 10px 30px rgb(0 0 0 / 45%);
 }
 
-/* ---- interface ---- */
-
-/* The interface in the fantasy theme's style: carved wood frames with brass inlay and rivets around warm parchment.
-   Text stays crisp HTML. Numbers use a face with lining figures and are trimmed to their cap height, so they sit in
-   the centre of their orbs and badges (Georgia's old-style figures rode low or high). */
 .aw-interface {
 	--aw-brass: var(--aw-accent);
 	--aw-brass-light: var(--aw-accent-light);
@@ -125,7 +115,6 @@ body {
 	font-family: var(--aw-figures);
 }
 
-/* Frames */
 .aw-frame {
 	border: 1px solid var(--aw-wood-edge);
 	border-radius: 10px;
@@ -322,7 +311,6 @@ body {
 	color: #fff;
 }
 
-/* Rows */
 .aw-row-main {
 	border-radius: 5px;
 }
@@ -442,7 +430,6 @@ body {
 	outline-offset: 1px;
 }
 
-/* Settings */
 .aw-switch-row {
 	border-radius: 5px;
 }
@@ -557,12 +544,10 @@ body {
 	color: var(--aw-ink-soft);
 }
 
-/* Ending a session is set apart, at the end of its own row, in the ink of a warning. */
 .aw-actions .aw-button-end {
 	color: #7a2a18;
 }
 
-/* Settings: the avatar looks, each as its portrait in a brass frame */
 .aw-looks {
 	border: 0;
 }
@@ -603,7 +588,6 @@ body {
 	color: var(--aw-ink);
 }
 
-/* Settings: each theme a row with a brass ring that fills when worn. */
 .aw-theme {
 	border-radius: 5px;
 }
@@ -647,11 +631,6 @@ body {
 	color: var(--aw-danger);
 }
 
-/* ---- conversation ---- */
-
-/* The conversation panel in the fantasy theme: an open book over the dimmed world. A tooled leather cover with gilt
-   corners holds two parchment pages over a gilt-edged page block; the left page is the character, the right the
-   transcript. Everything is drawn here in CSS; text stays crisp HTML. */
 .aw-conv-veil {
 	--aw-ink-soft: #6f5332;
 	--aw-oxblood: var(--aw-danger);
@@ -667,7 +646,6 @@ body {
 	color: var(--aw-ink);
 }
 
-/* The cover */
 .aw-conv-panel {
 	border-radius: 14px 14px 16px 16px;
 	background: var(--aw-panel-cover);
@@ -682,7 +660,6 @@ body {
 		0 6px 14px rgb(0 0 0 / 50%);
 }
 
-/* The page block under the pages: many leaves and a gilt edge, showing below and beside them. */
 .aw-conv-panel::before {
 	border-radius: 4px 4px 6px 6px;
 	background:
@@ -695,12 +672,10 @@ body {
 		0 4px 6px 1px rgb(0 0 0 / 50%);
 }
 
-/* The spine's crease between the pages. */
 .aw-conv-panel::after {
 	box-shadow: 0 0 10px 3px rgb(60 30 10 / 45%);
 }
 
-/* Gilt corner pieces on the leather. */
 .aw-conv-ornament {
 	background:
 		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 46 46'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23fbe7a6'/%3E%3Cstop offset='.45' stop-color='%23d4aa52'/%3E%3Cstop offset='1' stop-color='%237f5a1d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M2 2h30c-4 2-8 3-12 3-6 0-9 3-9 9 0 4-1 8-3 12V2z' fill='url(%23g)' stroke='%233a200a' stroke-width='1'/%3E%3Cpath d='M2 2l14 14' stroke='%233a200a' stroke-width='1.2'/%3E%3Ccircle cx='17' cy='17' r='3.2' fill='url(%23g)' stroke='%233a200a'/%3E%3Cpath d='M32 2c4 0 6 2 6 4s-2 3-3 2M2 32c0 4 2 6 4 6s3-2 2-3' fill='none' stroke='url(%23g)' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E")
@@ -708,7 +683,6 @@ body {
 	filter: drop-shadow(0 1px 1px rgb(0 0 0 / 60%));
 }
 
-/* The pages */
 .aw-conv-pane {
 	background: var(--aw-panel-page);
 	box-shadow:
@@ -734,7 +708,6 @@ body {
 		inset 0 0 50px rgb(150 100 40 / 18%);
 }
 
-/* The left page: the character */
 .aw-portrait {
 	border-radius: 50% 50% 10px 10px / 46% 46% 10px 10px;
 	background: radial-gradient(circle at 50% 36%, #f7e3ad 0, #d6a868 26%, #7d6370 62%, #2f2840 100%), #4a3a50;
@@ -764,7 +737,6 @@ body {
 	color: var(--aw-ink-soft);
 }
 
-/* A flourish under the name. */
 .aw-conv-role::after {
 	background:
 		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 12'%3E%3Cpath d='M2 6h56M92 6h56' stroke='%23a07a3a' stroke-width='1'/%3E%3Cpath d='M75 1l5 5-5 5-5-5z' fill='%23a07a3a'/%3E%3Ccircle cx='62' cy='6' r='1.6' fill='%23a07a3a'/%3E%3Ccircle cx='88' cy='6' r='1.6' fill='%23a07a3a'/%3E%3C/svg%3E")
@@ -811,7 +783,6 @@ body {
 	color: #4b3520;
 }
 
-/* A brass plaque button. */
 .aw-cta {
 	border: 1px solid #3a200a;
 	border-radius: 6px;
@@ -857,7 +828,6 @@ body {
 	color: var(--aw-oxblood);
 }
 
-/* The right page: the transcript */
 .aw-conv-close {
 	border: 0;
 	border-radius: 50%;
@@ -871,7 +841,6 @@ body {
 	filter: drop-shadow(0 2px 2px rgb(60 30 5 / 40%)) brightness(1.08);
 }
 
-/* A silk ribbon marking the page. */
 .aw-conv-marker {
 	background: linear-gradient(90deg, #6d140f, #a8261b 45%, #7d1812);
 	filter: drop-shadow(1px 2px 1px rgb(40 10 0 / 45%));
@@ -891,7 +860,6 @@ body {
 	background: transparent;
 }
 
-/* Shown over the top of the page, so the transcript under it never moves. */
 .aw-conv-loading {
 	border-radius: 12px;
 	background: rgb(251 242 218 / 92%);
@@ -914,7 +882,6 @@ body {
 	color: #a07a3a;
 }
 
-/* Entries the runtime indexed that the transcript file no longer holds: one quiet line at the top. */
 .aw-conv-missing {
 	font-style: italic;
 	color: var(--aw-ink-faint);
@@ -948,7 +915,6 @@ body {
 	color: var(--aw-ink-faint);
 }
 
-/* The operator's turns: in blue ink, set in from a margin rule like a note written into the book. */
 .aw-conv-user {
 	color: #1f3a57;
 }
@@ -967,7 +933,6 @@ body {
 	color: var(--aw-blue-ink);
 }
 
-/* Mail: a letter with a wax seal. */
 .aw-conv-mail {
 	border: 1px solid rgb(140 100 40 / 35%);
 	border-radius: 3px;
@@ -1074,7 +1039,6 @@ a.aw-md-link:focus-visible {
 	border-radius: 2px;
 }
 
-/* A link the window cannot open (not a web link): its target shows on hover only. */
 .aw-md-link-dead {
 	text-decoration-style: dotted;
 }
@@ -1202,7 +1166,6 @@ a.aw-md-link:focus-visible {
 	color: #8a2a1a;
 }
 
-/* Where the reply box goes (ticket 13): a ruled line with a quill. */
 .aw-conv-reply-slot {
 	border-top: 1px solid rgb(140 100 40 / 35%);
 	font-style: italic;
@@ -1215,8 +1178,6 @@ a.aw-md-link:focus-visible {
 		no-repeat center / contain;
 }
 
-/* The foot of the right page: what the operator can do (ticket 13). A ruled line, the receipts of what was sent, the
-   reply box with its quill, and the actions by state. */
 .aw-conv-act {
 	border-top: 1px solid rgb(140 100 40 / 35%);
 }
@@ -1266,7 +1227,6 @@ a.aw-md-link:focus-visible {
 	filter: saturate(0.5) brightness(0.97);
 }
 
-/* A quieter leather-and-parchment button beside the brass one. */
 .aw-cta-quiet {
 	color: var(--aw-ink);
 	background: linear-gradient(#fdf5df, #ecd9ab 55%, #e1c88f);
@@ -1277,7 +1237,6 @@ a.aw-md-link:focus-visible {
 		0 4px 8px rgb(60 30 5 / 22%);
 }
 
-/* Red sealing wax, for Stop. */
 .aw-cta-danger {
 	border-color: #3a0d05;
 	color: #fdebd2;
@@ -1290,7 +1249,6 @@ a.aw-md-link:focus-visible {
 		0 4px 8px rgb(60 10 5 / 35%);
 }
 
-/* What was sent, and how far it got. */
 .aw-conv-receipts {
 	color: var(--aw-ink-soft);
 }
@@ -1326,7 +1284,6 @@ a.aw-md-link:focus-visible {
 	color: var(--aw-oxblood);
 }
 
-/* Stop asks first: a slip of parchment over the foot of the page, closed with a wax seal. */
 .aw-conv-confirm {
 	border-radius: 4px;
 	background: radial-gradient(ellipse 90% 80% at 50% 40%, #fffaea, #f3e4bf 70%, #e7d09d);
@@ -1354,13 +1311,11 @@ a.aw-md-link:focus-visible {
 	color: var(--aw-ink);
 }
 
-/* The reply being written: a nib that blinks after the last word. */
 .aw-conv-writing .aw-md > :last-child::after {
 	border-radius: 1px 1px 3px 3px;
 	background: var(--aw-ink-soft);
 }
 
-/* An open question (ticket 14): a letter of questions laid over the foot of the page, sealed in wax. */
 .aw-conv-form,
 .aw-conv-terminal-only {
 	border-radius: 4px;
@@ -1454,7 +1409,6 @@ a.aw-md-link:focus-visible {
 	font-style: italic;
 }
 
-/* Hand-drawn marks: an inked ring for one choice, a ruled box for many. */
 .aw-conv-mark {
 	border: 1.5px solid var(--aw-ink-soft);
 	background: #fffdf6;
@@ -1499,7 +1453,6 @@ a.aw-md-link:focus-visible {
 	color: var(--aw-ink-soft);
 }
 
-/* Who answered the question that just closed. */
 .aw-conv-closed {
 	font-style: italic;
 	color: var(--aw-blue-ink);
@@ -1510,11 +1463,6 @@ a.aw-md-link:focus-visible {
 	font-style: normal;
 }
 
-/* ---- places ---- */
-
-/* The function places' panels in the fantasy theme: the innkeeper's register and the rookery are ledgers of warm
-   parchment in the interface's carved wood frame, with the host's portrait in a brass-rimmed medallion at the head.
-   The veil dims the world less than the conversation book does: these are errands at a counter, not a long read. */
 .aw-places {
 	--aw-oxblood: var(--aw-danger);
 	--aw-moss: #3f6a2c;
@@ -1543,7 +1491,6 @@ a.aw-md-link:focus-visible {
 	outline-offset: 2px;
 }
 
-/* The head: the host in a medallion, the panel's name, and what the host says. */
 .aw-place-head {
 	border-bottom: 1px solid rgb(122 90 50 / 35%);
 	box-shadow: 0 1px 0 rgb(255 250 230 / 70%);
@@ -1602,7 +1549,6 @@ a.aw-md-link:focus-visible {
 	font-style: italic;
 }
 
-/* The register's rows: a face, who and what, and the two things to do. */
 .aw-register-row {
 	border-bottom: 1px dashed rgb(122 90 50 / 30%);
 }
@@ -1671,7 +1617,6 @@ a.aw-md-link:focus-visible {
 	background: linear-gradient(#f8de9c, #dcb15c);
 }
 
-/* A receipt where the operator asked: sending, done, or failed with why. */
 .aw-progress {
 	font-style: italic;
 }
@@ -1707,7 +1652,6 @@ a.aw-md-link:focus-visible {
 	box-shadow: 0 0 0 1px #5a1a0c;
 }
 
-/* Ending a busy session: a small sealed note. */
 .aw-confirm-veil {
 	background: rgb(8 5 10 / 45%);
 }
@@ -1860,9 +1804,6 @@ a.aw-md-link:focus-visible {
 	text-transform: none;
 }
 
-/* ---- pointer ---- */
-
-/* RuneScape's pointer chrome in the fantasy palette: hover text and the right-click menu. */
 .pointer-hover {
 	border-radius: 6px;
 	background: linear-gradient(90deg, rgb(20 12 8 / 62%), rgb(20 12 8 / 38%) 80%, rgb(20 12 8 / 0%));
@@ -1909,10 +1850,6 @@ a.aw-md-link:focus-visible {
 	background: #6b4a2a;
 }
 
-/* ---- the quest office and the library ---- */
-
-/* The clerk's board and the librarian's catalogue are ledgers like the inn's register; an issue or a page reads on
-   warm parchment, its facts in a ruled margin; a write as the operator waits under a wax seal until he confirms. */
 .aw-quest-row,
 .aw-page-row {
 	border-bottom: 1px dashed rgb(122 90 50 / 30%);
@@ -2028,7 +1965,6 @@ a.aw-md-link:focus-visible {
 	box-shadow: inset 0 1px 3px rgb(60 35 15 / 30%);
 }
 
-/* The issue's facts in the margin of the ledger. */
 .aw-issue-facts {
 	border: 1px solid rgb(122 90 50 / 30%);
 	border-radius: 6px;
@@ -2060,7 +1996,6 @@ a.aw-md-link:focus-visible {
 	color: #8a6d48;
 }
 
-/* Trays: a comment being written, the moves Jira allows, a hand-over. */
 .aw-issue-compose,
 .aw-issue-moves,
 .aw-hand {
@@ -2153,7 +2088,6 @@ a.aw-md-link:focus-visible {
 	outline-offset: 1px;
 }
 
-/* A move: a tab of parchment with a ribbon of its kind. */
 .aw-move {
 	border: 1px solid #a07a46;
 	border-left-width: 5px;
@@ -2189,7 +2123,6 @@ a.aw-md-link:focus-visible {
 	color: #7a5a32;
 }
 
-/* The confirmation: a small note under a wax seal. */
 .aw-gate-veil {
 	background: rgb(8 5 10 / 42%);
 }
@@ -2238,7 +2171,6 @@ a.aw-md-link:focus-visible {
 	color: var(--aw-oxblood);
 }
 
-/* The library: a page found or read lately, marked by a small leaf of parchment. */
 .aw-page-mark {
 	background:
 		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 22'%3E%3Cpath d='M2 1h10l4 4v16H2z' fill='%23fbf0d0' stroke='%237a5a32' stroke-width='1.2' stroke-linejoin='round'/%3E%3Cpath d='M12 1v4h4' fill='%23e8d09c' stroke='%237a5a32' stroke-width='1.2' stroke-linejoin='round'/%3E%3Cpath d='M5 9h8M5 12h8M5 15h6' stroke='%23a07a46' stroke-width='1.1' stroke-linecap='round'/%3E%3C/svg%3E")
@@ -2262,7 +2194,6 @@ a.aw-md-link:focus-visible {
 	font-style: italic;
 }
 
-/* A page read in the library: a leaf of the book, its first letter illuminated. */
 .aw-page-sheet {
 	border-radius: 4px;
 	background: var(--aw-panel-page);
@@ -2289,7 +2220,6 @@ a.aw-md-link:focus-visible {
 	clear: left;
 }
 
-/* Sanitised HTML from Jira and Confluence, in the ledger's inks. */
 .aw-rich {
 	color: #2b1d12;
 }
@@ -2421,7 +2351,6 @@ a.aw-md-link:focus-visible {
 	color: #8a6d48;
 }
 
-/* Settings: the Atlassian sign-in, in the side panel's own inks. */
 .aw-atlassian-settings h3 small {
 	font-style: italic;
 	color: var(--aw-ink-faint);
@@ -2488,12 +2417,6 @@ a.aw-md-link:focus-visible {
 	font-style: italic;
 }
 
-/* ---- the forge ---- */
-
-/* The forge in the fantasy theme: the smith's list and a pull request's card are the same warm ledger as the inn's,
-   with CI as the quench: a moss-green tick for a tempered piece, an oxblood cross for a cracked one, and an ember ring
-   for one still in the fire. The review page is a long scroll of the diff, set in ink on parchment, with additions
-   and removals washed green and red like a scribe's corrections. A write outside is a sealed note over the page. */
 .aw-ci {
 	border-radius: 50%;
 	background: center / 100% no-repeat;
@@ -2661,7 +2584,6 @@ a.aw-md-link:focus-visible {
 	}
 }
 
-/* The card. */
 .aw-forge-back {
 	border-radius: 12px;
 	background:
@@ -2817,7 +2739,6 @@ a.aw-md-link:focus-visible {
 	color: #163050;
 }
 
-/* The review page. */
 .aw-review-totals {
 	font-family: var(--aw-figures);
 }
@@ -2960,7 +2881,6 @@ a.aw-md-link:focus-visible {
 	color: var(--aw-oxblood);
 }
 
-/* A write outside: a sealed note over the page that asked for it. */
 .aw-write-veil {
 	border-radius: 4px;
 	background: radial-gradient(ellipse at 50% 45%, rgb(40 25 12 / 28%), rgb(30 18 8 / 52%));
@@ -3005,10 +2925,6 @@ a.aw-md-link:focus-visible {
 	color: #8a6d48;
 }
 
-/* ---- the town square: Slack ---- */
-
-/* The crier's list, a channel read in a panel, and Slack in the side panel and Settings: a town's notices on the same
-   warm parchment as the register, with counts as dark wax tokens and mentions in sealing red. */
 .aw-slack-kind {
 	color: #8a6a3e;
 }

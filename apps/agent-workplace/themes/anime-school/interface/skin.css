@@ -1,7 +1,3 @@
-/* The anime school theme's skin: a pastel school notebook over sunlit classrooms and cherry blossoms. Frames are navy
-   like a sailor uniform, with the collar's two cream stripes; what they hold sits on cream dot-grid paper in a rounded
-   hand; sakura pink is the accent. The conversation panel is an open notebook: a navy cover, a dotted left page with
-   the character's photo taped in, graph paper on the right, and a spiral binding between them. */
 
 :root {
 	--t-glass: rgb(42 54 87 / 94%);
@@ -24,7 +20,6 @@
 	--t-shadow: 0 12px 30px rgb(16 12 32 / 40%), 0 2px 6px rgb(16 12 32 / 22%);
 }
 
-/* ---- the page ---- */
 
 html,
 body {
@@ -33,7 +28,6 @@ body {
 	-webkit-font-smoothing: antialiased;
 }
 
-/* The place's name: a cream name card with a navy edge, like a classroom door plate. */
 .place-title {
 	padding: 6px 22px 7px;
 	border: 2px solid var(--t-navy);
@@ -146,7 +140,6 @@ body {
 	color: var(--t-coral);
 }
 
-/* ---- the interface ---- */
 
 .aw-interface {
 	font-family: var(--aw-font-body);
@@ -179,7 +172,6 @@ body {
 	color: var(--aw-ink-faint);
 }
 
-/* Minimap and orbs */
 
 .aw-minimap-map {
 	border-radius: 9px;
@@ -280,7 +272,6 @@ body {
 	outline-offset: 2px;
 }
 
-/* Side panel */
 
 .aw-panel-head h2,
 .aw-card-head h2 {
@@ -343,7 +334,6 @@ body {
 	color: #fff;
 }
 
-/* Rows */
 
 .aw-row-main {
 	border-radius: 7px;
@@ -463,7 +453,6 @@ body {
 	color: var(--t-coral);
 }
 
-/* Settings */
 
 .aw-switch-row {
 	border-radius: 7px;
@@ -576,7 +565,6 @@ body {
 	color: var(--t-coral);
 }
 
-/* Chatbox */
 
 .aw-chat-line time {
 	color: var(--aw-ink-faint);
@@ -635,7 +623,6 @@ body {
 	outline-offset: 1px;
 }
 
-/* Examine card */
 
 .aw-card-head p {
 	color: var(--t-glass-soft);
@@ -655,7 +642,6 @@ body {
 	color: var(--aw-ink-faint);
 }
 
-/* ---- the conversation panel: an open notebook ---- */
 
 .aw-conv-veil {
 	--aw-blue-ink: var(--t-blue);
@@ -664,7 +650,6 @@ body {
 	color: var(--aw-ink);
 }
 
-/* The cover: navy cloth around both pages. */
 .aw-conv-panel {
 	padding: 18px 20px 22px;
 	border-radius: 16px;
@@ -676,7 +661,6 @@ body {
 		0 6px 14px rgb(16 12 32 / 40%);
 }
 
-/* The pages' edges under them. */
 .aw-conv-panel::before {
 	inset: 16px 17px 17px;
 	border-radius: 6px;
@@ -684,7 +668,6 @@ body {
 	box-shadow: 0 3px 0 #d8cbb6;
 }
 
-/* The spiral binding between the pages: rings over a dark gutter. */
 .aw-conv-panel::after {
 	top: 22px;
 	bottom: 26px;
@@ -705,7 +688,6 @@ body {
 	filter: drop-shadow(0 1px 1px rgb(0 0 0 / 35%));
 }
 
-/* Washi tape across the top corners. */
 .aw-conv-ornament {
 	width: 86px;
 	height: 24px;
@@ -731,7 +713,6 @@ body {
 	display: none;
 }
 
-/* A sticky note poking out of the left page. */
 .aw-conv-marker {
 	top: -8px;
 	right: 34px;
@@ -748,7 +729,6 @@ body {
 	background: var(--aw-panel-page);
 }
 
-/* The left page: dot grid, the character's photo taped in. */
 .aw-conv-side {
 	padding: 26px 34px 20px 24px;
 	border-radius: 8px 3px 3px 8px;
@@ -758,7 +738,6 @@ body {
 	box-shadow: inset -14px 0 18px -14px rgb(43 58 85 / 35%);
 }
 
-/* The right page: graph paper with a pink margin. */
 .aw-conv-main {
 	border-radius: 3px 8px 8px 3px;
 	background:
@@ -822,7 +801,6 @@ body {
 	font-size: 13.5px;
 }
 
-/* A wavy underline drawn under the name. */
 .aw-conv-role::after {
 	width: 120px;
 	height: 8px;
@@ -870,7 +848,6 @@ body {
 	font: 12px / 1.4 var(--aw-font-mono);
 }
 
-/* Buttons: pink pills for the main action, cream for the quiet one, red for Stop. */
 .aw-cta {
 	padding: 8px 20px 9px;
 	border: 2px solid #c35d77;
@@ -936,7 +913,6 @@ body {
 	color: var(--aw-ink-soft);
 }
 
-/* A round pink sticker to close the notebook. */
 .aw-conv-close {
 	top: 10px;
 	right: 12px;
@@ -958,7 +934,6 @@ body {
 	filter: brightness(1.06);
 }
 
-/* The document */
 
 .aw-conv-log {
 	padding: 30px 52px 18px 48px;
@@ -1024,7 +999,6 @@ body {
 	font-size: 11.5px;
 }
 
-/* The operator's turns: a soft blue card. */
 .aw-conv-user {
 	padding: 9px 14px 10px 14px;
 	border-radius: 10px;
@@ -1040,7 +1014,6 @@ body {
 	color: var(--t-blue);
 }
 
-/* Mail: a message card with an envelope badge. */
 .aw-conv-mail {
 	border: 1px solid var(--t-line);
 	border-radius: 10px;
@@ -1064,7 +1037,6 @@ body {
 	color: #c25a6a;
 }
 
-/* Markdown */
 
 .aw-md li::marker {
 	color: var(--t-teal);
@@ -1163,7 +1135,6 @@ a.aw-md-link:focus-visible {
 	content: "]";
 }
 
-/* Folded lines: tool calls, thoughts, and notes */
 
 .aw-conv-fold-line {
 	border: 0;
@@ -1271,7 +1242,6 @@ a.aw-md-link:focus-visible {
 	color: var(--t-coral);
 }
 
-/* The foot of the document: the reply box and its actions. */
 
 .aw-conv-reply-slot {
 	border-top: 1px solid var(--t-line);
@@ -1358,7 +1328,6 @@ a.aw-md-link:focus-visible {
 	color: var(--t-coral);
 }
 
-/* Stop asks first: a popover. */
 .aw-conv-confirm {
 	border-radius: 12px;
 	background: #fff;
@@ -1386,14 +1355,12 @@ a.aw-md-link:focus-visible {
 	color: var(--aw-ink-soft);
 }
 
-/* The reply being written: a caret after the last word. */
 .aw-conv-writing .aw-md > :last-child::after {
 	width: 2px;
 	border-radius: 1px;
 	background: var(--t-teal);
 }
 
-/* An open question: a form sheet over the foot of the document. */
 .aw-conv-form,
 .aw-conv-terminal-only {
 	border-radius: 12px;
@@ -1535,7 +1502,6 @@ a.aw-md-link:focus-visible {
 	content: "\2713";
 }
 
-/* ---- the places' panels ---- */
 
 .aw-places {
 	--aw-oxblood: var(--aw-danger);
@@ -1843,7 +1809,6 @@ a.aw-md-link:focus-visible {
 	color: var(--aw-ink-faint);
 }
 
-/* ---- the pointer ---- */
 
 .pointer-hover {
 	border-radius: 8px;
@@ -1900,10 +1865,6 @@ a.aw-md-link:focus-visible {
 	text-transform: none;
 }
 
-/* ---- the town square: Slack ---- */
-
-/* The crier's list, a channel read in a panel, and Slack in the side panel and Settings, in the theme's clean card
-   style: counts as small pills, mentions in the warning colour. */
 .aw-slack-kind {
 	color: var(--aw-ink-faint);
 }
@@ -2070,9 +2031,6 @@ a.aw-md-link:focus-visible {
 	color: var(--aw-ink-faint);
 }
 
-/* ---- the quest office and the library ---- */
-
-/* The student council's notice board and the library's catalogue as rounded lists on the notebook page; an issue reads like a club request with its details on a card; a page is a notebook leaf; a write as the operator waits under a star sticker until he confirms. */
 .aw-quest-row,
 .aw-page-row {
 	border-bottom: 1px solid var(--t-line);
@@ -2576,11 +2534,6 @@ a.aw-md-link:focus-visible {
 	color: var(--aw-ink-faint);
 }
 
-/* ---- the forge ---- */
-
-/* The forge in the anime school theme: the shop workshop's list and a pull request's card are pages of the class notebook, soft and rounded. CI reads as status chips (green tick, red cross, amber ring, grey dash);
-   the review page is a code review in the pack's surface colours, additions and removals washed green and red. A write
-   outside is a small confirmation card over the page that asked for it. */
 .aw-ci {
 	border-radius: 50%;
 	background: center / 100% no-repeat;
