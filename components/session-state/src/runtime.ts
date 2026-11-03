@@ -3201,7 +3201,8 @@ export class Runtime {
 		const reply = (
 			body:
 				| { hits: (SearchHit & { task?: string; file: string | null; name: string | null })[]; total: number }
-				| { error: string },
+				// `refused`: a decided refusal (permission), as opposed to a failure to search.
+				| { error: string; refused?: true },
 		) =>
 			connection.socket.write(
 				`${JSON.stringify({ type: "transcript_hits", requestId: request.requestId, ...body })}\n`,
@@ -3214,6 +3215,7 @@ export class Runtime {
 			const refused = tasks.filter((task) => !maySearchTask(db, String(request.caller ?? ""), task));
 			if (refused.length)
 				return void reply({
+					refused: true,
 					error: `Only people assigned to a task, and managers above anyone who worked on it, may search it: ${refused.join(", ")}`,
 				});
 			const spans = taskSpans(db, tasks);
@@ -3271,7 +3273,7 @@ export class Runtime {
 
 	/** One entry of a session's transcript, read from Pi's own JSONL file, which stays the source of truth. */
 	private async readEntry(connection: Connection, request: ReadEntry): Promise<void> {
-		const reply = (body: { entry: unknown } | { error: string }) =>
+		const reply = (body: { entry: unknown } | { error: string; refused?: true }) =>
 			connection.socket.write(
 				`${JSON.stringify({ type: "entry", requestId: request.requestId, ...body } as EntryReply)}\n`,
 			);
@@ -3288,7 +3290,7 @@ export class Runtime {
 			typeof request.caller === "string" &&
 			!mayReadEntry(this.db!, request.caller, request.sessionId, times.get(request.entryId))
 		)
-			return void reply({ error: "That entry is outside every task you may search." });
+			return void reply({ refused: true, error: "That entry is outside every task you may search." });
 		let found: Map<string, unknown>;
 		try {
 			found = (await readTranscriptEntries(row.session_file, times)).found;
