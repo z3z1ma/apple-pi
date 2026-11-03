@@ -34,7 +34,7 @@ function allComments(path: string, text: string): SourceComment[] {
 	const visit = (node: ts.Node) => {
 		for (const ranges of [ts.getLeadingCommentRanges(text, node.pos), ts.getTrailingCommentRanges(text, node.end)])
 			for (const range of ranges ?? []) add(range.pos, range.end);
-		ts.forEachChild(node, visit);
+		for (const child of node.getChildren(source)) visit(child);
 	};
 	visit(source);
 	if (jsx)

@@ -29,6 +29,10 @@ test("in an opted-in repository a new comment is refused, with where its rationa
 	});
 	expect(refusal).toMatch(/why b is two/);
 	expect(refusal).toMatch(/\.context\/<path>\.md/);
+	const afterComma = await editRefusal(file, "edit", {
+		edits: [{ oldText: "export const b = 2;", newText: "export const b = [\n\t{ x: 1 }, // weak match\n];" }],
+	});
+	expect(afterComma).toMatch(/weak match/);
 	expect(
 		await editRefusal(file, "edit", { edits: [{ oldText: "export const b = 2;", newText: "export const b = 4;" }] }),
 	).toBeUndefined();
