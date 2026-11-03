@@ -6,5 +6,8 @@ Why: Monaco sizes itself from its host. Intrinsic minimum sizes can make a long 
 Tree rows reserve separate fixed SVG slots for the disclosure chevron and file/folder icon, then shrink only the filename. The selected row and keyboard focus stay visible inside the scrolling file pane. Tab activation and close are sibling buttons, with selection styling on their wrapper.
 Why: nested buttons break keyboard activation, and letting a long filename grow an icon slot or flex minimum pushes navigation outside the fixed sidebar.
 
+The `.without-files` grid rules sit after both media blocks and repeat their breakpoints.
+Why: the media blocks' `.wp-code-panes.with-git` rules have the same specificity as `.wp-code-panes.without-files`. Placed earlier, a hidden Files pane would keep its column at narrow widths.
+
 Coupled: apps/agent-workplace/web/workplace-code.tsx, apps/agent-workplace/web/workplace-icon.tsx, apps/agent-workplace/web/workplace-git.css, apps/agent-workplace/web/workplace-terminal.css, apps/agent-workplace/web/workplace.css
 Verify: apps/agent-workplace/tests/world-code.test.ts, apps/agent-workplace/tests/world-terminal.test.ts
