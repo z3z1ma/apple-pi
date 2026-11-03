@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
-import { commandRefusal, editRefusal, installRepoRules, proposedContent } from "../src/index.js";
+import { commandRefusal, editRefusal, installRepoRules } from "../src/index.js";
 
 const repo = mkdtempSync(join(tmpdir(), "repo-rules-"));
 afterAll(() => rmSync(repo, { recursive: true, force: true }));
@@ -22,12 +22,6 @@ writeFileSync(
 );
 const file = join(repo, "web/view.tsx");
 writeFileSync(file, "// biome-ignore lint: kept\nexport const a = 1;\n// an old comment stays\nexport const b = 2;\n");
-
-test("an edit is computed against the file the way the edit tool applies it", () => {
-	expect(proposedContent(file, { edits: [{ oldText: "a = 1", newText: "a = 3" }] }, "edit")).toContain("a = 3");
-	expect(proposedContent(file, { edits: [{ oldText: "absent", newText: "x" }] }, "edit")).toBeUndefined();
-	expect(proposedContent(file, { content: "x" }, "write")).toBe("x");
-});
 
 test("in an opted-in repository a new comment is refused, with where its rationale belongs", async () => {
 	const refusal = await editRefusal(file, "edit", {

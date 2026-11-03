@@ -16,7 +16,7 @@ const PROMPT = `This repository keeps its rules in \`.pi/rules/\`, and the harne
 
 const COMMITS = /\bgit\s+(add|commit)\b/;
 
-export function proposedContent(path: string, input: Record<string, unknown>, toolName: string): string | undefined {
+function proposedContent(path: string, input: Record<string, unknown>, toolName: string): string | undefined {
 	if (toolName === "write") return typeof input.content === "string" ? input.content : undefined;
 	const edits = input.edits as { oldText?: unknown; newText?: unknown }[] | undefined;
 	if (!Array.isArray(edits) || !existsSync(path)) return undefined;
