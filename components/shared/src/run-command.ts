@@ -43,9 +43,7 @@ export function runCommand(
 		const kill = () => {
 			try {
 				if (child.pid) process.kill(-child.pid, "SIGKILL");
-			} catch {
-				// The group already exited.
-			}
+			} catch {}
 		};
 		const timer =
 			timeoutSec === undefined

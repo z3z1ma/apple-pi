@@ -58,9 +58,7 @@ function publishOwner(path: string, owner: ExclusiveLeaseOwner): void {
 	} finally {
 		try {
 			unlinkSync(candidate);
-		} catch {
-			// The published owner file is authoritative; a temp cleanup failure is harmless.
-		}
+		} catch {}
 	}
 }
 

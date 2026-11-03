@@ -170,7 +170,7 @@ describe("search root guard: bash, obvious direct invocations", () => {
 		"find src -type f -exec wc -l {} +",
 		"fd -tf needle src",
 		"rg -c needle .",
-		"gopls check $(find internal/runtime -name '*.go')", // nested $(...) isn't parsed; accepted
+		"gopls check $(find internal/runtime -name '*.go')",
 	])("allows a search command with a safe literal root: %s", (command) => {
 		expect(searchRootBlockReason("bash", { command }, REPO, POLICY)).toBeUndefined();
 	});
@@ -231,7 +231,7 @@ describe("search root guard: bash, best-effort means giving up on real ambiguity
 		"printf '/\\n' | xargs rg needle",
 		"sudo rg needle /Users/example/",
 		"if rg needle /; then echo found; fi",
-		"nice -n 5 rg needle /", // wrapper commands (sudo/env/nice/timeout/...) aren't unwrapped
+		"nice -n 5 rg needle /",
 		"pushd ~; rg needle",
 		"f() { cd /; }; f; rg needle",
 		"source ./setup.sh; rg needle",

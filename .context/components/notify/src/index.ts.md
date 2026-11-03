@@ -9,6 +9,9 @@ Why: the tool blocks the turn, so `agent_settled` never fires while it is pendin
 `$TMUX` is `<socket>,<pid>,<session>` inside a tmux client. The click runs later in a launchd context with no `$TMUX` and a minimal `PATH`, so the stored command bakes the absolute tmux binary and server socket. Resolve that binary from `PATH` first.
 Why: the tmux client must match the running server's protocol. Hardcoded candidates are only a last resort and must not win over the binary that started the server.
 
+Logging failures never fail notification delivery. Failed delivery paths fall through to the next path; tmux lookup falls back to fixed candidates and repository naming falls back to cwd.
+Why: optional diagnostics and lookup failures must not prevent notifications.
+
 Focus detection fails open. A notification is suppressed only when Ghostty is frontmost and the pane's tmux window is the active window of an attached session. `/notify-test` always delivers.
 
 A program-owned temporary person's routine completion belongs to its waiting caller, so only that completion path is quiet. Keep operator-input notifications active: suppressing the whole extension for temporary people would hide a question that blocks the program. Lasting sessions keep their ordinary notification behavior.

@@ -192,9 +192,7 @@ async function killProcessGroups(groups: Iterable<number>, waitMs = 2000): Promi
 	for (const pgid of pending) {
 		try {
 			process.kill(-pgid, "SIGKILL");
-		} catch {
-			// The group already exited.
-		}
+		} catch {}
 	}
 	const deadline = Date.now() + waitMs;
 	while (pending.some(groupAlive) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 10));

@@ -154,9 +154,7 @@ export function registerVroom(pi: ExtensionAPI, storage: FastModeStorage = globa
 					enabled = stored;
 					updateStatus(ctx);
 				}
-			} catch {
-				// Keep the last known state when the shared file is temporarily unreadable.
-			}
+			} catch {}
 		}
 		if (!enabled || !activeProviderLabel(ctx) || !isRecord(event.payload)) return;
 		return { ...event.payload, service_tier: "priority" };

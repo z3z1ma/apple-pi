@@ -663,10 +663,7 @@ describe("terse tool renderer integration with ToolExecutionComponent", () => {
 		);
 		container.addChild(tool1);
 
-		const thoughtAssistant = new AssistantMessageComponent(
-			undefined,
-			false, // hideThinkingBlock = false
-		);
+		const thoughtAssistant = new AssistantMessageComponent(undefined, false);
 		container.addChild(thoughtAssistant);
 
 		thoughtAssistant.updateContent(

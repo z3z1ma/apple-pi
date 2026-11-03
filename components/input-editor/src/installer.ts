@@ -74,9 +74,7 @@ function getEditorBoundary(ctx: ExtensionContext): string | undefined {
 function restoreBuiltInSurfaces(ctx: ExtensionContext): void {
 	try {
 		ctx.ui.setEditorComponent(undefined);
-	} catch {
-		// Continue restoring the footer even if the editor API is unavailable.
-	}
+	} catch {}
 	try {
 		ctx.ui.setFooter(undefined);
 	} catch {}

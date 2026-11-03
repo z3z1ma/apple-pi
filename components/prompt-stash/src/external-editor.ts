@@ -93,9 +93,7 @@ export async function openInExternalEditor(options: ExternalEditorOptions): Prom
 	} finally {
 		try {
 			rmSync(tempDir, { recursive: true, force: true });
-		} catch {
-			// Best effort cleanup
-		}
+		} catch {}
 		options.tui?.start?.();
 		options.tui?.requestRender?.(true);
 	}

@@ -157,9 +157,7 @@ export function recordSidecarUsage(input: SidecarUsageInput): void {
 		mkdirSync(dirname(path), { recursive: true });
 		rotateIfNeeded(path);
 		appendFileSync(path, `${JSON.stringify(record)}\n`, "utf-8");
-	} catch {
-		// Measurement must never change sidecar behavior.
-	}
+	} catch {}
 }
 
 export type SidecarUsageTracker = {

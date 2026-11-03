@@ -266,9 +266,7 @@ export class BtwViewer implements Component {
 		return lines;
 	}
 
-	invalidate(): void {
-		/* no cached state */
-	}
+	invalidate(): void {}
 
 	dispose(): void {
 		this.closed = true;
@@ -415,7 +413,6 @@ export class BtwViewer implements Component {
 					needsSeparator = true;
 				}
 			}
-			// Skip toolResult bodies entirely for a clean answer-first UI
 		}
 
 		if (

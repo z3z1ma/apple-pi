@@ -288,9 +288,7 @@ async function resolveTmuxBin(pi: ExtensionAPI): Promise<string> {
 		});
 		const resolved = result.stdout.trim();
 		if (result.code === 0 && resolved) return resolved;
-	} catch {
-		// Fall through to the fixed candidates below.
-	}
+	} catch {}
 	const candidates = [
 		"/opt/homebrew/bin/tmux",
 		"/run/current-system/sw/bin/tmux",
@@ -346,9 +344,7 @@ async function projectTitle(pi: ExtensionAPI, cwd: string): Promise<string> {
 	try {
 		const result = await pi.exec("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { timeout: 2_000 });
 		if (result.code === 0 && result.stdout.trim()) return basename(result.stdout.trim());
-	} catch {
-		// Fall back to cwd below.
-	}
+	} catch {}
 	return basename(cwd) || "Pi";
 }
 
@@ -371,9 +367,7 @@ async function appendLog(record: Record<string, unknown>): Promise<void> {
 	try {
 		await mkdir(dirname(LOG_PATH), { recursive: true });
 		await appendFile(LOG_PATH, `${JSON.stringify(record)}\n`, "utf8");
-	} catch {
-		// Notifications must never fail because logging failed.
-	}
+	} catch {}
 }
 
 async function runAppleScript(
@@ -458,9 +452,7 @@ async function deliverNotification(
 				via = notifier === APP_NOTIFIER ? "pi-app" : "terminal-notifier";
 				break;
 			}
-		} catch {
-			// Try the next delivery path.
-		}
+		} catch {}
 	}
 
 	if (!success && (await runAppleScript(pi, title, subtitle, body, true))) {
