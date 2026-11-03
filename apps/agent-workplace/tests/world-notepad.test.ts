@@ -6,13 +6,9 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, CharacterFacts, ThemeChoice, WorldSnapshot } from "../src/world.js";
 
-// The headquarters' notepad, in the committed, built world UI in headless Chrome over a fixture backend: the board opens
-// the coordinator's notes, typing saves them, asking for an update puts a marker at the cursor and mails the agent to
-// replace it, a selection goes to an agent as mail, and a change on disk loads (or, under unsaved edits, asks).
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-notes-<theme>-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const PACKS = ["fantasy", "tech-office", "anime-school"] as const;
 const manifest = (id: string) =>
@@ -66,7 +62,6 @@ const ORLA: Character = {
 	startedAt: NOW - 9_000_000,
 	facts: facts({ reportsTo: null, tmux: { socket: "/tmp/tmux", pane: "%1", session: "home", window: 1 } }),
 };
-// A repository with a long path, so the recruit form's select has a long option to fit.
 const LONG = "/Users/operator/code_projects/personal/a-repository-with-a-rather-long-name-indeed";
 const WANDERER: Character = {
 	id: "wanderer",
@@ -96,10 +91,6 @@ const world = (theme: string): WorldSnapshot => ({
 
 const good = (id: string, name: string): ThemeChoice => ({ id, name, description: null, problems: [] });
 
-/**
- * Open the world over a fixture backend. `window.notes` holds the file's text (`disk`), each save, and each mail;
- * `window.diskChange(text)` changes the file as an agent would.
- */
 async function openWorld(theme: string, size: readonly [number, number] = [1280, 800]) {
 	const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
 	const errors: string[] = [];
@@ -171,7 +162,7 @@ async function openWorld(theme: string, size: readonly [number, number] = [1280,
 		timeout: 20000,
 	});
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
-	await page.waitForTimeout(500); // the arrival fade
+	await page.waitForTimeout(500);
 	return { page, errors };
 }
 
@@ -198,7 +189,6 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `${name}.png`), animations: "disabled" });
 }
 
-/** Right-click the coordinator in the world. */
 async function rightClickOrla(page: Page) {
 	const orla = (await view<{ id: string; x: number; y: number }[]>(page, "figures()")).find((f) => f.id === HQ)!;
 	const [ox, oy] = await screen(page, orla.x, orla.y - 0.8);
@@ -223,13 +213,11 @@ describe.each(PACKS)("%s", (id) => {
 			expect(await dialog.locator(".aw-place-says").textContent()).toBe(PATH);
 			expect(name).toBeTruthy();
 
-			// Typing saves once it pauses.
 			const area = dialog.getByLabel("Notes");
 			await area.fill("Plan for the week\n");
 			await vi.waitFor(async () => expect((await notes(page)).disk).toBe("Plan for the week\n"), { timeout: 5000 });
 			await dialog.getByText("Saved", { exact: true }).waitFor({ timeout: 3000 });
 
-			// Asking for an update puts a marker at the cursor and mails the coordinator (first) to replace it.
 			await area.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(el.value.length, el.value.length));
 			await dialog.getByRole("button", { name: "Ask an agent to add an update here" }).click();
 			const marker = (await area.inputValue()).match(/<!-- update pending: [a-z0-9]+ -->/)?.[0];
@@ -249,13 +237,11 @@ describe.each(PACKS)("%s", (id) => {
 			await vi.waitFor(async () => expect((await notes(page)).disk).toContain(marker!), { timeout: 5000 });
 			await dialog.getByRole("button", { name: "Done" }).click();
 
-			// The agent replaces the marker on disk: the notes show it at once.
 			await page.evaluate(() => (window as any).diskChange("Plan for the week\nAda: docs; Bo: tests"));
 			await vi.waitFor(async () => expect(await area.inputValue()).toBe("Plan for the week\nAda: docs; Bo: tests"), {
 				timeout: 3000,
 			});
 
-			// A selection goes to any awake agent as quoted mail.
 			await area.evaluate((el: HTMLTextAreaElement) => {
 				el.focus();
 				el.setSelectionRange(18, 18);

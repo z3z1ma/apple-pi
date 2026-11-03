@@ -1,0 +1,4 @@
+## file
+
+The committed built world UI runs in headless Chrome with the preload API replaced by a fixture backend. The page reaches its files the way Electron's `app://` protocol serves them, with no server. Door clicks look at an off-screen door first, then walk up and through. Clicks hit the world even where a panel covers a door. Workers stand in wings by repository or the common room. Fewer wings mean fewer niches, and the view stays in the gallery. Newcomers walk in from the door. Agents at one table are neighbours on the same row, closer than two tables' width. Nobody moves when another leaves. A pressed control stays on from place to place until pressed again. Feed and terminal checks live in `world-interface.test.ts`. `AGENT_WORLD_SHOTS` saves a screenshot of each visited place.
+Why: a panel that swallowed door clicks, or a departure that shifted the remaining people, would fail the operator's walk.

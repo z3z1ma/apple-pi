@@ -6,11 +6,9 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { Character, Headquarters, WorldSnapshot } from "../src/world.js";
 
-// Seam 2: the committed, built world UI in headless Chrome, with the preload API replaced by a fixture backend.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves a screenshot of each place the tests visit there.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 
 let browser: Browser;
@@ -19,7 +17,6 @@ beforeAll(async () => {
 });
 afterAll(() => browser?.close());
 
-/** Open the world with a fixture in place of `window.agentWorkplace`; `push` sends it a new snapshot. */
 async function openWorld(first: WorldSnapshot) {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 	const errors: string[] = [];
@@ -27,7 +24,6 @@ async function openWorld(first: WorldSnapshot) {
 	page.on("console", (message) => {
 		if (message.type() === "error") errors.push(message.text());
 	});
-	// The page reaches its files the way Electron's app:// protocol serves them, with no server.
 	await page.route(`${ORIGIN}/**`, async (route) => {
 		const file = appFile(appDir, new URL(route.request().url()).pathname);
 		if (!file || !existsSync(file)) return route.fulfill({ status: 404 });
@@ -42,7 +38,6 @@ async function openWorld(first: WorldSnapshot) {
 				listeners.add(listener);
 				return () => listeners.delete(listener);
 			},
-			// The interface's feed and terminal (tested in world-interface.test.ts).
 			feed: async () => [],
 			onFeed: () => () => {},
 			goToTerminal: async () => ({ ok: true }),
@@ -70,16 +65,11 @@ const gallery = (page: Page) =>
 async function shot(page: Page, name: string) {
 	if (!SHOTS) return;
 	mkdirSync(SHOTS, { recursive: true });
-	await page.waitForTimeout(400); // let the arrival fade finish
+	await page.waitForTimeout(400);
 	await page.screenshot({ path: join(SHOTS, `aw-02-${name}.png`), animations: "disabled" });
 }
 
-/**
- * Click a door as the operator would, looking at it first when it is off screen; the avatar walks up to it and goes
- * through. Wait to arrive at `arrive`.
- */
 async function enter(page: Page, door: string, arrive?: string) {
-	// Click the world itself, even where the interface's panels cover a door.
 	await page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
 	await page.evaluate((name) => (window as any).agentWorldView.lookAt(name), door);
 	await page.waitForTimeout(80);
@@ -90,7 +80,6 @@ async function enter(page: Page, door: string, arrive?: string) {
 	await page.waitForTimeout(250);
 }
 
-// A fixture world: Orla coordinates; her workers are in wings by repository or the common room.
 const HQ = "orla";
 const at = (n: number) => 1_700_000_000_000 + n * 1000;
 const coordinator = (id = HQ, name = "Orla", n = 0): Character => ({
@@ -221,7 +210,6 @@ test("the gallery shows a meeting room and one niche per wing, repeating its pai
 		await shot(page, "gallery-seven");
 		await page.evaluate(() => (window as any).agentWorldView.lookAt("a-very-long-repository-name wing"));
 		await shot(page, "gallery-seven-east");
-		// Fewer wings, fewer niches; the view stays in the gallery.
 		await push(world([coordinator(), worker("w0", "/r/alpha", 1)], ["/r/alpha", "/r/beta"]));
 		await vi.waitFor(async () => expect((await gallery(page))?.niches).toBe(3), { timeout: 3000 });
 		await shot(page, "gallery-two");
@@ -244,17 +232,14 @@ test("a wing with more agents than the small room's spots uses the large room, w
 		const crowd = workers(14, "/r/apple-pi");
 		await push(world([coordinator(), ...crowd], ["/r/apple-pi"]));
 		await vi.waitFor(async () => expect(await characters(page)).toHaveLength(14), { timeout: 3000 });
-		// Newcomers walk in from the door to their spots.
 		await vi.waitFor(async () => expect((await figures(page)).every((f) => !f.moving)).toBe(true), {
 			timeout: 15000,
 		});
 		const placed = await figures(page);
 		expect(new Set(placed.map((f) => `${f.x},${f.y}`)).size).toBe(14);
-		// Several agents at one table: neighbours on the same row, closer than two tables' width.
 		const sharing = placed.filter((a) => placed.some((b) => b !== a && b.y === a.y && Math.abs(b.x - a.x) < 2.5));
 		expect(sharing.length).toBeGreaterThanOrEqual(4);
 		await shot(page, "wing-large-crowded");
-		// Nobody moves when another leaves.
 		const before = new Map(placed.map((f) => [f.id, `${f.x},${f.y}`]));
 		await push(world([coordinator(), ...crowd.filter((_, i) => i !== 2)], ["/r/apple-pi"]));
 		await vi.waitFor(async () => expect(await characters(page)).toHaveLength(13), { timeout: 3000 });
@@ -294,7 +279,6 @@ test("the walk grid toggle draws the blocked cells, spots, and doors over the pa
 		await page.keyboard.press("g");
 		await vi.waitFor(async () => expect(await view(page, "walkGrid()")).toBe(true), { timeout: 2000 });
 		await shot(page, "grid-headquarters");
-		// It stays on from place to place, until pressed again.
 		for (const [door, arrive, name] of [
 			["Archway to the common room", `common-room:${HQ}`, "grid-common-room"],
 			["Archway to the hall", `headquarters:${HQ}`, ""],
