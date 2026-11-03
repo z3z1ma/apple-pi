@@ -1,36 +1,3 @@
-/**
- * /pair — persistent shared-screen supervision of the main agent's work.
- * The pair programmer follows the trajectory and can ask a colleague for a second opinion
- * through the organization's mail, in the main session's name.
- *
- * Delivery model. Every advise() call enters one shared output queue. The pair programmer's
- * review and primary execution remain independent. At an assistant-turn boundary,
- * ready advice is sent through `steer`, which places it before the main agent's next
- * step without aborting the response in flight. Terminal advice can trigger a
- * correction run after settlement. An advisory-triggered correction run is still
- * consumed while recursive terminal output stays suppressed.
- *
- * Why every finding is held once: the pair reviews turn N asynchronously, so by
- * the time advice could land the primary has usually done follow-up work. The
- * next successful frontier review must reconfirm it before nonterminal delivery
- * (held notes ride a reconfirmation preamble; silence withdraws them). Findings
- * first raised by the review covering the terminal turn are current and can land
- * without another otherwise-impossible review.
- *
- * Pair review is fully asynchronous: each completed primary turn appends an immutable
- * spool delta, while an attention scheduler permits reviews at meaningful intra-run
- * checkpoints. No primary turn waits for pair work, and the reader advances its
- * committed frontier only after a successful transactional review. The persistent
- * footer reports review activity without a blocking toast.
- *
- * An optional PAIR.md in a trusted cwd is appended to the pair's system
- * prompt (pair-only guidance: review priorities, project traps).
- *
- * While enabled, `before_agent_start` appends a short protocol to the primary
- * agent's system prompt so it knows how to treat nit/concern/blocker notes,
- * including repeats. That text is for the agent being reviewed, not the pair.
- */
-
 import type { Agent, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -92,18 +59,6 @@ import { createSecondOpinionTools, type SecondOpinionRequest, sendSecondOpinion 
 import { buildPairSeed, formatSourceAddressedTrajectory, type SettledAdvice } from "./seed.js";
 import { createPairSession } from "./session.js";
 
-// ===========================================================================
-// Pair programmer core — persistent second model that watches the main agent.
-//
-// Port of oh-my-pi's pair onto upstream pi's public extension surface. The
-// pair is a long-lived `Agent` with its own model and a shared-screen toolset:
-// primary-bound revisit_note, handle-bound receipt expansion, and private
-// share_note/ask_for_second_opinion/update_notebook capabilities. It is fed the primary transcript one
-// turn-delta at a time and may inject concise advice back. It is NOT an
-// executor or repository navigator: it cannot inspect current files, run commands,
-// search session history, or change session state.
-// ===========================================================================
-
 export type { PairFindingAcknowledgment, PairFindingDisposition, PendingPairFinding } from "./acknowledgments.js";
 export {
 	formatPairAcknowledgmentReminder,
@@ -118,8 +73,6 @@ import type { PairNote, PairNoteKind, PairSeverity, PrimaryTurnState } from "./t
 import { isPairQuestion } from "./types.js";
 
 const ADVISORY_TYPE = "advisory";
-
-// ---- advise tool (agent-core tool; lives only on the pair agent) ----
 
 const adviseSchema = Type.Object({
 	note: Type.String({
@@ -165,17 +118,15 @@ const pairNoteKind = (note: Pick<PairNote, "kind"> | undefined): PairNoteKind =>
 	isPairQuestion(note) ? "question" : "finding";
 const pairNoteKey = (note: Pick<PairNote, "id" | "note" | "kind">): string =>
 	`${pairNoteKind(note)}:${note.id ?? dedupeKey(note.note)}`;
-/** Concerns and blockers retain priority metadata, but all severities share delivery policy. */
+
 export const isHighSeverity = (s: PairSeverity | undefined): boolean => s === "concern" || s === "blocker";
 
-/** A turn without tool calls is the agent loop's terminal response candidate. */
 export function isTerminalTurn(message: { content?: ReadonlyArray<{ type?: string }> } | undefined): boolean {
 	return !(message?.content ?? []).some((part) => part.type === "toolCall");
 }
 
 const BASH_APPEND_WATCHED = Symbol("pair.bashAppendWatched");
 
-/** Observe persisted `!bash` pages. Pi records them via appendMessage, not message_end. */
 export function bindBashAppendHook(
 	sessionManager: { appendMessage?: (message: unknown) => unknown },
 	onBash: (
@@ -217,20 +168,12 @@ export function bindBashAppendHook(
 	};
 }
 
-/** Parse the hidden `/pair test <nit|concern|blocker> <note>` test hook args. */
 export function parsePairTestArgs(args: string): { severity: PairSeverity; note: string } | null {
 	const m = args.trim().match(/^test\s+(nit|concern|blocker)\s+([\s\S]+)$/i);
 	if (!m) return null;
 	return { severity: m[1].toLowerCase() as PairSeverity, note: m[2].trim() };
 }
 
-/**
- * The advise tool. Dedupes by normalized note text + severity rank: a repeat at
- * the same-or-lower severity is dropped, a real escalation (nit→concern→blocker)
- * passes through. Dedup is recorded only when the note is actually *delivered*
- * (`onAdvice` returns true). Queued or dropped advice returns false and stays
- * unrecorded until its actual boundary delivery.
- */
 export class AdviseTool {
 	readonly name = "share_note";
 	readonly label = "Advise";
@@ -240,7 +183,6 @@ export class AdviseTool {
 	#delivered = new Map<string, number>();
 	#deliveredQuestions = new Set<string>();
 
-	// onAdvice returns true if delivered, false if queued or dropped.
 	constructor(
 		private readonly onAdvice: (
 			note: string,
@@ -260,12 +202,6 @@ export class AdviseTool {
 		this.#deliveredQuestions.clear();
 	}
 
-	/**
-	 * Record a note as delivered so a later same-or-lower-severity repeat is
-	 * deduped. Called by boundary delivery when it steers a held note in (held
-	 * notes go through `onAdvice`→false, which intentionally does NOT record, so
-	 * the actual delivery point must).
-	 */
 	markDelivered(note: string, severity?: PairSeverity, findingId?: string, kind?: PairNoteKind): void {
 		if (kind === "question") {
 			this.#deliveredQuestions.add(dedupeKey(note));
@@ -307,7 +243,6 @@ export class AdviseTool {
 		}
 		const delivered = this.onAdvice(args.note, severity, findingId, kind);
 		if (!delivered) {
-			// Not recorded: it is queued for a boundary or dropped as stale.
 			return {
 				content: [{ type: "text", text: "Your note will be shared at the next safe moment if it still applies." }],
 				details: { ...canonicalArgs, held: true },
@@ -317,8 +252,6 @@ export class AdviseTool {
 		return { content: [{ type: "text", text: "Your note was shared." }], details: canonicalArgs };
 	}
 }
-
-// ---- advisory rendering for the primary transcript ----
 
 import {
 	buildReviewMessages,
@@ -352,12 +285,6 @@ export {
 } from "./seed.js";
 export { PAIR_SESSION_TOOLS } from "./session.js";
 
-// ---- PairRuntime — drives the pair agent off primary turn deltas ----
-
-/**
- * Reviews scheduler-permitted contiguous delta batches in the persistent pair
- * conversation. Identity change uses `reset()`. Overflow uses Pi's native model-owned compaction.
- */
 type PendingDelta = Readonly<{
 	sequence: number;
 	text: string;
@@ -382,7 +309,6 @@ type PairReviewAttemptOutcome = {
 	silent: boolean;
 };
 
-/** Ordered input ownership shared across pair programmer runtime construction and replacement. */
 export class PairSpool {
 	#pending: PendingDelta[] = [];
 	#claimedCount = 0;
@@ -453,19 +379,16 @@ export class PairRuntime {
 	#primedContext: string | undefined;
 	#rolling: SettledAdvice[] = [];
 	#needsSeed = true;
-	// Newly observed findings wait here until a newer successful frontier review.
+
 	#advice: PairNote[] = [];
-	// Reconfirmed findings wait separately for the next safe delivery boundary.
+
 	#readyAdvice: PairNote[] = [];
-	// Keys re-raised during the in-flight review; drives the post-review prune.
+
 	#reraised: Set<string> | undefined;
 	#offeredFindingIds: Set<string> | undefined;
-	// Outcome of the most recently completed drain batch. Lets deterministic
-	// settlement observers distinguish a genuine settle from a failed review.
+
 	#lastOutcome: "ok" | "failed" | undefined;
-	// Epoch of the in-flight review; advice callbacks are honored only while it still
-	// matches #epoch. A reset/dispose bumps #epoch, orphaning a stale review whose
-	// late advise() calls would otherwise leak into the moved-on session.
+
 	#reviewEpoch = -1;
 	#attemptEffects: AttemptEffects | undefined;
 	#settleWaiters: Array<{ settle: () => void; cancel: () => void }> = [];
@@ -474,16 +397,12 @@ export class PairRuntime {
 	#legacyReviewSequence = 0;
 	#epoch = 0;
 	#agentResetPending = false;
-	// Lifetime input/output/cost from pair turns already discarded by compact.
-	// The agent's message list only holds the CURRENT context, so without folding
-	// these in, /pair status would undercount after compact. A full reset()
-	// (identity change) zeroes them — that is a fresh accounting.
+
 	#cumInput = 0;
 	#cumOutput = 0;
 	#cumCost = 0;
 	#reviewCount = 0;
-	// Production turn_end binds this so #drain can emit after the hook returns.
-	// Tests that construct PairRuntime directly leave it unset and write nothing.
+
 	#usageSession?: { sessionId?: string };
 	disposed = false;
 
@@ -510,7 +429,6 @@ export class PairRuntime {
 		private readonly onPresented?: (text: string) => void,
 	) {}
 
-	/** Enable durable per-prompt usage records for this runtime. */
 	setUsageSession(sessionId?: string): void {
 		this.#usageSession = { sessionId };
 	}
@@ -625,17 +543,14 @@ export class PairRuntime {
 		return this.spool.committedBoundary;
 	}
 
-	/** True when no batch is in flight and nothing is queued. */
 	get idle(): boolean {
 		return !this.#busy && !this.spool.hasPending;
 	}
 
-	/** True while a review prompt is in flight. Deferred pending is not reviewing. */
 	get reviewing(): boolean {
 		return this.#busy;
 	}
 
-	/** Whether pending or ready findings include material priority. */
 	get hasHighPriority(): boolean {
 		return [...this.#advice, ...this.#readyAdvice].some((n) => isHighSeverity(n.severity));
 	}
@@ -684,7 +599,6 @@ export class PairRuntime {
 		this.#upsertAdviceIn(this.#readyAdvice, note, severity, findingId, true, kind);
 	}
 
-	/** Accept only identities currently owned by the host's pending or ready queues. */
 	canonicalFindingId(findingId?: string, kind?: PairNoteKind): string | undefined {
 		if (!findingId) return undefined;
 		const expectedKind = pairNoteKind({ kind });
@@ -695,7 +609,6 @@ export class PairRuntime {
 			: undefined;
 	}
 
-	/** Stage pair programmer advice inside the active review; out-of-review callers seed the live queue. */
 	enqueueAdvice(note: string, severity?: PairSeverity, findingId?: string, kind?: PairNoteKind): void {
 		if (this.disposed) return;
 		if (this.#attemptEffects && this.#reviewEpoch === this.#epoch) {
@@ -716,14 +629,12 @@ export class PairRuntime {
 		this.#upsertAdvice(note, severity, findingId, kind);
 	}
 
-	/** Mail is published only after a complete, current review. */
 	stageSecondOpinion(request: SecondOpinionRequest): boolean {
 		if (!this.#attemptEffects || !this.acceptingAdvice) return false;
 		this.#attemptEffects.secondOpinions.push(request);
 		return true;
 	}
 
-	/** Stage a pair-selected wake lease inside the active transactional review. */
 	stageAttention(lease: PairAttentionLease): boolean {
 		const attempt = this.#attemptEffects;
 		if (!attempt || !this.acceptingAdvice) return false;
@@ -734,22 +645,18 @@ export class PairRuntime {
 		return true;
 	}
 
-	/** Delivery retry bookkeeping: keep an already-confirmed finding ready. */
 	requeueReadyAdvice(note: string, severity?: PairSeverity, findingId?: string, kind?: PairNoteKind): void {
 		this.#upsertReadyAdvice(note, severity, findingId, kind);
 	}
 
-	/** Drain findings reconfirmed by a newer successful frontier review. */
 	takeConfirmedAdvice(): PairNote[] {
 		return this.#readyAdvice.splice(0);
 	}
 
-	/** Terminal review makes both reconfirmed and newly observed findings current. */
 	takeAllAdvice(): PairNote[] {
 		return [...this.#readyAdvice.splice(0), ...this.#advice.splice(0)];
 	}
 
-	/** Record delivery only after the primary session accepted the outbound message. */
 	markAdviceDelivered(notes: readonly PairNote[]): void {
 		this.#rememberSettled(notes, "delivered");
 	}
@@ -763,17 +670,10 @@ export class PairRuntime {
 		if (this.#rolling.length > 8) this.#rolling.splice(0, this.#rolling.length - 8);
 	}
 
-	/** Whether advice from the in-flight review is still valid (not orphaned by a
-	 *  reset/dispose). The delivery layer consults this to drop late stale callbacks. */
 	get acceptingAdvice(): boolean {
 		return !this.disposed && this.#attemptEffects !== undefined && this.#reviewEpoch === this.#epoch;
 	}
 
-	/**
-	 * Resolve once the active review settles, or `timeoutMs` elapses, or `signal`
-	 * aborts. Deferred evidence may remain queued for a later scheduler permit.
-	 * Primary turns never await this helper.
-	 */
 	waitUntilSettled(timeoutMs: number, signal?: AbortSignal): Promise<"settled" | "timeout" | "aborted" | "failed"> {
 		if (this.disposed) return Promise.resolve("aborted");
 		if (!this.#busy) return Promise.resolve(this.#lastOutcome === "failed" ? "failed" : "settled");
@@ -792,14 +692,12 @@ export class PairRuntime {
 			};
 			const onAbort = () => finish("aborted");
 			waiter = {
-				// Fired when the drain reaches a settlement boundary (reviewed or deferred).
 				settle: () => {
 					if (this.disposed) finish("aborted");
 					else if (this.#lastOutcome === "failed") finish("failed");
 					else if (!this.#busy) finish("settled");
 				},
-				// Fired by reset()/dispose(): resolve immediately rather than waiting for
-				// the in-flight prompt to unwind (which could take up to the timeout).
+
 				cancel: () => finish("aborted"),
 			};
 			timer = setTimeout(() => finish("timeout"), timeoutMs);
@@ -815,7 +713,6 @@ export class PairRuntime {
 		for (const w of [...this.#settleWaiters]) w.settle();
 	}
 
-	/** Resolve all pending waiters as "aborted" (used by reset/dispose). */
 	#cancelWaiters(): void {
 		for (const w of [...this.#settleWaiters]) w.cancel();
 	}
@@ -831,7 +728,7 @@ export class PairRuntime {
 				input += u.input ?? 0;
 				output += u.output ?? 0;
 				cost += u.cost?.total ?? 0;
-				// Latest request's input + cache reads ≈ current pair context size.
+
 				contextTokens = (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
 			}
 		}
@@ -840,13 +737,11 @@ export class PairRuntime {
 		return { input, output, cost, contextTokens, contextPercent };
 	}
 
-	/** Append an immutable input chunk. Production scheduling uses the shared spool directly. */
 	push(deltaText: string, opts?: { boundary?: number; terminal?: boolean; notebookBatch?: PairNotebookBatch }): void {
 		if (this.disposed || this.spool.append(deltaText, opts) === undefined) return;
 		this.wake();
 	}
 
-	/** Start exactly one scheduler-permitted review of the currently claimable prefix. */
 	startReview(permit: PairReviewPermit): boolean {
 		if (this.disposed || this.#busy || !this.spool.hasPending) return false;
 		this.#activePermit = permit;
@@ -854,7 +749,6 @@ export class PairRuntime {
 		return true;
 	}
 
-	/** Compatibility helper for deterministic callers outside production scheduling. */
 	wake(): void {
 		if (this.disposed || !this.spool.hasPending) return;
 		if (this.#busy) return;
@@ -870,12 +764,10 @@ export class PairRuntime {
 		});
 	}
 
-	/** Compatibility alias for deterministic callers. */
 	startDrain(): void {
 		this.wake();
 	}
 
-	/** Re-prime after a history rewrite (compaction / session switch / fork). */
 	reprime(contextText: string): void {
 		this.reset();
 		this.#primedContext = contextText.trim() || undefined;
@@ -886,8 +778,6 @@ export class PairRuntime {
 			this.agent.reset();
 			this.#agentResetPending = false;
 		} catch {
-			// Agent.reset() rejects while its aborted prompt is still unwinding. The
-			// drain owns that prompt and retries this reset before processing new work.
 			this.#agentResetPending = true;
 		}
 	}
@@ -947,8 +837,7 @@ export class PairRuntime {
 		const epoch = this.#epoch;
 		const attempt: AttemptEffects = { advice: [], secondOpinions: [] };
 		this.#attemptEffects = attempt;
-		// Re-offer the shared advice queue without removing it. Attempt-created
-		// effects remain private until the response completes successfully.
+
 		const offered = this.#advice.map((note) => ({ ...note }));
 		const offeredByKey = new Map(offered.map((note) => [pairNoteKey(note), note]));
 		const offeredKeys = new Set(offeredByKey.keys());
@@ -1055,8 +944,7 @@ export class PairRuntime {
 			finishAttempt();
 			this.#reraised = undefined;
 			this.onDebug?.("pair prompt threw", String(e));
-			// A reset/dispose aborts the in-flight prompt; drop the stale batch.
-			// Held notes were never removed, so nothing to restore there.
+
 			return {
 				outcome: this.#epoch !== epoch ? "stale" : "failed",
 				newIntervention: false,
@@ -1085,8 +973,7 @@ export class PairRuntime {
 				};
 				return;
 			}
-			// Claim a contiguous prefix without removing it. A failed claim remains
-			// the exact retry unit even when newer scheduler evidence arrives behind it.
+
 			const batch = this.spool.claim();
 			const effectivePermit: PairReviewPermit = {
 				...requestedPermit,
@@ -1132,22 +1019,8 @@ export class PairRuntime {
 	}
 }
 
-// ===========================================================================
-// Extension wiring
-// ===========================================================================
-
-// Footer status key. Statuses are ordered alphabetically by key; "q-pair"
-// sorts after "permissions"/"provider-system-prompt" but before "sub-bar", so
-// The pair programmer shows as a middle segment. Change this to reposition it (e.g.
-// "a-pair" for leftmost).
 const STATUS_KEY = "q-pair";
 
-/**
- * Footer label + cost for the given reviewing state. `reviewing` distinguishes
- * a live review in flight from idle so a glance at the footer always answers
- * "is it still working" — the persistent, self-resolving signal that replaces
- * the old one-shot "catching up" toast (which never resolved on a silent settle).
- */
 export function formatPairFooterText(reviewing: boolean, costUsd: number): string {
 	return `Pair programmer${reviewing ? " (reviewing)" : ""}: $${costUsd.toFixed(2)}`;
 }
@@ -1155,13 +1028,7 @@ const DEBUG = !!process.env.PAIR_DEBUG;
 const dbg = (...a: unknown[]) => {
 	if (DEBUG) console.error("[pair]", ...a);
 };
-// Set by the handoff extension (pi-amplike) via the same Symbol.for key while a
-// handoff is in flight — from the moment it becomes pending until the new
-// session's prompt has been dispatched. During that window the primary session
-// is being torn down / replaced and its deferred handoff prompt is racing to be
-// sent, so the pair must not inject messages or (worse) trigger an
-// autonomous turn: doing so either crashes the handoff ("Agent is already
-// processing") or leaks a stray advisory into the brand-new session.
+
 const HANDOFF_IN_PROGRESS_KEY = Symbol.for("pi-amplike-handoff-in-progress");
 function handoffInProgress(): boolean {
 	return !!(globalThis as any)[HANDOFF_IN_PROGRESS_KEY];
@@ -1180,7 +1047,6 @@ function userMessageText(message: { content?: unknown } | undefined): string {
 		.trim();
 }
 
-/** Fresh primary user entries for a turn delta: exact content + source ids, no slash commands. */
 export function livePairUserMessages(
 	entries: readonly { id?: string; message?: unknown }[],
 ): Array<{ content: unknown; sourceEntryId: string; kind?: "mail" }> {
@@ -1213,9 +1079,6 @@ function sessionIdFromCtx(ctx: unknown): string | undefined {
 	}
 }
 
-// Emitted by the handoff extension after its tool path replaces the session
-// transcript via the low-level sessionManager.newSession() (which emits no
-// session_start). Must match HANDOFF_SESSION_REPLACED_CHANNEL in handoff.ts.
 const HANDOFF_SESSION_REPLACED_CHANNEL = "pi-amplike:handoff-session-replaced";
 
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
@@ -1241,7 +1104,6 @@ export default function (pi: ExtensionAPI) {
 
 	let enabled = loadEnabled();
 
-	// Lazily-built pair state, rebuilt when cwd/model changes or session resets.
 	let runtime: PairRuntime | undefined;
 	let activeModelLabel: string | undefined;
 	let modelProfileError: string | undefined;
@@ -1260,32 +1122,16 @@ export default function (pi: ExtensionAPI) {
 	const directFindings = { nit: 0, concern: 0, blocker: 0 };
 	const acknowledgments = new PairAcknowledgmentTracker();
 
-	// The advise tool bound to the live runtime so boundary delivery can mark held
-	// notes delivered at the actual send point.
 	let adviseTool: AdviseTool | undefined;
 
-	// Set when the user aborts (Escape): while true, late pair programmer advice is delivered
-	// WITHOUT triggerTurn so it cannot auto-resume the run the user just stopped.
-	// Cleared when the user drives the next turn.
 	let autoResumeSuppressed = false;
 
-	// A terminal advisory closes the supervision episode. The resulting correction
-	// run belongs to the main agent and is not reviewed again until the user speaks.
 	let awaitingUserAfterAdvisory = false;
 
-	// Assistant-turn state identifies the safe boundary where a steer can enter an
-	// active run before its next step.
 	let turnState: PrimaryTurnState = "ended-nonterminal";
 	const inputSpool = new PairSpool();
 	let stagedBoundaryNotes: PairNote[] = [];
 
-	// Most recent ctx seen from any hook that carries one. `updateStatus` needs this
-	// so the runtime's async `onSettled` callback — which fires whenever a review
-	// completes, not just at turn_end — can refresh the footer without waiting for
-	// the next primary-turn event. That is the actual fix for the reported UX gap:
-	// the old transient "catching up" notify had no matching "done" signal, so a
-	// silent settle was indistinguishable from a stuck pair. A persistent,
-	// self-resolving footer state removes the need for a terminal message at all.
 	let latestCtx: ExtensionContext | undefined;
 	const reviewScheduler = createPairReviewScheduler({
 		now: Date.now,
@@ -1356,20 +1202,6 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	// ---- statusbar: per-session pair cost + live reviewing/idle state ----
-	// Reflects the live pair lifetime cost (rt.usage.cost) and whether a review
-	// is currently in flight (`pair programmer (reviewing): $N` vs `pair programmer: $N`) in the
-	// footer status bar. Cleared when the pair is off or torn down.
-	//
-	// Footer ordering: pi sorts extension statuses alphabetically BY KEY and joins
-	// them with a single space (no separators of its own). So the key controls
-	// position and we draw our own `│` divider in the text. STATUS_KEY sorts after
-	// "permissions"/"provider-system-prompt" but before "sub-bar", placing the pair programmer as
-	// a middle segment rather than the leftmost.
-	//
-	// LEADING bar only (no trailing): whatever follows draws its own separator
-	// (e.g. pi-sub-bar with statusLeadingDivider:true starts with `│`), so a trailing
-	// bar here would double up (`│ pair programmer │ │ …`).
 	function updateStatus(ctx: unknown): void {
 		latestCtx = ctx as ExtensionContext;
 		const ui = (
@@ -1389,7 +1221,6 @@ export default function (pi: ExtensionAPI) {
 		ui.setStatus(STATUS_KEY, `${bar} ${formatPairFooterText(runtime.reviewing, runtime.usage.cost)}`);
 	}
 
-	// ---- advice delivery into the primary session ----
 	function sendNotes(notes: readonly PairNote[], opts: { stale?: boolean; finalAnswer?: boolean }): void {
 		if (!notes.length) return;
 		const delivered = identifyMaterialPairNotes(
@@ -1475,8 +1306,6 @@ export default function (pi: ExtensionAPI) {
 		if ((close.length || remind.length) && latestCtx) updateStatus(latestCtx);
 	}
 
-	// Pair programmer callbacks only enqueue. Delivery policy lives at primary boundaries,
-	// where terminality and reconfirmation state are actually known.
 	function deliverAdvice(
 		note: string,
 		severity?: PairSeverity,
@@ -1485,20 +1314,15 @@ export default function (pi: ExtensionAPI) {
 		kind?: PairNoteKind,
 	): boolean {
 		if (!enabled) return false;
-		// Stand down entirely while a handoff is being performed (see comment on
-		// HANDOFF_IN_PROGRESS_KEY).
+
 		if (handoffInProgress()) {
 			dbg("handoff in progress, dropping advice", severity, JSON.stringify(note).slice(0, 80));
-			// False means "not delivered", so AdviseTool does not poison the fresh
-			// session's dedup map with a dropped callback.
+
 			return false;
 		}
-		// Drop late callbacks the session has moved past: pair turned off, or a
-		// reset/dispose orphaned the in-flight review (its epoch no longer matches).
+
 		const targetRuntime = sourceRuntime ?? runtime;
-		// The hidden command test hook is the only caller without a source runtime.
-		// It injects a synthetic ready finding so every severity exercises the same
-		// boundary-delivery path without pretending a model review occurred.
+
 		if (!sourceRuntime) {
 			const staged: PairNote = {
 				note,
@@ -1518,24 +1342,19 @@ export default function (pi: ExtensionAPI) {
 		}
 		if ((sourceRuntime && sourceRuntime !== runtime) || (targetRuntime && !targetRuntime.acceptingAdvice)) {
 			dbg("dropping stale/disabled advice", severity, JSON.stringify(note).slice(0, 80));
-			// Especially after reset/replacement, never let an old callback enqueue into
-			// the fresh runtime or poison its cleared dedup map.
+
 			return false;
 		}
 
 		if (targetRuntime) {
 			targetRuntime.enqueueAdvice(note, severity, findingId, kind);
 			dbg("queued advice", severity, JSON.stringify(note).slice(0, 120));
-			return false; // AdviseTool records only at the real boundary delivery.
+			return false;
 		}
 
 		return false;
 	}
 
-	// Reviews finish asynchronously after primary turn_end. A nonterminal boundary
-	// releases only findings reconfirmed by a newer successful frontier review.
-	// Terminal delivery waits for final-turn coverage, where both reconfirmed and
-	// newly observed findings are current.
 	function flushSettledAdvice(outcome: "ok" | "failed", reviewedThrough: number, sourceRuntime: PairRuntime): void {
 		if (outcome !== "ok" || sourceRuntime !== runtime || turnState === "running") return;
 		if (turnState === "ended-terminal" && reviewedThrough < primaryTurnSequence) return;
@@ -1736,7 +1555,6 @@ export default function (pi: ExtensionAPI) {
 		);
 	}
 
-	// ---- build the pair agent lazily (needs ctx for model/registry/cwd) ----
 	async function buildRuntime(
 		ctx: {
 			cwd: string;
@@ -1910,7 +1728,6 @@ export default function (pi: ExtensionAPI) {
 		return runtime;
 	}
 
-	/** Serialize construction: concurrent hooks must share one private session. */
 	async function ensureRuntime(
 		ctx: Parameters<typeof buildRuntime>[0],
 		notifyProfileError = true,
@@ -1920,8 +1737,7 @@ export default function (pi: ExtensionAPI) {
 		if (runtime && !runtime.disposed && builtForCwd === ctx.cwd && builtForTrusted === projectTrusted) return runtime;
 		if (runtimeBuild) {
 			if (runtimeBuild.epoch === constructionEpoch && runtimeBuild.key === key) return runtimeBuild.promise;
-			// Teardown invalidates publication, but the next generation still waits
-			// for the stale session construction to settle and dispose.
+
 			await runtimeBuild.promise;
 			return ensureRuntime(ctx, notifyProfileError);
 		}
@@ -1934,7 +1750,6 @@ export default function (pi: ExtensionAPI) {
 		}
 	}
 
-	/** Extension-owned spool: construction failures leave immutable input here. */
 	function appendSpool(
 		text: string,
 		boundary = primaryTurnSequence,
@@ -1964,12 +1779,6 @@ export default function (pi: ExtensionAPI) {
 			.catch((error) => dbg("pair spool pump failed", String(error)));
 	}
 
-	// ---- event wiring ----
-
-	// User preflight happens before Pi starts streaming, so mark the turn running
-	// here as well as at turn_start. This closes the only real pre-turn window without
-	// consulting isIdle() or maintaining a second terminal flag. Also add the
-	// primary-agent protocol section so weaker models actually handle steered pair notes.
 	pi.on("before_agent_start", (event) => {
 		if (!enabled) return;
 		autoResumeSuppressed = false;
@@ -1985,8 +1794,6 @@ export default function (pi: ExtensionAPI) {
 		if (!userMessageText(event.message).startsWith("/")) reviewScheduler.noteUserDirection();
 	});
 
-	// `!bash` is recorded by SessionManager.appendMessage, not message_end.
-	// Install the bash append hook synchronously so executeBash is not stalled on pair setup.
 	pi.on("user_bash", (event, ctx) => {
 		if (!enabled) return;
 		if (event.excludeFromContext) return;
@@ -1994,8 +1801,6 @@ export default function (pi: ExtensionAPI) {
 		watchPrimaryBash(ctx);
 	});
 
-	// Fires for every assistant turn, including advisory-triggered runs and same-run
-	// continuations. Every real turn_start is paired with turn_end (also on failure).
 	pi.on("agent_start", () => {
 		if (!enabled) return;
 		turnState = "running";
@@ -2017,9 +1822,6 @@ export default function (pi: ExtensionAPI) {
 		turnState = "running";
 	});
 
-	// One source-addressed delta per primary turn. The completed assistant turn is
-	// also the safe scheduling boundary where ready advice can steer the active run.
-	// Pair review itself remains asynchronous and never delays this hook.
 	pi.on("turn_end", (event, ctx) => {
 		if (!enabled) return;
 		const terminal = isTerminalTurn(event.message as AssistantMessage);
@@ -2114,7 +1916,6 @@ export default function (pi: ExtensionAPI) {
 		(ctx as { ui?: { setStatus?: (k: string, t: string | undefined) => void } }).ui?.setStatus?.(STATUS_KEY, undefined);
 	});
 
-	// ---- advisory bullet rendering ----
 	renderInline(ADVISORY_TYPE);
 	pi.registerMessageRenderer<{ notes: PairNote[] }>(ADVISORY_TYPE, (message, _options, theme) => {
 		const notes = message.details?.notes;
@@ -2132,7 +1933,6 @@ export default function (pi: ExtensionAPI) {
 		return container;
 	});
 
-	// ---- /pair command ----
 	pi.registerCommand("pair", {
 		description: "Control the pair programmer. Usage: /pair [on|off|status|notebook [full]]",
 		handler: async (args, ctx) => {
@@ -2200,8 +2000,6 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			// Hidden test hook. Inject a synthetic ready finding so delivery can be
-			// exercised without running the pair model's confirmation cycle.
 			if (arg.startsWith("test")) {
 				const parsed = parsePairTestArgs(args);
 				if (!parsed) {

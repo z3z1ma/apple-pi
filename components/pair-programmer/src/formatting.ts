@@ -29,7 +29,6 @@ export function formatIncomingMail(content: string): string {
 
 const ADVISORY_TYPE = "advisory";
 
-/** Render held pair notes as the reconfirmation preamble for the next review. */
 export function formatReconfirmPreamble(held: readonly PairNote[]): string {
 	if (!held.length) return "";
 	const items = held
@@ -55,17 +54,6 @@ export function formatReconfirmPreamble(held: readonly PairNote[]): string {
 const PAIR_GUIDANCE = "pause, consider, then use your judgment";
 const escapeXml = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/**
- * Render notes as the agent-facing message body: one `<pair-note>` per note.
- * `stale` adds a `context` attribute noting the advice is about an earlier step
- * (used for any finding released at a later nonterminal boundary).
- * `finalAnswer` appends guidance for advice delivered as a followup to a terminal
- * message: at the moment it is steered in, the primary is stopped having returned
- * a final answer this turn — regardless of which turn generated the note. If the
- * The agent acts on it, it should reply with a fresh, self-contained final answer rather
- * than a terse follow-up — so the user reads one complete answer, not a
- * back-and-forth thread it has to stitch together.
- */
 export function formatAdvisoryContent(
 	notes: readonly PairNote[],
 	opts?: { stale?: boolean; finalAnswer?: boolean },
@@ -89,8 +77,6 @@ export function formatAdvisoryContent(
 	return `${rendered}\n\nYou had already returned a final answer to the user this turn. If this note changes what you do, respond with a new, self-contained final answer that fully stands on its own — do NOT write a terse follow-up that assumes the user read your previous message. The user should be able to read your new reply alone and get the complete answer.`;
 }
 
-// ---- transcript delta formatting (primary turn → markdown for the pair) ----
-
 function textOf(content: Array<{ type: string; text?: string }>): string {
 	return content
 		.filter((c) => c.type === "text" && typeof c.text === "string")
@@ -98,17 +84,7 @@ function textOf(content: Array<{ type: string; text?: string }>): string {
 		.join("");
 }
 
-// Render any tool-call argument value as readable text with REAL newlines preserved
-// at EVERY depth. We never JSON.stringify content: that escapes every real newline
-// into a literal backslash-n (so a heredoc body reaches the pair as `<<'EOF'\n...`
-// — the exact bug that produced a bogus "garbled markdown" advisory), and escaping
-// only at the top level merely pushes the bug into nested strings (e.g. edits[].oldText).
-// String leaves ride verbatim; containers are walked. Tool args are plain JSON data
-// from the model, so there are no cycles or non-serializable leaves to guard against;
-// a depth cap is the only (never-hit-in-practice) backstop.
 function renderArgValue(v: unknown, indent: string, depth: number): string {
-	// Multiline strings ride raw on following lines — NOT re-indented, which would
-	// alter the very content (e.g. a heredoc body) the pair must see verbatim.
 	if (typeof v === "string") return v.includes("\n") ? `\n${v}` : ` ${v}`;
 	if (v === null || typeof v !== "object") return ` ${String(v)}`;
 	if (depth >= 8) return " […]";
@@ -273,12 +249,7 @@ function formatImplementingAgent(
 			if (callId && c.arguments && typeof c.arguments === "object") {
 				argsByCallId.set(callId, c.arguments as Record<string, unknown>);
 			}
-			// When this call produced a diff (a successful edit), suppress the raw
-			// {oldText,newText} args and let the result's -/+ diff carry the change: the
-			// args are two unannotated peer blobs and the pair — reviewing AFTER the
-			// edit landed (current checkout state shows the NEW side) — can't tell which persisted
-			// ("didn't persist"). With NO diff (failed edit, non-edit tool) show the args
-			// verbatim; for a failed edit they're the only evidence of what was attempted.
+
 			const args = c.arguments as Record<string, unknown> | undefined;
 			const edits = args?.edits;
 			const hasDiff = diffByCallId.has(callId ?? "");
@@ -318,14 +289,6 @@ function formatProjectedResults(
 	issueReceipt?: PairReceiptIssuer,
 ): string[] {
 	return results.map((tr) => {
-		// Prefer the canonical line-numbered unified diff (the same view the human /
-		// main model gets, computed by pi's edit-diff) for a SUCCESSFUL result: its -/+
-		// markers unambiguously frame removed-vs-current lines, which the flat
-		// {oldText,newText} echo lacks. It is also a pinned point-in-time snapshot of
-		// THIS turn's change. Current checkout state may already contain later edits,
-		// so the inline historical diff is not re-derivable and must ride verbatim.
-		// On an ERROR, show the text body instead: the error is the diagnostic, and a
-		// diff from a failed edit is untrustworthy (did it apply? partially?).
 		const diff = (tr as { details?: { diff?: unknown } }).details?.diff;
 		const successfulDiff = !tr.isError && typeof diff === "string" && diff.trim() ? diff : "";
 		const rawBody = successfulDiff || textOf(tr.content as Array<{ type: string; text?: string }>);
@@ -349,10 +312,6 @@ function formatProjectedResults(
 	});
 }
 
-// Format one primary turn (optionally preceded by the user prompt) as a markdown
-// string with REAL newlines throughout (renderToolArgs keeps arg content verbatim).
-// The sections are joined with explicit "\n\n" here so the boundary never depends on
-// how a provider concatenates content parts — see buildReviewMessages.
 export function formatTurnDelta(opts: {
 	userPrompt?: string;
 	userMessages?: ReadonlyArray<{ content: unknown; sourceEntryId?: string; kind?: "mail" }>;
@@ -457,7 +416,6 @@ function userMessageReceiptSnapshot(content: unknown, images: readonly PairRecei
 	};
 }
 
-/** Project a user message onto the shared screen: text, compact image placeholders, optional receipt. */
 export function formatUserMessage(
 	content: unknown,
 	opts?: { issueReceipt?: PairReceiptIssuer; sourceEntryId?: string },
@@ -505,11 +463,6 @@ function contextText(content: string | Array<{ type: string; text?: string }>): 
 		.join("\n");
 }
 
-/**
- * Render exactly the primary messages Pi currently considers active after applying
- * compaction or branch navigation. This is prior context for the next review, not
- * a historical review request, so pair messages themselves are excluded.
- */
 export function formatActiveSessionContext(entries: readonly SessionEntry[], issueReceipt?: PairReceiptIssuer): string {
 	const messages: Array<{ message: AgentMessage; sourceEntryId: string }> = entries.flatMap((entry) =>
 		sessionEntryToContextMessages(entry)
@@ -566,15 +519,6 @@ export function formatActiveSessionContext(entries: readonly SessionEntry[], iss
 	return parts.join("\n\n");
 }
 
-// Assemble a review prompt as a BATCH of user messages: optional active-session
-// context after a history rewrite, then a header/reconfirm turn, then one user
-// turn per primary-turn delta. Each message carries exactly ONE text block whose
-// internal section separators ("\n\n") are explicit, so nothing depends on how a
-// provider joins multiple content parts within a message. Between turns:
-// OpenAI-family endpoints (OpenRouter, the default) keep them as distinct turns;
-// Anthropic-family folds consecutive user turns into one (\n-joined, per the Messages
-// API). Each turn starts with a #### / ### header, so it stays legible either way,
-// and arg content rides verbatim (real newlines, no \n-escaping) — the whole point.
 export function buildReviewMessages(preamble: string, batch: string[], activeSessionContext?: string): UserMessage[] {
 	const now = Date.now();
 	const messages: UserMessage[] = [];

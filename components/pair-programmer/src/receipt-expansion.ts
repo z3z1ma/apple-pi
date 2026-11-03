@@ -7,7 +7,6 @@ import { Type } from "typebox";
 export const EXPAND_RECEIPT_TOOL_NAME = "expand_receipt";
 export const RECEIPT_UNAVAILABLE_TEXT = "Receipt is not available.";
 
-/** Primary-visible omitted payload captured at issue time. Text is paged; images pass through. */
 export type PairReceiptImage = {
 	readonly type: "image";
 	readonly data: string;
@@ -103,7 +102,6 @@ function utf8ByteLength(text: string): number {
 	return Buffer.byteLength(text, "utf8");
 }
 
-/** Exclusive UTF-8 byte index that does not split a code point. */
 function utf8ClipEnd(encoded: Buffer, maxBytes: number): number {
 	if (encoded.length <= maxBytes) return encoded.length;
 	let end = Math.max(0, maxBytes);
@@ -118,10 +116,6 @@ function utf8SafePrefix(text: string, maxBytes: number): string {
 	return encoded.subarray(0, end).toString("utf8");
 }
 
-/**
- * Exact-slice page of historical text using Pi's exported line/byte caps.
- * Concatenating successive fragments reconstructs the original string.
- */
 function takeReceiptPage(
 	text: string,
 	maxBytes: number = DEFAULT_MAX_BYTES,
@@ -166,10 +160,6 @@ function unavailable(): AgentToolResult<ExpandReceiptDetails> {
 	};
 }
 
-/**
- * Host-owned issuer for omitted primary-visible payloads.
- * Handles are opaque, store-local, and redeemable only against historical snapshots.
- */
 export class PairReceiptStore {
 	private readonly isActiveSourceEntry: (sourceEntryId: string) => boolean;
 	private readonly byHandle = new Map<string, StoredReceipt>();
@@ -191,7 +181,6 @@ export class PairReceiptStore {
 		return this.intern(dedupeKey, freezeSnapshot(snapshot), freezeIds(sourceEntryIds), 0);
 	}
 
-	/** Activate only handles that have crossed the pair's prompt boundary. */
 	activatePresented(text: string): void {
 		if (this.revoked || !text) return;
 		for (const match of text.matchAll(/(?:^|\n)receipt: ([0-9a-f]{32})(?=\n|$)/g)) {
@@ -219,8 +208,7 @@ export class PairReceiptStore {
 		const labels = sourceLabels(record.sourceEntryIds);
 		const continuationBytes = utf8ByteLength(continuationNotice("0".repeat(32)));
 		const contentBytes = Math.max(4, DEFAULT_MAX_BYTES - utf8ByteLength(`${labels}\n`) - continuationBytes);
-		// A fragment ending in "\n" contributes one implicit empty line before
-		// the two-newline continuation separator, so reserve three suffix lines.
+
 		const contentLines = Math.max(1, DEFAULT_MAX_LINES - record.sourceEntryIds.length - 3);
 		const { fragment, rest } = takeReceiptPage(remaining, contentBytes, contentLines);
 		let text = `${labels}\n${fragment}`;
@@ -229,7 +217,7 @@ export class PairReceiptStore {
 			const nextOffset = record.textOffset + fragment.length;
 			continuationId = this.continuationHandle(record, nextOffset);
 			text += continuationNotice(continuationId);
-			// The continuation capability is presented in this tool result.
+
 			this.presentedHandles.add(continuationId);
 		}
 
@@ -292,11 +280,6 @@ function toolCallIds(message: AssistantMessage): string[] {
 	);
 }
 
-/**
- * Bind receipt issuance to the immutable primary entries already projected into
- * one trajectory view. The formatter can fold content, but it cannot mint a
- * capability for an entry the driver never exposed on the active lineage.
- */
 export function createPairReceiptIssuer(
 	store: PairReceiptStore,
 	entries: readonly ReceiptSourceEntry[],
