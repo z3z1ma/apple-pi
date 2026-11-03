@@ -12,6 +12,7 @@ import { activity } from "./overlay/interface/model.js";
 import { StoredDrafts } from "./stored-drafts.js";
 import { ChannelBrowser } from "./workplace-channels.js";
 import { WorkplaceCode } from "./workplace-code.js";
+import { Connections } from "./workplace-connections.js";
 import { useWorkplaceMenu, WorkplaceMenuProvider } from "./workplace-context-menu.js";
 import {
 	activityItems,
@@ -477,7 +478,9 @@ function Workplace() {
 									</div>
 								)}
 								{view === "settings" && (
-									<WorkplaceSettings theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} dark={dark} />
+									<WorkplaceSettings theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} dark={dark}>
+										<Connections />
+									</WorkplaceSettings>
 								)}
 								{worldVisited && (
 									<div hidden={view !== "world"}>
