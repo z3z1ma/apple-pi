@@ -50,7 +50,7 @@ export function CommunicationDialog({
 			aria-busy={busy}
 			onCancel={(event) => {
 				event.preventDefault();
-				if (!busy && !dialog.current?.querySelector('[aria-expanded="true"]')) close();
+				if (!busy) close();
 			}}
 		>
 			<header className="wp-modal-header">
