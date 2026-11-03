@@ -1,9 +1,3 @@
-/**
- * The organization a session belongs to, read from the session-state database: the tree of `reports_to` that ends
- * at one root (a top-level session with no manager). Everyone in the tree is a member, at work or at home; sessions in
- * other trees are other organizations.
- */
-
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { statePaths } from "../../session-state/src/paths.js";
@@ -12,29 +6,21 @@ import { type AssignedTask, workOf } from "../../session-state/src/work-read.js"
 export interface Member {
 	id: string;
 	name: string | null;
-	/** The role catalog name, or null for an unroled session. */
 	role: string | null;
-	/** The role's title, or null for an unroled session. */
 	title: string | null;
-	/** One line of the soul drawn at hire, or null without a role. */
 	soul: string | null;
-	/** The manager's session id; null for the root. */
 	reportsTo: string | null;
 	status: "busy" | "idle" | "waiting" | "at home";
 	cwd: string;
-	/** Work explicitly held, with one focus and a record of finished assignments. */
 	tasks: AssignedTask[];
 	focus: AssignedTask | null;
 	record: AssignedTask[];
-	/** When the session first started (ms), or null when it never ran. */
 	since: number | null;
-	/** When and why the person left; null for a member. */
 	retired: { at: number; reason: string } | null;
 }
 
 export interface Organization {
 	root: string;
-	/** The root first, then by manager and name; excludes the caller unless includeSelf was requested. */
 	members: Member[];
 }
 
@@ -54,10 +40,6 @@ interface Row {
 	retired_reason: string | null;
 }
 
-/**
- * The organization's columns of `sessions` as select terms, each null when the running runtime predates it: the
- * runtime migrates the schema only when it starts, and a bridge of newer code can connect to an older runtime.
- */
 export function organizationColumns(
 	db: DatabaseSync,
 	names = ["role", "role_title", "soul", "retired_at", "retired_reason"],
@@ -68,7 +50,6 @@ export function organizationColumns(
 	return names.map((name) => (columns.has(name) ? `s.${name}` : `null as ${name}`)).join(", ");
 }
 
-/** The root of the tree `id` is in, following managers up and stopping at a cycle. */
 function rootOf(id: string, managerOf: Map<string, string | null>): string {
 	const seen = new Set<string>();
 	let current = id;
@@ -81,7 +62,6 @@ function rootOf(id: string, managerOf: Map<string, string | null>): string {
 	return current;
 }
 
-/** Current reporting record; undefined means unknown, while reportsTo: null identifies a recorded root. */
 export function reportingOf(id: string): { id: string; reportsTo: string | null } | undefined {
 	const path = statePaths().db;
 	if (!existsSync(path)) return undefined;
@@ -95,7 +75,6 @@ export function reportingOf(id: string): { id: string; reportsTo: string | null 
 	}
 }
 
-/** Immutable creator context, absent for older schemas and people created without it. */
 export function specializationOf(id: string): string | null {
 	const path = statePaths().db;
 	if (!existsSync(path)) return null;
@@ -110,7 +89,6 @@ export function specializationOf(id: string): string | null {
 	}
 }
 
-/** The organization of `self`: its root and every other member, or `self` alone when the database is unreadable. */
 export function organizationOf(self: string, includeSelf = false): Organization {
 	const path = statePaths().db;
 	if (!existsSync(path)) return { root: self, members: [] };
@@ -122,7 +100,6 @@ export function organizationOf(self: string, includeSelf = false): Organization 
 	}
 }
 
-/** The organization of `self` in an open state database. */
 export function organizationIn(db: DatabaseSync, self: string, includeSelf = false): Organization {
 	const rows = db
 		.prepare(

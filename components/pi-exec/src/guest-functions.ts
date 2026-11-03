@@ -26,19 +26,14 @@ const MAX_GUEST_TOOL_RESULT_CHARS = 50_000;
 
 export type Args = Record<string, unknown>;
 
-/** What a host function may use while serving one call. */
 export interface HostCallScope {
 	ctx: ExtensionToolContext;
 	peers: PeerCalls;
 	signal: AbortSignal;
 	operation: ExecutionOperation;
-	/** Publish a change to the operation's trace or activity. */
 	changed(): void;
-	/** Publish a detached live snapshot of a model worker's child tools for inspection. */
 	setChildren(children: ExecActivityCall[]): void;
-	/** Run a definition Pi does not list as callable, such as pi_exec's own bash. */
 	runTool(definition: ToolDefinition<any, any>, args: Args): Promise<any>;
-	/** Run a callable tool through Pi's tool pipeline. */
 	executeTool(name: string, args: Args): Promise<AgentToolCallOutcome>;
 	claimAgent(): number;
 	addUsage(usage: Usage): void;
@@ -46,25 +41,16 @@ export interface HostCallScope {
 
 type PythonCallable = (...actuals: any[]) => unknown;
 
-/** A Python function bound to a host function: its type stub and how its Python arguments reach the host. */
 interface PythonFunction {
 	name: string;
 	stub: string;
-	/**
-	 * `call` sends arguments to the host function. `interruption` returns the error to raise once the program
-	 * has stopped, so a binding that converts failures to values still lets the interrupt through.
-	 */
 	bind(call: (args?: Args) => Promise<unknown>, interruption: () => Error | undefined): PythonCallable;
 }
 
-/** One host function the program can call, keyed by its trace ref. */
 export interface HostFunction {
-	/** Hand-written Python functions bound to this host function, in stub order. */
 	python?: PythonFunction[];
-	/** Trace and activity arguments; defaults to the raw arguments. Never include bound payloads. */
 	traceArgs?(args: Args): Args;
 	run(args: Args, scope: HostCallScope): unknown;
-	/** Trace result; defaults to a bounded copy of the value. */
 	traceResult?(value: unknown): unknown;
 }
 
@@ -75,7 +61,6 @@ function portableValue(value: unknown): unknown {
 	return { truncated: true, originalChars: json.length, preview: json.slice(0, MAX_GUEST_TOOL_RESULT_CHARS) };
 }
 
-/** TypeBox schemas carry runtime metadata; the program receives their JSON Schema projection. */
 function portableSchema(value: unknown): unknown {
 	const json = JSON.stringify(value);
 	if (json === undefined) return undefined;
@@ -92,7 +77,6 @@ function toolDescriptors(scope: HostCallScope, withParameters = false) {
 	}));
 }
 
-/** Python may pass a keyword argument positionally or as one dict. */
 const named = (value: unknown, key: string) =>
 	value && typeof value === "object" && !(value instanceof Map) ? (value as Args)[key] : value;
 
@@ -256,7 +240,6 @@ const HOST_FUNCTIONS: Record<string, HostFunction> = {
 			scope.changed();
 			const { result, isError } = await scope.executeTool(name, toolArgs);
 			const text = bounded(resultText(result), MAX_GUEST_TOOL_RESULT_CHARS, `${scope.operation.ref} output`).value;
-			// Like Pi's codemode: a failure raises unless the tool returned structured data with it.
 			if (isError && result.structuredContent === undefined) throw new Error(text || `${name} failed`);
 			if (isError) {
 				scope.operation.outcome = "failed";
@@ -312,10 +295,6 @@ const HOST_FUNCTIONS: Record<string, HostFunction> = {
 	},
 };
 
-/**
- * Type stubs of the hand-written Python functions, in a stable order. The session hashes the full stub text to
- * identify Monty checkpoints, so any change to a stub's text or order makes every saved checkpoint incompatible.
- */
 export const HOST_FUNCTION_STUBS: readonly string[] = Object.values(HOST_FUNCTIONS).flatMap((fn) =>
 	(fn.python ?? []).map((python) => python.stub),
 );
@@ -350,7 +329,6 @@ function coreToolFunction(name: CoreToolName): HostFunction {
 				const config = loadSearchRootGuardConfig(scope.ctx.cwd, scope.ctx.isProjectTrusted?.() ?? false);
 				const blocked = searchRootBlockReason(name, args, scope.ctx.cwd, { home: homedir(), ...config });
 				if (blocked) throw new Error(blocked);
-				// pi_exec keeps its own bash: the registered one can start root-owned background tasks.
 				const native = name !== "bash" && scope.ctx.tools.some((tool) => tool.name === name);
 				const result = native
 					? await nativeResult(scope, name, args)
@@ -388,7 +366,6 @@ export function hostFunction(ref: string): HostFunction | undefined {
 	return undefined;
 }
 
-/** Captured extension tools callable as Python functions; core tools and evidence functions keep their own names. */
 export function extensionPythonTools(tools: readonly AgentTool[]): readonly AgentTool[] {
 	return tools.filter(
 		(tool) =>
@@ -399,10 +376,6 @@ export function extensionPythonTools(tools: readonly AgentTool[]): readonly Agen
 	);
 }
 
-/**
- * Every Python function a program can call. `invoke` sends a call to the host function with that ref; `interruption`
- * returns the error to raise once the program has stopped.
- */
 export function guestFunctions(
 	invoke: (ref: string, args?: Args) => Promise<unknown>,
 	interruption: () => Error | undefined,

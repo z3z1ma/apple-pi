@@ -21,7 +21,6 @@ export interface EvidenceEnvironment {
 	signal?: AbortSignal;
 }
 
-/** All evidence calls use keyword arguments and the normal host-call budget. */
 export const EVIDENCE_FUNCTION_NAMES = [
 	"git_change",
 	"git_patch",
@@ -68,7 +67,6 @@ function strings(value: unknown, name: string): string[] {
 const measure = (value: unknown): number => JSON.stringify(value).length;
 const quote = (value: string): string => `'${value.replaceAll("'", "'\"'\"'")}'`;
 
-/** Bounded output, deadline, and process-tree cancellation also apply to test commands. */
 function command(
 	file: string,
 	args: string[],
@@ -139,12 +137,6 @@ function target(options: RecordValue): GitTarget {
 }
 const EVIDENCE_OUTPUT_LIMIT = 8 * 1024 * 1024;
 const EVIDENCE_DEADLINE_MS = 60_000;
-/**
- * The same snapshot review_code, sign_off_code and explain_change select; trees make repeat calls comparable.
- * Evidence keeps its execution policy: one deadline for the call, an output limit enforced while Git streams,
- * and pathspecs resolved from the session's directory as plain `git diff` would. Closing the change cancels and
- * waits for any diff still running.
- */
 async function withChange<T>(
 	options: RecordValue,
 	env: EvidenceEnvironment,
@@ -218,7 +210,6 @@ function gitChange(options: RecordValue, env: EvidenceEnvironment): Promise<Reco
 	});
 }
 
-// Marks cross Monty's JSON boundary, so they are explicit records, not WeakMap identities.
 const MARK = "__pi_context_policy__";
 type Policy = {
 	kind: "required" | "clippable" | "droppable";
@@ -272,7 +263,6 @@ export interface ContextFit {
 	dropped: string[];
 	serializedChars: number;
 }
-/** Unmarked and required values are never silently removed to make a context fit. */
 export function fitContext(value: unknown, options: RecordValue = {}): ContextFit {
 	const max = integer(options.max_serialized_chars ?? 48_000, "max_serialized_chars", 2);
 	const flags = object(options.flags ?? {}, "flags");
@@ -338,7 +328,6 @@ export function fitContext(value: unknown, options: RecordValue = {}): ContextFi
 		const original = slot.value as string;
 		let low = 0;
 		let high = original.length;
-		// Serialized escaping can be larger than the string; measure each candidate.
 		while (low < high) {
 			const middle = Math.ceil((low + high) / 2);
 			slot.value = clip(original, middle, slot.policy);
@@ -416,7 +405,6 @@ async function neighboringTests(
 		paths.push(path);
 		map.set(key, paths);
 	};
-	// Index each candidate once rather than filtering every repository path for every changed file.
 	for (const [position, path] of files.entries()) {
 		if (position % 1000 === 0) await setImmediate();
 		env.signal?.throwIfAborted();
@@ -507,7 +495,6 @@ async function neighborhood(args: RecordValue, env: EvidenceEnvironment): Promis
 	const change = await gitChange(args, env);
 	const changed: string[] = change.changedFiles;
 	const result: RecordValue = { change };
-	// Changed paths are repository-relative, so discovery reads from the repository root whatever the session cwd.
 	env = { ...env, cwd: change.repository };
 	const allFiles =
 		include.has("tests") || include.has("definitions") || include.has("references") ? await repositoryFiles(env) : [];
@@ -568,10 +555,8 @@ async function runTests(args: RecordValue, env: EvidenceEnvironment): Promise<Re
 			selectedTests,
 			tests,
 		};
-	// Reuse Pi's Bash discovery (including Git Bash on Windows and WSL stdin transport).
 	const shell = getShellConfig();
 	const stdin = shell.commandTransport === "stdin";
-	// Selected test paths are repository-relative, so the command runs at the repository root.
 	const result = await command(
 		shell.shell,
 		stdin ? shell.args : [...shell.args, cmd],

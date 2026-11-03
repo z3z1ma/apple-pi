@@ -29,7 +29,6 @@ async function reviewLabel(
 	signal?: AbortSignal,
 ): Promise<ReviewLabel> {
 	const committed = target.kind !== "working-tree" && target.kind !== "staged";
-	// The label is display only: a query that fails (detached HEAD, a shallow history) leaves its field empty.
 	const optional = <T>(query: Promise<T>) => query.catch(() => null);
 	const [branch, subject, commits] = await settledAll([
 		optional(text(repository, ["symbolic-ref", "--short", "-q", "HEAD"], { signal })),
@@ -92,7 +91,6 @@ function scopedPatch(artifact: ReviewArtifact, signal?: AbortSignal) {
 	);
 }
 
-/** Manifest, refs and comparison identity: enough to browse retained objects without the materialized copy. */
 export async function verifyCapturedSource(artifact: ReviewArtifact, signal?: AbortSignal): Promise<void> {
 	if (artifactDigest(artifact) !== artifact.digest) throw new Error("Review manifest identity changed");
 	if (hash(await readFile(join(dirname(artifact.source), "change.patch"))) !== artifact.patchHash)
@@ -103,14 +101,8 @@ export async function verifyCapturedSource(artifact: ReviewArtifact, signal?: Ab
 	if (hash(await scopedPatch(artifact, signal)) !== artifact.patchHash) throw new Error("Captured comparison changed");
 }
 
-/** Measured on this checkout's first verification after capture: 1 reader 8.6 s, 8 readers 3.8 s, 32 and 128 no faster. */
 const VERIFY_READERS = 8;
 
-/**
- * Full integrity before recovery and decisions: every retained object, and every materialized path's mode and bytes
- * hashed against the retained head tree. This reads the files themselves rather than the checkout's index or
- * config, which reviewers' ordinary Git use can change (index flags, stat data, core.worktree).
- */
 export async function verifyArtifact(artifact: ReviewArtifact, signal?: AbortSignal): Promise<void> {
 	await verifyCapturedSource(artifact, signal);
 	await text(artifact.source, ["fsck", "--no-reflogs", "--no-dangling"], { signal });
@@ -159,7 +151,6 @@ export async function verifyArtifact(artifact: ReviewArtifact, signal?: AbortSig
 				: await fileBlobId(format, path, signal);
 		if (id !== entry.blob) throw new Error(`Captured source changed: ${entry.path}`);
 	};
-	// Every reader stops at the first failure and has finished before verification settles.
 	await Promise.all(Array.from({ length: VERIFY_READERS }, check));
 	if (failure) throw failure.error;
 }
@@ -218,7 +209,6 @@ async function absent(error: unknown): Promise<undefined> {
 async function treeReferences(root: string, tree: string, signal?: AbortSignal, path?: string) {
 	return (await treeListing(root, tree, signal, path)).map(({ size: _, ...entry }) => entry);
 }
-/** `ls-tree -l` reports blob sizes, so pointer detection reads only small blobs. */
 async function treeListing(root: string, tree: string, signal?: AbortSignal, path?: string) {
 	const args = ["--literal-pathspecs", "ls-tree", "-rlz", "--full-tree", tree, ...(path ? ["--", path] : [])];
 	return paths(await bytes(root, args, { signal })).map((record) => {
@@ -228,11 +218,6 @@ async function treeListing(root: string, tree: string, signal?: AbortSignal, pat
 	});
 }
 
-/**
- * Copy exactly the objects both trees reach into one pack in the capture, so it does not depend on the author's
- * repository. pack-objects reuses stored deltas without searching for new ones (--window=0 halved this step here) and writes
- * the index itself; fsck checks the result later.
- */
 async function transferObjects(change: GitChange, source: string, signal?: AbortSignal) {
 	await change.git(["pack-objects", "--revs", "--window=0", "-q", join(source, ".git", "objects", "pack", "pack")], {
 		input: `${change.baseTree}\n${change.headTree}\n`,
@@ -241,10 +226,6 @@ async function transferObjects(change: GitChange, source: string, signal?: Abort
 	await text(source, ["prune-packed"], { signal });
 }
 
-/**
- * One patch for all regions. `--name-status` and the patch share Git's path order; a type change (T) is the one
- * status Git writes as two sections (deletion, then addition) for the same path.
- */
 async function changedRegions(
 	source: string,
 	base: string,
@@ -328,10 +309,6 @@ const identity = (change: GitChange) =>
 		change.indexEntries,
 	]);
 
-/**
- * Build a self-contained review repository. Git snapshots the target into the capture's own object store,
- * a pack copies the reachable objects, and checkout-index materializes the head tree for reviewers.
- */
 export async function captureReview(
 	request: ReviewRequest,
 	destination: string,
@@ -413,7 +390,6 @@ export async function captureReview(
 		await text(source, ["update-ref", "refs/heads/base", baseRevision], { signal });
 		await text(source, ["update-ref", "refs/heads/review", headRevision], { signal });
 		await text(source, ["symbolic-ref", "HEAD", "refs/heads/review"], { signal });
-		// Mutable sources are snapshotted again after materialization; an observed change refuses the capture.
 		const again = await openGitChange(repository, request.target, { signal, objects });
 		await again.close();
 		if (
@@ -486,13 +462,11 @@ export async function captureReview(
 		await writeFile(join(destination, "change.patch"), patch);
 		await writeFile(join(destination, "manifest.json"), `${JSON.stringify(artifact, null, 2)}\n`);
 		await change.close();
-		// fsck runs with full verification before recovery and decisions.
 		await verifyCapturedSource(artifact, signal);
 		if (JSON.stringify(artifact.configuration) !== JSON.stringify(reviewConfiguration(source)))
 			throw new Error("Review configuration changed during capture; capture the review again");
 		return artifact;
 	} catch (error) {
-		// Close first: it stops and waits for the change's Git work before its storage disappears.
 		await change?.close();
 		await rm(destination, { recursive: true, force: true });
 		throw error;

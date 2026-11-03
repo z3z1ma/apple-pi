@@ -1,0 +1,6 @@
+## file
+
+Evidence calls use keyword arguments and the normal host-call budget. Test commands keep the same bounded output, deadline, and process-tree cancellation. The Git snapshot is the one `review_code`, `sign_off_code`, and `explain_change` select; trees make repeat calls comparable. One deadline covers the call, the output limit is enforced while Git streams, and pathspecs resolve from the session directory as plain `git diff` would. Closing the change cancels and waits for a diff still running. Marks that cross Monty's JSON boundary are explicit records, not WeakMap identities. Unmarked and required values are never removed to make a context fit. Serialized escaping can be larger than the string, so each candidate is measured. Each candidate is indexed once. Changed paths and selected test paths are repository-relative, so discovery and the test command use the repository root whatever the session cwd. Test discovery reuses Pi's Bash discovery.
+Why: a second snapshot or a silent trim would make evidence disagree with review and with the value the program passed.
+Coupled: components/pi-exec/src/guest-functions.ts, components/shared/src/git-change.ts
+Verify: components/pi-exec/tests/evidence.test.ts

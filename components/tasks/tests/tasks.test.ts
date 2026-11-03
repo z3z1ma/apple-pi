@@ -392,8 +392,6 @@ describe("tasks component", () => {
 			expect(getResultText(result)).toContain("Command started in background as task-1");
 			expect(result.details?.backgrounded).toBe(true);
 			expect(result.details?.taskId).toBe("task-1");
-
-			// The task should continue running in the background and eventually complete
 			const task = await manager.waitFor("task-1", 5000);
 			expect(task?.status).toBe("completed");
 			expect(task?.kind).toBe("command");
@@ -415,7 +413,6 @@ describe("tasks component", () => {
 				notify: vi.fn(),
 			};
 
-			// Start a command that runs for 2 seconds
 			const executePromise = bashTool.execute(
 				"call-3",
 				{ command: "node -e \"console.log('early output'); setTimeout(() => console.log('late output'), 500);\"" },
@@ -424,11 +421,9 @@ describe("tasks component", () => {
 				{ cwd: process.cwd(), ui: mockUi } as any,
 			);
 
-			// Allow child process to start and register terminal listener
 			await new Promise((resolve) => setTimeout(resolve, 100));
 			expect(terminalInputHandler).toBeDefined();
 
-			// Operator presses Ctrl+B (\x02)
 			const res = terminalInputHandler!("\x02");
 			expect(res?.consume).toBe(true);
 
@@ -438,7 +433,6 @@ describe("tasks component", () => {
 			expect(result.details?.taskId).toBe("task-1");
 			expect(mockUi.notify).toHaveBeenCalledWith("Backgrounded command (task-1)", "info");
 
-			// Ensure the process continues in background and finishes
 			const task = await manager.waitFor("task-1", 5000);
 			expect(task?.status).toBe("completed");
 			expect(task?.kind).toBe("command");
@@ -502,20 +496,16 @@ describe("tasks component", () => {
 			const manager = createManager();
 			const taskTool = createTaskManagementTool(manager);
 
-			// Initially empty
 			const emptyList = await taskTool.execute("call-list-1", { action: "list" }, undefined, undefined, {} as any);
 			expect(getResultText(emptyList)).toBe("No managed tasks found.");
 
-			// Spawn a task
 			const child = spawn(process.execPath, ["-e", "setTimeout(() => console.log('done'), 150);"]);
 			const task = manager.createTask("node -e 'done'", process.cwd(), child);
 
-			// List tasks
 			const listResult = await taskTool.execute("call-list-2", { action: "list" }, undefined, undefined, {} as any);
 			expect(getResultText(listResult)).toContain(task.id);
 			expect(getResultText(listResult)).toContain("running");
 
-			// Check status with wait_seconds
 			const statusResult = await taskTool.execute(
 				"call-status-1",
 				{
@@ -531,7 +521,6 @@ describe("tasks component", () => {
 			expect(getResultText(statusResult)).toContain("Status: completed");
 			expect(getResultText(statusResult)).toContain("done");
 
-			// Cancel action
 			const child2 = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"]);
 			const task2 = manager.createTask("node endless", process.cwd(), child2);
 
@@ -728,7 +717,6 @@ describe("tasks component", () => {
 				{ cwd: process.cwd() },
 			);
 
-			// Wait for task to finish and send message
 			await new Promise((resolve) => setTimeout(resolve, 300));
 
 			expect(sentMessages.length).toBeGreaterThanOrEqual(1);
@@ -738,7 +726,6 @@ describe("tasks component", () => {
 			expect(notification.msg.content).toContain("wake me up!");
 			expect(notification.opts).toEqual({ deliverAs: "steer", triggerTurn: true });
 
-			// Shutdown cleanup
 			const shutdownHandlers = eventHandlers.get("session_shutdown") ?? [];
 			for (const h of shutdownHandlers) h();
 		});
