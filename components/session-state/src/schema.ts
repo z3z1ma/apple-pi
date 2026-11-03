@@ -471,6 +471,8 @@ const MIGRATIONS = [
 		pinned integer not null
 	) strict;
 	create index canvases_updated on canvases (updated_at);`,
+	// A conversation page is the newest entries before a cursor: read in time order without sorting a whole session.
+	`create index messages_by_time on messages (session_id, part, at);`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

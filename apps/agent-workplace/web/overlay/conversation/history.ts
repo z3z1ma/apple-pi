@@ -39,9 +39,15 @@ function newer(known: TranscriptEntry[], fresh: TranscriptEntry[]): TranscriptEn
 
 /**
  * The history of `characterId`'s conversation. `pulse` changes whenever the character's observed state does; each
- * change reads the newest page again and appends what is new.
+ * change reads the newest page again and appends what is new. `textOnly` pages only the written words a text-only view
+ * draws, so a long run of tool work between them is never read; changing it starts the history again.
  */
-export function useHistory(api: ConversationApi | undefined, characterId: string, pulse: string): History {
+export function useHistory(
+	api: ConversationApi | undefined,
+	characterId: string,
+	pulse: string,
+	textOnly = false,
+): History {
 	const [entries, setEntries] = useState<TranscriptEntry[]>([]);
 	const [before, setBefore] = useState<string | null>(null);
 	const [missing, setMissing] = useState(0);
@@ -61,10 +67,11 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 		live.current.again = false;
 		live.current.loadingOlder = false;
 		setLoadingOlder(false);
+		setReady(false);
 		return () => {
 			owner.active = false;
 		};
-	}, [api, characterId]);
+	}, [api, characterId, textOnly]);
 
 	// The newest page, on opening.
 	useEffect(() => {
@@ -73,7 +80,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 		const owner = lifetime.current;
 		const requestedPulse = live.current.pulse;
 		void attempt;
-		call(() => (!gone && canRead(owner) ? api.conversation(characterId) : undefined))
+		call(() => (!gone && canRead(owner) ? api.conversation(characterId, undefined, textOnly) : undefined))
 			.then((page) => {
 				if (gone || !canRead(owner) || !page) return;
 				if (!page.ok) {
@@ -91,7 +98,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 		return () => {
 			gone = true;
 		};
-	}, [api, characterId, attempt]);
+	}, [api, characterId, attempt, textOnly]);
 
 	const loadOlder = useCallback(() => {
 		const now = live.current;
@@ -100,7 +107,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 		const cursor = now.before;
 		live.current.loadingOlder = true;
 		setLoadingOlder(true);
-		call(() => (canRead(owner) ? api.conversation(characterId, cursor) : undefined))
+		call(() => (canRead(owner) ? api.conversation(characterId, cursor, textOnly) : undefined))
 			.then((page) => {
 				if (!canRead(owner) || !page) return;
 				if (!page.ok) {
@@ -118,7 +125,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 				live.current.loadingOlder = false;
 				setLoadingOlder(false);
 			});
-	}, [api, characterId]);
+	}, [api, characterId, textOnly]);
 
 	// Read the newest page again when the character's state changes, and append what is new.
 	const refresh = useCallback(() => {
@@ -131,7 +138,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 		}
 		now.refreshing = true;
 		const requestedPulse = now.pulse;
-		call(() => (canRead(owner) ? api.conversation(characterId) : undefined))
+		call(() => (canRead(owner) ? api.conversation(characterId, undefined, textOnly) : undefined))
 			.then((page) => {
 				if (!canRead(owner) || !page) return;
 				if (!page.ok) {
@@ -156,7 +163,7 @@ export function useHistory(api: ConversationApi | undefined, characterId: string
 					refresh();
 				}
 			});
-	}, [api, characterId]);
+	}, [api, characterId, textOnly]);
 
 	const firstPulse = useRef(pulse);
 	useEffect(() => {

@@ -1043,6 +1043,24 @@ var GONE = "The session runtime is not answering.";
 /** How long a subscription waits for the runtime to confirm it, and how soon a lost one is made again. */
 var SUBSCRIBE_TIMEOUT_MS = 3e3;
 var RESUBSCRIBE_MS = 1e3;
+/**
+* Complete lines from a socket's chunks. A page can be one line of megabytes arriving in many chunks; each chunk is
+* searched once and joined only when its line ends, rather than rescanning everything held so far.
+*/
+function lineReader$1() {
+	let held = [];
+	return (chunk) => {
+		const lines = [];
+		let start = 0;
+		for (let end = chunk.indexOf(10); end >= 0; end = chunk.indexOf(10, start)) {
+			lines.push(Buffer.concat([...held, chunk.subarray(start, end)]).toString());
+			held = [];
+			start = end + 1;
+		}
+		if (start < chunk.length) held.push(chunk.subarray(start));
+		return lines;
+	};
+}
 function openConversations(socketPath) {
 	let socket;
 	let connecting;
@@ -1052,12 +1070,9 @@ function openConversations(socketPath) {
 		if (socket && !socket.destroyed) return Promise.resolve(socket);
 		connecting ??= new Promise((resolve, reject) => {
 			const next = createConnection(socketPath);
-			let buffer = "";
+			const lines = lineReader$1();
 			next.on("data", (chunk) => {
-				buffer += chunk.toString();
-				for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
-					const line = buffer.slice(0, end);
-					buffer = buffer.slice(end + 1);
+				for (const line of lines(chunk)) {
 					let reply;
 					try {
 						reply = JSON.parse(line);
@@ -1193,16 +1208,11 @@ function openConversations(socketPath) {
 		if (closed || !watched.length) return finish();
 		const next = createConnection(socketPath);
 		streams = next;
-		let buffer = "";
+		const lines = lineReader$1();
 		next.on("data", (chunk) => {
-			buffer += chunk.toString();
-			for (let end = buffer.indexOf("\n"); end >= 0; end = buffer.indexOf("\n")) {
-				const line = buffer.slice(0, end);
-				buffer = buffer.slice(end + 1);
-				try {
-					onStreamLine(JSON.parse(line));
-				} catch {}
-			}
+			for (const line of lines(chunk)) try {
+				onStreamLine(JSON.parse(line));
+			} catch {}
 		});
 		next.once("connect", () => send(next));
 		next.on("error", () => {});
@@ -1214,14 +1224,15 @@ function openConversations(socketPath) {
 		});
 	});
 	return {
-		page(sessionId, before) {
+		page(sessionId, before, textOnly) {
 			const requestId = `agent-workplace-${randomUUID()}`;
 			return ask(requestId, {
 				type: "read_entries",
 				requestId,
 				sessionId,
 				limit: 50,
-				...before ? { before } : {}
+				...before ? { before } : {},
+				...textOnly ? { textOnly } : {}
 			}, PAGE_TIMEOUT_MS, (reply) => {
 				if (reply.type !== "entries") return void 0;
 				if (typeof reply.error === "string") return {
@@ -12965,7 +12976,7 @@ function start() {
 		ok: false,
 		reason: "No character was named."
 	});
-	ipcMain.handle("world:conversation", (_event, characterId, before) => typeof characterId === "string" ? conversations.page(characterId, typeof before === "string" ? before : void 0) : {
+	ipcMain.handle("world:conversation", (_event, characterId, before, textOnly) => typeof characterId === "string" ? conversations.page(characterId, typeof before === "string" ? before : void 0, textOnly === true) : {
 		ok: false,
 		reason: "No character was named."
 	});

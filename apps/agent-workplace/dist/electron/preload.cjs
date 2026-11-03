@@ -66,7 +66,7 @@ var api = {
 	},
 	goToTerminal: (characterId) => electron.ipcRenderer.invoke("world:terminal", characterId),
 	profile: (characterId) => electron.ipcRenderer.invoke("world:profile", characterId),
-	conversation: (characterId, before) => electron.ipcRenderer.invoke("world:conversation", characterId, before),
+	conversation: (characterId, before, textOnly) => electron.ipcRenderer.invoke("world:conversation", characterId, before, textOnly),
 	searchConversations: (query) => electron.ipcRenderer.invoke("world:search-conversations", query),
 	markSeen: (characterId) => electron.ipcRenderer.invoke("world:mark-seen", characterId),
 	setAvatarLook: (look) => electron.ipcRenderer.invoke("world:avatar-look", look),

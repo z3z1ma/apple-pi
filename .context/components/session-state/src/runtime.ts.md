@@ -58,8 +58,8 @@ Verify: components/session-state/tests/streaming.test.ts
 
 ## symbol:Runtime.readEntries
 
-A page reads the transcript once and picks its ids in one pass; entries are ordered by the `messages` index (`at`, then `rowid`), not by file position. Byte offsets were deliberately not added: the JSONL is Pi's, and offsets would have to survive appends and rewrites. Both `read_entry` and `read_entries` stream the file line by line (`scanTranscript`) and parse only lines whose first id is wanted; the scan reads to the end, which keeps one open per page.
-Why: `read_entry` reads the whole file per id, so paging through a long transcript one entry at a time scanned it thousands of times; reading the file as one string failed with "Invalid string length" on a 390 MB session, which now pages in about 0.8 s.
+A page is the newest `limit` index rows before the cursor, read through `messages_by_time` with `limit + 1` (never the whole session's ids), ordered by `at`, then `rowid`. `textOnly` keeps only rows a text-only view draws (`user`/`assistant` with `size > 0`, the text length the bridge indexed), so a DM whose agent works through tools does not page through thousands of hidden entries. `read_entries`, `read_entry` and the reaction notice read the transcript backwards from its end (`transcript-read.ts`) and stop once the wanted entries are found or a line is older than the oldest of them. Byte offsets were deliberately not added: the JSONL is Pi's, and offsets would have to survive appends and rewrites.
+Why: every page used to stream the whole file from the start (0.4-0.6 s on the 200 MB coordinator transcript), and a text-only DM's first page held nothing visible, so opening it loaded page after page through hours of tool work. A newest page now reads about 1 MB in a few milliseconds. Reading the file as one string failed with "Invalid string length" on a 390 MB session.
 Verify: components/session-state/tests/history.test.ts
 
 ## symbol:Runtime.hello

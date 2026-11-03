@@ -617,8 +617,11 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	goToTerminal(characterId: string): Promise<TerminalResult>;
 	/** Full Self text on demand, without reading or acknowledging a conversation. */
 	profile(characterId: string): Promise<ProfileRead>;
-	/** A page of the character's conversation: the newest, or the one just before the cursor `before`. */
-	conversation(characterId: string, before?: string): Promise<ConversationPage>;
+	/**
+	 * A page of the character's conversation: the newest, or the one just before the cursor `before`. `textOnly` pages
+	 * only the operator's and the agent's written words, as a text-only view draws them.
+	 */
+	conversation(characterId: string, before?: string, textOnly?: boolean): Promise<ConversationPage>;
 	/** Find words the operator or an agent said in any DM, newest first. */
 	searchConversations(query: string): Promise<ConversationSearch>;
 	/** Tell the runtime the operator saw the character (`mark_seen`); resolves with the command's last receipt. */

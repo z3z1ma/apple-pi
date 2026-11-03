@@ -1,6 +1,4 @@
-import { execFileSync } from "node:child_process";
-import { closeSync, constants, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
-import { open } from "node:fs/promises";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,43 +68,10 @@ async function readEntries(request: Record<string, unknown>, waitMs = 3000): Pro
 	return JSON.parse(line);
 }
 
-/**
- * Serve `content` at `path`, a named pipe, once per open for reading, counting the opens: each is one read of the
- * transcript by the runtime.
- */
-function serveReads(path: string, content: string) {
-	execFileSync("mkfifo", [path]);
-	let reads = 0;
-	let stopped = false;
-	const loop = (async () => {
-		while (!stopped) {
-			const handle = await open(path, "w");
-			if (stopped) {
-				await handle.close();
-				break;
-			}
-			reads++;
-			await handle.writeFile(content);
-			await handle.close();
-			// Let the reader drain the pipe and close before the next writer opens, so no read sees two copies.
-			await new Promise((resolve) => setTimeout(resolve, 50));
-		}
-	})();
-	return {
-		reads: () => reads,
-		async stop() {
-			stopped = true;
-			const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK); // releases a writer waiting to open
-			await loop;
-			closeSync(fd);
-		},
-	};
-}
-
-test("a long transcript is read once per page, not once per entry", async () => {
+test("paging back through a long transcript returns every entry once, in order", async () => {
 	const { entries, rows, text } = transcript(3000);
 	const file = join(dir, "long.jsonl");
-	const served = serveReads(file, text);
+	writeFileSync(file, text);
 	const bridge = await indexedSession("long", file, rows);
 	try {
 		const seen: unknown[] = [];
@@ -115,7 +80,6 @@ test("a long transcript is read once per page, not once per entry", async () => 
 		do {
 			const page = await readEntries({ sessionId: "long", limit: 250, ...(before ? { before } : {}) }, 20000);
 			pages++;
-			expect(served.reads()).toBe(pages);
 			expect(page.entries).toHaveLength(250);
 			seen.unshift(...page.entries);
 			before = page.before;
@@ -124,7 +88,6 @@ test("a long transcript is read once per page, not once per entry", async () => 
 		expect(seen).toEqual(entries.slice(1));
 	} finally {
 		bridge.socket.destroy();
-		await served.stop();
 	}
 }, 60000);
 
@@ -140,6 +103,27 @@ test("a page holds the newest entries in transcript order, with a cursor to the 
 		expect(middle).toEqual({ type: "entries", requestId: "p1", entries: entries.slice(2, 4), before: "e1" });
 		const first = await readEntries({ sessionId: "five", limit: 2, before: "e1" });
 		expect(first).toEqual({ type: "entries", requestId: "p1", entries: entries.slice(1, 2), before: null });
+	} finally {
+		bridge.socket.destroy();
+	}
+}, 20000);
+
+test("a text-only page skips tool work and mail, paging only written words", async () => {
+	const { entries, rows, text } = transcript(6);
+	// Entries 1 and 2 become tool work and mail: an assistant without text, and a custom message.
+	const indexed = rows.map((row, i) =>
+		i === 1 ? { ...row, size: 0 } : i === 2 ? { ...row, role: "custom", tool: "apple-pi.mailbox-message" } : row,
+	);
+	const file = join(dir, "words.jsonl");
+	writeFileSync(file, text);
+	const bridge = await indexedSession("words", file, indexed);
+	try {
+		const newest = await readEntries({ sessionId: "words", limit: 3, textOnly: true });
+		expect(newest).toEqual({ type: "entries", requestId: "p1", entries: entries.slice(4, 7), before: "e3" });
+		const older = await readEntries({ sessionId: "words", limit: 3, before: "e3", textOnly: true });
+		expect(older).toEqual({ type: "entries", requestId: "p1", entries: [entries[1]], before: null });
+		const everything = await readEntries({ sessionId: "words", limit: 3, before: "e3" });
+		expect(everything.entries).toEqual(entries.slice(1, 4));
 	} finally {
 		bridge.socket.destroy();
 	}

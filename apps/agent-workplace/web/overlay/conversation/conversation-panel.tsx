@@ -140,7 +140,7 @@ function Panel({
 		attention === "asking" ? "worried" : attention === "working" ? "thinking" : happy ? "happy" : "neutral";
 
 	const pulse = `${facts?.run}:${facts?.settledAt}:${facts?.tool?.since}:${facts?.needsYouSince}`;
-	const history = useHistory(api, opened.id, pulse);
+	const history = useHistory(api, opened.id, pulse, !showTools);
 	const streaming = useLiveReplies(api, opened.id, history.entries, history.refresh);
 	const position = useReadPosition(history, pulse, facts, embedded);
 	const seenNote = useSeenConversation(api, opened.id, facts?.needsYouSince ?? null, position.ready);

@@ -1,8 +1,7 @@
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmodSync, createReadStream, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
-import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 import type { TurnResult } from "../../shared/src/turn-observer.js";
 import { frictionIn } from "./friction.js";
@@ -96,6 +95,7 @@ import {
 	setServerOptions,
 	socketFiles,
 } from "./tmux.js";
+import { readTranscriptEntries } from "./transcript-read.js";
 import {
 	changeWork,
 	cleanMovedBundles,
@@ -1344,9 +1344,11 @@ export class Runtime {
 		if (!row) return;
 		let said = "";
 		try {
-			const raw = (row.session_file ? await scanTranscript(row.session_file, new Set([id])) : new Map()).get(id) as
-				| { message?: { content?: unknown } }
-				| undefined;
+			const raw = (
+				row.session_file
+					? (await readTranscriptEntries(row.session_file, this.entryTimes(session, [id]))).found
+					: new Map()
+			).get(id) as { message?: { content?: unknown } } | undefined;
 			const content = raw?.message?.content;
 			said = (
 				typeof content === "string"
@@ -3173,6 +3175,12 @@ export class Runtime {
 		}
 	}
 
+	/** Each id's indexed time, or undefined for an entry not indexed yet. */
+	private entryTimes(sessionId: string, ids: string[]): Map<string, number | undefined> {
+		const at = this.db?.prepare("select at from messages where session_id = ? and entry_id = ? and part = ''");
+		return new Map(ids.map((id) => [id, (at?.get(sessionId, id) as { at: number } | undefined)?.at]));
+	}
+
 	/** One entry of a session's transcript, read from Pi's own JSONL file, which stays the source of truth. */
 	private async readEntry(connection: Connection, request: ReadEntry): Promise<void> {
 		const reply = (body: { entry: unknown } | { error: string }) =>
@@ -3188,7 +3196,8 @@ export class Runtime {
 		if (!row.session_file) return void reply({ error: "session has no transcript file" });
 		let found: Map<string, unknown>;
 		try {
-			found = await scanTranscript(row.session_file, new Set([request.entryId]));
+			found = (await readTranscriptEntries(row.session_file, this.entryTimes(request.sessionId, [request.entryId])))
+				.found;
 		} catch (error) {
 			return void reply({ error: `cannot read transcript: ${(error as Error).message}` });
 		}
@@ -3257,19 +3266,36 @@ export class Runtime {
 		if (!row) return void reply({ error: "unknown session" });
 		if (!row.session_file) return void reply({ error: "session has no transcript file" });
 		const limit = Number.isInteger(request.limit) && request.limit! > 0 ? request.limit! : 50;
-		const ids = (
-			db
-				.prepare("select entry_id from messages where session_id = ? and part = '' order by at, rowid")
-				.all(request.sessionId) as { entry_id: string }[]
-		).map((r) => r.entry_id);
-		const end = request.before === undefined ? ids.length : ids.indexOf(request.before);
-		if (end < 0) return void reply({ error: "unknown cursor" });
-		const start = Math.max(0, end - limit);
-		const page = ids.slice(start, end);
-		// One read of the transcript per page, however many entries it holds.
+		// The page is the `limit` entries before the cursor in (`at`, rowid) order, plus one to learn whether more remain.
+		let cursor: { at: number; rowid: number } | undefined;
+		if (request.before !== undefined) {
+			cursor = db
+				.prepare("select at, rowid from messages where session_id = ? and entry_id = ? and part = ''")
+				.get(request.sessionId, request.before) as { at: number; rowid: number } | undefined;
+			if (!cursor) return void reply({ error: "unknown cursor" });
+		}
+		// A text-only view draws only written words; the index's `size` is the length of a message's text.
+		const words = request.textOnly ? "and role in ('user', 'assistant') and size > 0" : "";
+		const rows = (
+			cursor
+				? db
+						.prepare(
+							`select entry_id, at from messages where session_id = ? and part = '' ${words} and (at < ? or (at = ? and rowid < ?)) order by at desc, rowid desc limit ?`,
+						)
+						.all(request.sessionId, cursor.at, cursor.at, cursor.rowid, limit + 1)
+				: db
+						.prepare(
+							`select entry_id, at from messages where session_id = ? and part = '' ${words} order by at desc, rowid desc limit ?`,
+						)
+						.all(request.sessionId, limit + 1)
+		) as { entry_id: string; at: number }[];
+		const more = rows.length > limit;
+		const pageRows = rows.slice(0, limit).reverse();
+		const page = pageRows.map((r) => r.entry_id);
+		// One backward read of the transcript per page, from its end to the page's oldest entry.
 		let found: Map<string, unknown>;
 		try {
-			found = await scanTranscript(row.session_file, new Set(page));
+			found = (await readTranscriptEntries(row.session_file, new Map(pageRows.map((r) => [r.entry_id, r.at])))).found;
 		} catch (error) {
 			return void reply({ error: `cannot read transcript: ${(error as Error).message}` });
 		}
@@ -3281,7 +3307,7 @@ export class Runtime {
 		);
 		reply({
 			entries: page.filter((id) => found.has(id)).map((id) => found.get(id)),
-			before: start > 0 ? ids[start] : null,
+			before: more && page.length ? page[0]! : null,
 			...(missing.length ? { missing } : {}),
 			...(Object.keys(reactions).length ? { reactions } : {}),
 		});
@@ -3791,23 +3817,4 @@ export class Runtime {
 			"insert into events (at, source, session_id, generation, type, data) values (?, ?, ?, ?, ?, ?)",
 		).run(Date.now(), source, sessionId, generation, type, JSON.stringify(data));
 	}
-}
-
-/**
- * The wanted entries of a transcript, read line by line in one pass. A transcript can be larger than the longest
- * string V8 allows, so it is never read whole; a line is parsed only when the first id on it is wanted.
- */
-async function scanTranscript(file: string, wanted: Set<string>): Promise<Map<string, unknown>> {
-	const found = new Map<string, unknown>();
-	const lines = createInterface({ input: createReadStream(file, "utf8"), crlfDelay: Infinity });
-	for await (const line of lines) {
-		const at = line.indexOf('"id":"');
-		if (at < 0) continue;
-		const id = line.slice(at + 6, line.indexOf('"', at + 6));
-		if (!wanted.has(id) || found.has(id)) continue;
-		try {
-			found.set(id, JSON.parse(line));
-		} catch {}
-	}
-	return found;
 }

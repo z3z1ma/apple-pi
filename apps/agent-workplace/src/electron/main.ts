@@ -136,9 +136,9 @@ function start() {
 	ipcMain.handle("world:profile", (_event, characterId: unknown) =>
 		typeof characterId === "string" ? world.profile(characterId) : { ok: false, reason: "No character was named." },
 	);
-	ipcMain.handle("world:conversation", (_event, characterId: unknown, before: unknown) =>
+	ipcMain.handle("world:conversation", (_event, characterId: unknown, before: unknown, textOnly: unknown) =>
 		typeof characterId === "string"
-			? conversations.page(characterId, typeof before === "string" ? before : undefined)
+			? conversations.page(characterId, typeof before === "string" ? before : undefined, textOnly === true)
 			: { ok: false, reason: "No character was named." },
 	);
 	ipcMain.handle("world:search-conversations", (_event, query: unknown) =>

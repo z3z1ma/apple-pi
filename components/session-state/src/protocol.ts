@@ -113,6 +113,8 @@ export interface ReadEntries {
 	sessionId: string;
 	before?: string;
 	limit?: number;
+	/** Only the entries a text-only view draws: the operator's and the agent's written words, not tools or mail. */
+	textOnly?: boolean;
 }
 
 /** What a client can ask a session to do. */

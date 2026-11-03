@@ -154,8 +154,8 @@ const api: AgentWorkplaceApi = {
 	},
 	goToTerminal: (characterId) => ipcRenderer.invoke("world:terminal", characterId) as Promise<TerminalResult>,
 	profile: (characterId) => ipcRenderer.invoke("world:profile", characterId) as Promise<ProfileRead>,
-	conversation: (characterId, before) =>
-		ipcRenderer.invoke("world:conversation", characterId, before) as Promise<ConversationPage>,
+	conversation: (characterId, before, textOnly) =>
+		ipcRenderer.invoke("world:conversation", characterId, before, textOnly) as Promise<ConversationPage>,
 	searchConversations: (query) =>
 		ipcRenderer.invoke("world:search-conversations", query) as Promise<ConversationSearch>,
 	markSeen: (characterId) => ipcRenderer.invoke("world:mark-seen", characterId) as Promise<CommandResult>,
