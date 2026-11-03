@@ -394,9 +394,7 @@ export class ExternalThreads {
 		let configured: { thread: string; person: string } | undefined;
 		try {
 			configured = preference ? JSON.parse(preference.value) : undefined;
-		} catch {
-			/* Invalid persisted preference uses the same fallback as an absent desk. */
-		}
+		} catch {}
 		if (
 			preference &&
 			(!configured ||

@@ -149,9 +149,7 @@ export class OutputBuffer {
 		if (this.tempFilePath) {
 			try {
 				rmSync(this.tempFilePath, { force: true });
-			} catch {
-				// Ignore cleanup failures
-			}
+			} catch {}
 			this.tempFilePath = undefined;
 		}
 	}

@@ -88,9 +88,7 @@ export class TaskManager {
 			for (const listener of this.promptDueListeners) {
 				try {
 					listener(task);
-				} catch {
-					// One listener must not prevent another from observing a due prompt.
-				}
+				} catch {}
 			}
 		}, delayMs);
 		this.tasks.set(task.id, task);
@@ -335,9 +333,7 @@ export class TaskManager {
 		for (const listener of this.monitorEventListeners) {
 			try {
 				listener(event);
-			} catch {
-				// One listener must not prevent another from observing an event.
-			}
+			} catch {}
 		}
 	}
 
@@ -345,9 +341,7 @@ export class TaskManager {
 		for (const listener of this.changeListeners) {
 			try {
 				listener(task);
-			} catch {
-				// Listener errors must not affect other listeners.
-			}
+			} catch {}
 		}
 	}
 
@@ -356,9 +350,7 @@ export class TaskManager {
 		for (const listener of this.finishListeners) {
 			try {
 				listener(task);
-			} catch {
-				// Listener errors must not affect other listeners.
-			}
+			} catch {}
 		}
 	}
 }

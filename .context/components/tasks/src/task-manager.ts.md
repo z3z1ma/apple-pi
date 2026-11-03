@@ -1,3 +1,8 @@
+## file
+
+Listener failures are isolated for prompt, monitor, change and finish notifications; remaining listeners still run.
+Why: a view or callback failure must not prevent another consumer from observing managed work.
+
 ## symbol:reset
 
 `reset` discards every task without a terminal notification because the owning session is ending.

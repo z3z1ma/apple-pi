@@ -78,9 +78,7 @@ function parameterDefault(raw: string, type: ProgramParam["type"], path: string)
 			try {
 				const parsed: unknown = JSON.parse(value);
 				if (typeof parsed === "string") return parsed;
-			} catch {
-				/* Reject malformed quoted strings below. */
-			}
+			} catch {}
 		} else if (value.startsWith("'")) {
 			if (/^'(?:[^'\\]|\\['\\])*'$/.test(value)) return value.slice(1, -1).replace(/\\(['\\])/g, "$1");
 		} else {

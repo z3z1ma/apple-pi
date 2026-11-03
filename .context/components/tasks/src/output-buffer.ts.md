@@ -1,5 +1,8 @@
 ## file
 
+Temporary output removal is best-effort during cleanup.
+Why: an unlink failure must not prevent teardown of the finished output buffer.
+
 Every consumer of a snapshot's `content` (tool results, task status, notifications, full-output files) gets plain text; only terminal views use `styled`.
 Why: operator decision (2026-10-24): the model receives no escape sequences. Truncation therefore counts plain text, so colored output does not shrink what the model sees.
 

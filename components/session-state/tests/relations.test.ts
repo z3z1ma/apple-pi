@@ -117,7 +117,7 @@ test("a session in a git repository shows its repository, worktree, and branch, 
 			fauxAssistantMessage("switched"),
 		],
 		["bash"],
-		{ cwd: join(repo, "src", "deep") }, // below the checkout root: the repository is still the root
+		{ cwd: join(repo, "src", "deep") },
 	);
 	try {
 		const id = run.session.sessionManager.getSessionId();
