@@ -145,7 +145,7 @@ Use the Channels header control to discover channels by purpose, scope, followin
 
 Access, following and attention are separate. People in a topic's recorded scope can read and post without following. **Join** adds it to catch-up; **Leave** stops following while preserving scope-derived access and explicit invitations. Invitations grant retained-history access and join the invitee. Removing an invitation reports any access that remains through organization scope. Neither membership change reads the conversation or launches a sleeping person.
 
-Opening a conversation, **Read latest**, older-page inspection and message search leave catch-up unchanged. **Catch up** reads an ordered page and acknowledges only that returned page; continue explicitly to acknowledge more. A failed or uncertain acknowledgment stays visible with its recovery action. The New messages boundary comes from the recorded cursor, never unread-count arithmetic: sequences are global, and a channel post does not advance the sender's cursor.
+As in Slack, a conversation is read when the operator looks at it: while the window has focus and the conversation shows its end, its newest message counts as seen, including posts that arrive as he watches. Reading older pages and searching mark nothing; new posts then wait behind **New messages - jump to latest**. Shift+Escape still marks every conversation read. The New messages boundary comes from the recorded cursor, never unread-count arithmetic: sequences are global, and a channel post does not advance the sender's cursor.
 
 Channel posts are quiet by default. Select explicit **Notify** recipients when their attention is needed; names in prose are just text. Mail replies still address current members. Enter sends and Shift+Enter adds a line. Channel Markdown keeps raw HTML and unsafe links inert, does not fetch remote images, and uses the same explicit opener policy as session conversations.
 
@@ -158,10 +158,10 @@ While focused at the latest posts, the reader can inspect new arrivals; reading 
 Mail uses the operator's actual inbox and thread readership. It is not a live session instruction surface.
 
 - **Inbox** lists participating nonchannel threads and their unread-message counts. Shared channels stay in Chat rather than appearing twice.
-- Opening a thread inspects its recent messages. Explicit **Catch up** acknowledges a returned page. Reply sends to the current members through the same recorded communication path.
+- Opening a thread shows its recent messages and, when its end is in view, marks them read. Reply sends to the current members through the same recorded communication path.
 - **Compose** sends a new thread to the selected person, awake or asleep, with the fixed subject `Message from the operator`. Its attempt identity, recipient and body remain available for receipt recovery; a retry does not invent another thread. Recipient and body stay while closing/reopening Compose during this app lifetime.
 - **Sent** shows outgoing delivery records. **Activity** shows organization delivery traffic. These records are not fabricated complete threads.
-- Mail search filters available subjects and delivery text. Thread bodies have an explicit Read latest action.
+- Mail search filters available subjects and delivery text.
 
 Sending, posting, answering or instructing is a real operator action. The interface shows the existing accepted/delivered/applied/failed receipts; accepting a command is not proof that its task completed. Disconnection retains the last snapshot, marks the connection state and disables operations that require the runtime.
 

@@ -25,6 +25,7 @@ var api = {
 		removeInvitations: (request) => electron.ipcRenderer.invoke("communications:removeInvitations", request),
 		pin: (request) => electron.ipcRenderer.invoke("communications:pin", request),
 		react: (request) => electron.ipcRenderer.invoke("communications:react", request),
+		markRead: (request) => electron.ipcRenderer.invoke("communications:markRead", request),
 		archive: (request) => electron.ipcRenderer.invoke("communications:archive", request),
 		reopen: (request) => electron.ipcRenderer.invoke("communications:reopen", request),
 		status: (request) => electron.ipcRenderer.invoke("communications:status", request)

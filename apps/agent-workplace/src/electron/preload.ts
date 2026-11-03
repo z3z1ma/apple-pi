@@ -90,6 +90,10 @@ const api: AgentWorkplaceApi = {
 			ipcRenderer.invoke("communications:pin", request) as ReturnType<AgentWorkplaceApi["communications"]["pin"]>,
 		react: (request) =>
 			ipcRenderer.invoke("communications:react", request) as ReturnType<AgentWorkplaceApi["communications"]["react"]>,
+		markRead: (request) =>
+			ipcRenderer.invoke("communications:markRead", request) as ReturnType<
+				AgentWorkplaceApi["communications"]["markRead"]
+			>,
 		archive: (request) =>
 			ipcRenderer.invoke("communications:archive", request) as ReturnType<
 				AgentWorkplaceApi["communications"]["archive"]

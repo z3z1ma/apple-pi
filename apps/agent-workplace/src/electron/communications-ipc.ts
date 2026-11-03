@@ -15,6 +15,7 @@ export function wireCommunications(api: CommunicationsApi): void {
 		"removeInvitations",
 		"pin",
 		"react",
+		"markRead",
 		"archive",
 		"reopen",
 		"status",

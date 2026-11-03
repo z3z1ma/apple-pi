@@ -177,6 +177,13 @@ export function openCommunications(path: string, commands: Commands): Communicat
 			// Fixed actor and kind; the renderer supplies only the message, the emoji and whether it is on.
 			return commands.send(OPERATOR, { kind: "react", message, emoji, on: request.on === true });
 		},
+		async markRead(request) {
+			const thread = typeof request.thread === "string" ? request.thread : "";
+			if (!thread || !Number.isSafeInteger(request.seq) || request.seq < 1)
+				return { ok: false, reason: "A thread and a message sequence are required." };
+			// Fixed actor and kind: the operator saw this conversation up to `seq`.
+			return commands.send(OPERATOR, { kind: "thread_read", thread, seq: request.seq });
+		},
 		pin(request) {
 			return mutate(request, "pin", () => {
 				if (!Number.isSafeInteger(request.seq) || request.seq < 1) throw new Error("A message sequence is required.");

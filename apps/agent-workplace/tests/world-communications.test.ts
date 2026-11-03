@@ -373,6 +373,12 @@ async function openWorkplace() {
 				pin: (request: any) => mutate("pin", request),
 				archive: (request: any) => mutate("archive", request),
 				reopen: (request: any) => mutate("reopen", request),
+				markRead: async (request: any) => {
+					record("markRead", request);
+					const read = request.thread === mailInfo.id ? mailInfo : thread;
+					read.read_up_to = Math.max(read.read_up_to, request.seq);
+					return { ok: true };
+				},
 				status: async (request: any) => {
 					record("status", request);
 					return structuredClone(
@@ -454,7 +460,6 @@ test("channel history pages and searches without catch-up and posts only explici
 		expect((await calls(page, "readThread"))[0].attempt).toBeUndefined();
 		await page.getByRole("button", { name: "Search this conversation", exact: true }).click();
 		await page.getByRole("spinbutton", { name: "Message page size" }).fill("1");
-		await page.getByRole("button", { name: "Read latest", exact: true }).click();
 		await page.getByRole("button", { name: "Earlier messages", exact: true }).waitFor();
 		await page.getByRole("button", { name: "Earlier messages", exact: true }).click();
 		await vi.waitFor(async () =>
@@ -606,31 +611,22 @@ test("uncertain publication keeps its attempt and draft and recovers without a s
 	}
 });
 
-test("failed catch-up acknowledgment preserves the confirmed position and recovery handle", async () => {
+test("looking at the end of a conversation marks it read; searching or reading earlier pages marks nothing", async () => {
 	const { page, errors } = await openWorkplace();
 	try {
 		await openChannel(page);
-		await page.getByRole("button", { name: "Join channel", exact: true }).last().click();
-		await page.getByRole("button", { name: "Catch up", exact: true }).waitFor();
+		await vi.waitFor(async () => expect((await calls(page, "markRead")).length).toBeGreaterThan(0));
+		const marked = await calls(page, "markRead");
+		expect(marked.at(-1)).toMatchObject({ seq: expect.any(Number) });
+		expect((await calls(page, "readThread")).every((read: any) => read.view !== "catch_up")).toBe(true);
+		expect(await page.getByRole("button", { name: "Catch up", exact: true }).count()).toBe(0);
+		expect(await page.getByRole("button", { name: "Read latest", exact: true }).count()).toBe(0);
 		await page.getByRole("button", { name: "Search this conversation", exact: true }).click();
-		await page.getByRole("spinbutton", { name: "Message page size" }).fill("1");
-		await page.evaluate(() => {
-			(window as any).failAck = true;
-		});
-		await page.getByRole("button", { name: "Catch up", exact: true }).click();
-		await page
-			.getByRole("alert")
-			.filter({ hasText: /Catch-up acknowledgment failed/ })
-			.waitFor();
-		await page.getByText(/Last confirmed sequence: 0/).waitFor();
-		expect(await page.getByRole("button", { name: "Next message page", exact: true }).isEnabled()).toBe(false);
-		const reads = await calls(page, "readThread");
-		expect(reads.filter((read: any) => read.view === "catch_up")).toHaveLength(1);
-		const identity = reads.find((read: any) => read.view === "catch_up").attempt;
-		expect(identity).toMatch(/\S/);
-		await page.getByRole("button", { name: "Check outcome", exact: true }).click();
-		await vi.waitFor(async () => expect(await calls(page, "status")).toEqual([{ attempt: identity }]));
-		expect((await calls(page, "readThread")).filter((read: any) => read.view === "catch_up")).toHaveLength(1);
+		await page.getByRole("textbox", { name: "Search conversation" }).fill("Evidence 11");
+		await page.getByRole("button", { name: "Search", exact: true }).click();
+		await vi.waitFor(async () => expect(await calls(page, "searchMessages")).toHaveLength(1));
+		await page.waitForTimeout(200);
+		expect(await calls(page, "markRead")).toEqual(marked);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
@@ -646,9 +642,10 @@ test("Mail keeps addressed replies and plain text while its draft survives Chat 
 		await page.getByRole("button", { name: /Review exchange/ }).click();
 		await page.getByText("Mail evidence remains literal: <b>private</b>.", { exact: true }).waitFor();
 		expect(await page.locator(".wp-message-body b").count()).toBe(0);
-		const latest = (await page.getByRole("button", { name: "Read latest", exact: true }).boundingBox())!;
+		const latest = (await page.getByRole("button", { name: "Search this conversation", exact: true }).boundingBox())!;
 		const actions = (await page.getByLabel("Conversation actions", { exact: true }).boundingBox())!;
-		expect(actions.y).toBeCloseTo(latest.y, 0);
+		// One row: the icon button and the Actions control share a vertical center.
+		expect(Math.abs(actions.y + actions.height / 2 - (latest.y + latest.height / 2))).toBeLessThanOrEqual(2);
 		expect(actions.x).toBeGreaterThanOrEqual(latest.x + latest.width);
 		expect(actions.x + actions.width).toBeLessThanOrEqual(page.viewportSize()!.width);
 		expect(await page.getByText(/File links unavailable/).count()).toBe(0);

@@ -48,7 +48,7 @@ export function ThreadPane({
 	listener?: string;
 	/** Hosted in a pane that already names the conversation: no title or participant line of its own. */
 	embedded?: boolean;
-	/** The host pane's header slot for the reading controls (search, Catch up, Read latest, Actions). */
+	/** The host pane's header slot for the reading controls (search, Actions). */
 	toolbarHost?: HTMLElement | null;
 	/** Open a task thread a message produced (its recorded `message produced task` link). */
 	openThread?: (thread: { id: string; title: string }) => void;
@@ -208,6 +208,18 @@ export function ThreadPane({
 		attemptedSeq.current = channel!.lastSeq;
 		void read({ thread: id, view: "recent", limit });
 	}, [thread, hasNew, locked, focused, channel, search, read, id, limit]);
+	// Like Slack: what he is looking at is read. The newest message counts as seen while the window has focus and the
+	// conversation shows its end; reading older pages or searching marks nothing.
+	const markedThrough = useRef(0);
+	const markSeen = () => {
+		if (!page || !focused || !followLatest.current || search || page.view !== "recent") return;
+		const seen = page.window_through;
+		if (seen <= Math.max(page.thread.read_up_to ?? 0, markedThrough.current)) return;
+		markedThrough.current = seen;
+		void api.communications.markRead({ thread: id, seq: seen });
+	};
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new page, regained focus or a finished search can make the end visible.
+	useEffect(markSeen, [page, focused, search]);
 	const describe = (result: CommunicationResult) => {
 		if (result.outcome !== "applied") return result.reason ?? `Operation ${result.outcome}; no new attempt was sent.`;
 		const effect = result.effect;
@@ -434,28 +446,6 @@ export function ThreadPane({
 						>
 							<Icon name="search" />
 						</button>
-						{thread && (!channel || thread.following) && (
-							<button
-								type="button"
-								disabled={locked || !Number.isSafeInteger(limit) || limit < 1}
-								onClick={() => {
-									followLatest.current = false;
-									void read({ thread: id, view: "catch_up", limit });
-								}}
-							>
-								Catch up
-							</button>
-						)}
-						<button
-							type="button"
-							disabled={pending}
-							onClick={() => {
-								followLatest.current = !!channel;
-								void read({ thread: id, view: "recent", limit });
-							}}
-						>
-							Read latest
-						</button>
 						{thread && (
 							<details ref={actionsMenu} className="wp-channel-menu">
 								<summary aria-label="Conversation actions">Actions</summary>
@@ -520,7 +510,9 @@ export function ThreadPane({
 						)}
 					</>,
 				)}
-				{hasNew && (
+				{/* While he reads older posts, or to retry a failed read: shown while following, it would shrink the list
+				    and stop the following. */}
+				{hasNew && (!followLatest.current || Boolean(error)) && (
 					<button
 						type="button"
 						className="wp-new-posts"
@@ -582,7 +574,15 @@ export function ThreadPane({
 						min="1"
 						step="1"
 						value={limit}
-						onChange={(event) => setLimit(Number(event.target.value))}
+						onChange={(event) => {
+							const next = Number(event.target.value);
+							setLimit(next);
+							// The newest page shows again at the new size; a search keeps its own results.
+							if (!search && Number.isSafeInteger(next) && next > 0) {
+								followLatest.current = !!channel;
+								void read({ thread: id, view: "recent", limit: next });
+							}
+						}}
 					/>
 				</label>
 			</form>
@@ -592,6 +592,7 @@ export function ThreadPane({
 				onScroll={() => {
 					const el = messages.current;
 					if (el) followLatest.current = el.scrollHeight - el.clientHeight - el.scrollTop < 24;
+					if (followLatest.current) markSeen();
 				}}
 			>
 				{!page && pending && <p role="status">Reading conversation...</p>}

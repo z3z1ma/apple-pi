@@ -65,6 +65,8 @@ export interface CommunicationsApi {
 		emoji: string;
 		on: boolean;
 	}): Promise<{ ok: true } | { ok: false; reason: string }>;
+	/** He saw the conversation up to `seq`: his read position moves there, never back. */
+	markRead(request: { thread: string; seq: number }): Promise<{ ok: true } | { ok: false; reason: string }>;
 	archive(request: CommunicationAction & { summary: string; notify?: string[] }): Promise<CommunicationResult>;
 	reopen(request: CommunicationAction & { reason: string; notify?: string[] }): Promise<CommunicationResult>;
 	status(request: { attempt: string }): Promise<CommunicationResult>;

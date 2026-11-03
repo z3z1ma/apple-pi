@@ -729,6 +729,18 @@ function openCommunications(path, commands) {
 				on: request.on === true
 			});
 		},
+		async markRead(request) {
+			const thread = typeof request.thread === "string" ? request.thread : "";
+			if (!thread || !Number.isSafeInteger(request.seq) || request.seq < 1) return {
+				ok: false,
+				reason: "A thread and a message sequence are required."
+			};
+			return commands.send(OPERATOR$1, {
+				kind: "thread_read",
+				thread,
+				seq: request.seq
+			});
+		},
 		pin(request) {
 			return mutate(request, "pin", () => {
 				if (!Number.isSafeInteger(request.seq) || request.seq < 1) throw new Error("A message sequence is required.");
@@ -10740,6 +10752,7 @@ function wireCommunications(api) {
 		"removeInvitations",
 		"pin",
 		"react",
+		"markRead",
 		"archive",
 		"reopen",
 		"status"

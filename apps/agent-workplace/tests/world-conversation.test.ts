@@ -2179,7 +2179,9 @@ test("channel inspections preserve the unread cursor; explicit catch-up and sele
 			.locator("xpath=following-sibling::article[1]")
 			.getByText("The first unread incoming post.", { exact: true })
 			.waitFor();
-		expect(await channel.getAttribute("data-unread")).toBe("true");
+		// Like Slack: looking at the end of the conversation reads it; the divider stays where he left off.
+		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
+		await divider.waitFor();
 		expect(
 			await page.evaluate(() =>
 				(window as any).communicationCalls.every(
@@ -2187,8 +2189,6 @@ test("channel inspections preserve the unread cursor; explicit catch-up and sele
 				),
 			),
 		).toBe(true);
-		await page.getByRole("button", { name: "Catch up", exact: true }).click();
-		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
 		const scroll = page.locator(".wp-thread-messages");
 		await scroll.evaluate((el) => {
 			el.scrollTop = 100;
@@ -2213,10 +2213,7 @@ test("channel inspections preserve the unread cursor; explicit catch-up and sele
 		expect(await scroll.evaluate((el) => el.scrollTop)).toBe(100);
 		await jump.click();
 		await scroll.getByText("Incoming while reading older posts.", { exact: true }).waitFor();
-		expect(await channel.getAttribute("data-unread")).toBe("true");
-		await page.getByRole("button", { name: "Catch up", exact: true }).click();
 		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
-		await page.getByRole("button", { name: "Read latest", exact: true }).click();
 		await page.evaluate(
 			({ id, at }) =>
 				(window as any).channelPost(id, {
@@ -2229,7 +2226,7 @@ test("channel inspections preserve the unread cursor; explicit catch-up and sele
 			{ id, at: at(34) },
 		);
 		await scroll.getByText("Incoming while following the latest posts.", { exact: true }).waitFor();
-		expect(await channel.getAttribute("data-unread")).toBe("true");
+		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
 		await page.evaluate(
 			({ id, at }) => {
 				const w = window as any;
@@ -2245,8 +2242,6 @@ test("channel inspections preserve the unread cursor; explicit catch-up and sele
 		expect(await channel.getAttribute("data-unread")).toBe("true");
 		await jump.click();
 		await scroll.getByText("The retried post.", { exact: true }).waitFor();
-		expect(await channel.getAttribute("data-unread")).toBe("true");
-		await page.getByRole("button", { name: "Catch up", exact: true }).click();
 		await vi.waitFor(async () => expect(await channel.getAttribute("data-unread")).toBe("false"));
 		expect(errors).toEqual([]);
 	} finally {

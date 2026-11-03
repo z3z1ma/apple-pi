@@ -132,6 +132,26 @@ test("catch-up replays its original acknowledged page while inspections and sear
 	});
 });
 
+test("what the operator looks at is read: markRead moves his position forward, never back", async () => {
+	const thread = await channel("Looked at");
+	await publish(thread, "One");
+	await publish(thread, "Two");
+	const page = await api.readThread({ thread, view: "recent", limit: 10 });
+	if (!page.ok) throw new Error(page.reason);
+	const [first, second] = page.page.messages;
+	expect(await api.markRead({ thread, seq: second!.seq })).toEqual({ ok: true });
+	expect(await api.markRead({ thread, seq: first!.seq })).toEqual({ ok: true });
+	await vi.waitFor(
+		() => expect(world.snapshot().operatorMail).toContainEqual(expect.objectContaining({ id: thread, unread: 0 })),
+		{ timeout: 10000 },
+	);
+	expect(await api.readThread({ thread, view: "recent", limit: 10 })).toMatchObject({
+		ok: true,
+		page: { thread: { read_up_to: second!.seq } },
+	});
+	expect(await api.markRead({ thread, seq: 0 })).toMatchObject({ ok: false });
+});
+
 test("lost publication receipts recover the recorded effect without republishing changed or repeated intent", async () => {
 	const thread = await channel("Receipt recovery");
 	const send = vi.fn<Commands["send"]>(async (...args) => {

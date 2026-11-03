@@ -160,6 +160,11 @@ export function installWorkplaceCommunications() {
 		react: async () => {
 			throw new Error("Reactions are outside this retained-reader fixture");
 		},
+		markRead: async (request) => {
+			record("markRead", request);
+			w.communicationFixture?.ack?.(request.thread, request.seq);
+			return { ok: true };
+		},
 		archive: async () => {
 			throw new Error("Archive is outside this retained-reader fixture");
 		},
