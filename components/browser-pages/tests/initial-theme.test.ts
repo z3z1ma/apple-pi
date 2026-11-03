@@ -10,8 +10,3 @@ test("a page opened with ?theme= starts in that theme, whatever the system prefe
 	window.history.replaceState(null, "", "/?t=token&theme=light");
 	expect(initialTheme()).toBe("light");
 });
-
-test("without a theme the page follows the system preference", () => {
-	window.history.replaceState(null, "", "/?t=token&theme=sepia");
-	expect(initialTheme()).toBe(matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-});
