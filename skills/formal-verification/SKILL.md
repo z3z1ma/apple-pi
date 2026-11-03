@@ -19,15 +19,17 @@ Read the code, its `.context` invariants where present, the governing intent and
 
 Represent durable state separately from volatile state. Make a transaction one durable transition, with volatile intermediate phases where a crash can occur. Preserve separate stores as separate transitions: a database commit and a transcript or filesystem write are different events. Model acknowledgments and retries independently from effects. Keep the identity and deduplication rule the implementation actually uses.
 
-Write `Init`, `Next` and named invariants in `specs/<system>.tla`, with the finite instance and checked properties in its `.cfg`. Choose bounds that distinguish the cases being claimed, such as one identity retried versus two different identities interleaved; explain the choice. Record each abstraction and excluded behavior. Model the current implementation first; keep a proposed repair or deliberately broken control labeled separately.
+Write `Init`, `Next` and named invariants in a `<system>.tla` file, with the finite instance and checked properties in its `.cfg`. Choose bounds that distinguish the cases being claimed, such as one identity retried versus two different identities interleaved; explain the choice. Record each abstraction and excluded behavior. Model the current implementation first; keep a proposed repair or deliberately broken control labeled separately.
 
 ## Run the checker
 
-Call `tlc_check` with the `.tla` path (and `config` when the `.cfg` is not beside it). It runs TLC with a pinned, checksummed `tla2tools.jar` (downloaded on first use; needs Java) and returns a verdict: `pass`, `violation` with the property name, `deadlock`, or `error`. A violation or deadlock comes with the counterexample as numbered states, each with its action and variable values, plus state counts and depth. One module plus the standard TLA+ modules is supported; the declared module name may differ from the file name.
+Call `tlc_check` with the `.tla` path (and `config` when the `.cfg` is not beside it). It runs TLC with pinned, checksummed tools (downloaded on first use; needs Java) and returns a verdict: `pass`, `violation` with the property name, `deadlock`, `incomplete` or `error`. A violation or deadlock comes with the counterexample as numbered states, each with its action and variable values, plus state counts and depth. A spec can split into modules in its directory, under any file names, and can extend the TLA+ Community Modules (`SequencesExt`, `FiniteSetsExt`, `Functions`, `Folds`, `Relation`, `Graphs` and others).
+
+Grow confidence by growing bounds. Start at the smallest instance that separates the cases, then raise `constants` run by run (`{"Workers": "{w1, w2, w3}"}`) under a `timeLimit`, without editing the `.cfg`. When a state space is too large to exhaust, `mode: "simulate"` samples long random behaviors and `mode: "depth-first"` checks every behavior up to `depth` steps; both report `incomplete` when they find nothing. Pass extra `invariants` or `properties` to check a new claim against the same model.
 
 [`examples/lost-update.tla`](examples/lost-update.tla) is a small model to try first: two workers read a counter and write back the value plus one, and `tlc_check` finds the interleaving that loses an update.
 
-Require a `pass` with no states left on the queue, not merely a parsed spec or a stopped search. Retain the spec, configuration, tool version, state counts and verdict. A deliberately broken model should come back as a violation with a trace; this checks that the check can detect violations rather than accept every model.
+Require a `pass`, not an `incomplete` search or a parsed spec. Treat any action listed as never taking a step as a modelling error: an invariant that holds because nothing happens proves nothing. Retain the spec, configuration, tool version, state counts and verdict. A deliberately broken model should come back as a violation with a trace; this checks that the check can detect violations rather than accept every model.
 
 ## Counterexample-to-test loop
 
