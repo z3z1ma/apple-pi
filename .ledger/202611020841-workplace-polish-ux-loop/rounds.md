@@ -131,3 +131,14 @@ Open: the desk keeps a separate row for search / Catch up / Read latest / Action
 - Tests: the central-dock terminal failure was a real defect. Ghostty's FitAddon ignores `fit()` for 50 ms after a resize, so a window resize landing then left the terminal at its old size; the terminal now refits after that window (`d9206d6a`). The `/org experience` test passed 3 of 3 alone and in its file; not reproduced, so unchanged.
 - Offline composing: deferred by the operator.
 - Coordinator proven live: superseded by the desk-intelligence direction.
+
+## Round 22: controls and modals (`57802bb6`)
+
+The operator found native dropdowns, a floating unstyled "Earlier messages" button, a single-recipient Mail compose and a poor channel modal.
+
+- One `Select` and one `Recipients` control (`workplace-fields.tsx`) replace every native `<select>` and `<datalist>`: Org, Add person, Code, Reviews, Issues, Desk, Activity sources, channels. Tests choose options through `tests/helpers/select.ts`.
+- Mail compose is Gmail-shaped: To and Cc chips with typeahead, a subject, several recipients.
+- @mentions work in DMs, using the channel composer's mention list.
+- Earlier messages is a centered pill at the top of the list and loads as he scrolls up; scrolling to the end loads nothing.
+- Modals share one look (`wp-modal`: title row, icon close, body, footer with one primary action, blurred backdrop, fade). Discover channels is a Slack-style browser that searches as he types, with rows that open on click.
+- Found on the way: the Reviews `choose` hit both the control and its list by label, and `world-file-links` expected mail rows to start with the subject (failed at HEAD too; fixed).
