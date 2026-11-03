@@ -1,5 +1,3 @@
-/* The headquarters' notepad: layout only, on the letter form's fields; the look comes from the theme pack's skin. */
-
 .aw-notepad {
 	width: min(760px, calc(100vw - 48px));
 }
@@ -21,7 +19,6 @@
 	text-transform: none;
 }
 
-/* A request to an agent takes room from the notes, so the dialog still fits the window. */
 .aw-notepad .aw-place-body:has(.aw-notepad-request) .aw-notepad-text {
 	min-height: min(24vh, 200px);
 	height: min(24vh, 200px);

@@ -1,9 +1,3 @@
-// The town square's panels (tickets 27 and 28). The crier searches all of Slack as its own search bar does (on Enter
-// only: channels named like it first, then the messages found, each opening its channel or thread at that message) and
-// lists every channel; a channel reads in a panel with names, times, and messages, its threads expanding. In a thread the operator replies as
-// himself, only through the outside-write gate's confirmation (the exact text and where it goes), or asks an agent to
-// look into it, which is an instruction to the agent and posts nothing to Slack. A channel or thread opens at its first
-// new message (ticket 05 of the aliveness task), and reading changes nothing in Slack: only Mark read does.
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { SlackChannel, SlackHit, SlackMessage, SlackThread } from "../../../src/integrations.js";
 import type { Character, WorldSnapshot } from "../../../src/world.js";
@@ -38,7 +32,6 @@ export function SquarePanels({ world }: { world: WorldSnapshot | undefined }) {
 	);
 }
 
-/** A channel's kind as a small mark before its name: `#` for a channel, a lock, or a person. */
 function KindMark({ kind }: { kind: SlackChannel["kind"] }) {
 	return (
 		<span className={`aw-slack-kind aw-slack-kind-${kind}`} aria-hidden="true">
@@ -73,7 +66,6 @@ function KindMark({ kind }: { kind: SlackChannel["kind"] }) {
 	);
 }
 
-/** Without a sign-in, a place that reads Slack says how to get one; the button opens Slack's own sign-in. */
 export function SlackSignIn({ state, lead, settings }: { state: SlackState; lead?: ReactNode; settings?: boolean }) {
 	return (
 		<div className="aw-slack-signin">
@@ -103,10 +95,6 @@ export function SlackSignIn({ state, lead, settings }: { state: SlackState; lead
 	);
 }
 
-/**
- * The crier: a search of all of Slack, run only on Enter (or Search), and the channels: those with unread messages,
- * or every one the operator belongs to, filtered by name as he types (which asks Slack nothing).
- */
 function CrierPanel() {
 	const theme = useTheme();
 	const state = useSlack();
@@ -168,7 +156,7 @@ function CrierPanel() {
 							value={text}
 							onChange={(event) => {
 								setText(event.target.value);
-								// Emptied: back to the channels (Slack is not asked).
+
 								if (!event.target.value.trim()) slack.clearSearch();
 							}}
 						/>
@@ -229,7 +217,6 @@ function CrierPanel() {
 	);
 }
 
-/** How many channels are unread, as the crier's list says it. */
 function unreadCaption(state: SlackState): string {
 	const unread = state.channels.length;
 	if (unread) return `${unread} ${unread === 1 ? "channel has" : "channels have"} unread messages`;
@@ -238,7 +225,6 @@ function unreadCaption(state: SlackState): string {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** What a search found, as its caption says it. */
 function searchCaption(search: SlackSearchState): string {
 	if (search.problem && !search.hits) return search.problem;
 	if (!search.hits) return `Searching Slack for \u201c${search.text}\u201d\u2026`;
@@ -251,7 +237,6 @@ function searchCaption(search: SlackSearchState): string {
 	return `${found} for \u201c${search.text}\u201d`;
 }
 
-/** A search's results: the channels named like it first, then the messages Slack found, a page at a time. */
 function SearchResults({
 	search,
 	unread,
@@ -311,7 +296,6 @@ function SearchResults({
 	);
 }
 
-/** One message found: where it is (and in which thread), who wrote it and when, and the words that matched. */
 function HitRow({ hit, theme }: { hit: SlackHit; theme: Theme | undefined }) {
 	const title = channelTitle(hit.channel);
 	const thread = hit.threadTs !== null;
@@ -353,7 +337,6 @@ function HitRow({ hit, theme }: { hit: SlackHit; theme: Theme | undefined }) {
 	);
 }
 
-/** What the list of every channel says above itself. */
 function allCaption(state: SlackState, shown: number, filter: string): string {
 	const all = state.all.channels;
 	if (!all) return state.all.problem ?? "Listing every channel you are in\u2026";
@@ -364,10 +347,6 @@ function allCaption(state: SlackState, shown: number, filter: string): string {
 	return `${plural(all.length, "conversation", "conversations")} you are in`;
 }
 
-/**
- * Every channel, direct message, and group the operator belongs to, the unread first with their counts; the filter
- * narrows the loaded list as he types, asking Slack nothing. In the crier and in the Slack tab.
- */
 export function AllChannels({ theme, inTab }: { theme: Theme | undefined; inTab?: boolean }) {
 	const state = useSlack();
 	const [filter, setFilter] = useState("");
@@ -400,9 +379,7 @@ export function AllChannels({ theme, inTab }: { theme: Theme | undefined; inTab?
 	);
 }
 
-/** One channel in a list: its kind, name, and unread count; choosing it reads it. */
 export function ChannelRow({ channel, theme }: { channel: SlackChannel; theme: Theme | undefined }) {
-	// The list of every channel says which are unread; elsewhere a channel with a count or a newest message is.
 	const unread =
 		channel.unreads ?? (channel.unread !== null || channel.more || channel.mentions > 0 || channel.latest !== null);
 	const look = theme ? townsfolkLook(theme, channel.id) : undefined;
@@ -436,7 +413,6 @@ export function ChannelRow({ channel, theme }: { channel: SlackChannel; theme: T
 	);
 }
 
-/** A time as a channel shows it: the clock today, the weekday this week, else the date. */
 function when(at: number): string {
 	const date = new Date(at);
 	const now = new Date();
@@ -451,7 +427,6 @@ function when(at: number): string {
 	});
 }
 
-/** Text with its links made clickable (they open in the browser); the rest as written. */
 function Linked({ text }: { text: string }) {
 	const parts = text.split(/(https?:\/\/[^\s)]+)/g);
 	return (
@@ -484,36 +459,30 @@ interface Opened {
 	loading: boolean;
 	messages?: SlackMessage[];
 	url?: string | null;
-	/** The newest reply the operator has read, when Slack says (threads he follows). */
+
 	lastRead?: string | null;
 	problem?: string;
 }
 
-/** Where the new messages begin: the first one after `lastRead`, -1 when none is new. */
 function firstAfter(messages: SlackMessage[], lastRead: string | null | undefined): number {
 	if (!lastRead) return -1;
 	return messages.findIndex((message) => Number(message.ts) > Number(lastRead));
 }
 
-/** Scroll `box` so `mark` (the New divider) sits at the top of its view. */
 function scrollToMark(box: HTMLElement, mark: HTMLElement) {
 	const top = mark.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
 	box.scrollTop = Math.max(0, top - 4);
 }
 
-/** Scroll `box` so `item` (a message opened at) sits a third of the way down its view. */
 function scrollToItem(box: HTMLElement, item: HTMLElement) {
 	const top = item.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
 	box.scrollTop = Math.max(0, top - box.clientHeight / 3);
 }
 
-/** A Mark read button's progress: sending, or why it failed. */
 type Marking = { state: "sending" } | { state: "failed"; reason: string } | undefined;
 
-/** What is being written under a thread: a reply as the operator, or a request to an agent. */
 type Writing = { ts: string; mode: "reply" | "ask" };
 
-/** A channel read in a panel: its latest messages, newest last, threads opening under their first message. */
 function ChannelPanel({
 	channel,
 	look,
@@ -522,7 +491,7 @@ function ChannelPanel({
 }: {
 	channel: ChannelRef;
 	look?: string;
-	/** A message to open at (found by search), and its thread if it is a reply in one. */
+
 	focus?: MessageRef;
 	world: WorldSnapshot | undefined;
 }) {
@@ -531,9 +500,9 @@ function ChannelPanel({
 	const [read, setRead] = useState<{ thread?: SlackThread; problem?: string }>({});
 	const [threads, setThreads] = useState<Record<string, Opened>>({});
 	const [writing, setWriting] = useState<Writing>();
-	/** The thread just opened, to bring into view once its replies show. */
+
 	const [justOpened, setJustOpened] = useState<string>();
-	/** Marked read here, up to this message (the channel); and its button's progress. */
+
 	const [markedTs, setMarkedTs] = useState<string>();
 	const [marking, setMarking] = useState<Marking>();
 	const [threadMarking, setThreadMarking] = useState<Record<string, Marking>>({});
@@ -545,7 +514,7 @@ function ChannelPanel({
 	const unread = listed?.unread ?? channel.unread ?? 0;
 	const wearer = look ?? (theme ? townsfolkLook(theme, channel.id) : undefined);
 	const portrait = theme && wearer ? portraitOf(theme, wearer, listed?.mentions ? "worried" : "neutral") : undefined;
-	/** The message in the channel to open at: the hit, or the thread it is a reply in. */
+
 	const target = focus?.threadTs ?? focus?.ts;
 
 	useEffect(() => {
@@ -568,14 +537,10 @@ function ChannelPanel({
 	}, [channel.id, target]);
 
 	const messages = read.thread?.messages ?? [];
-	/**
-	 * Where the new messages begin: after where Slack says the operator last read (or after what he marked read here);
-	 * when Slack does not say, the listing's unread count from the newest back.
-	 */
+
 	const lastRead = markedTs ?? read.thread?.lastRead;
 	const firstNew = lastRead ? firstAfter(messages, lastRead) : unread > 0 ? Math.max(0, messages.length - unread) : -1;
-	// Open at the message asked for (found by search); else at the first new message, the New divider just above it,
-	// or at the newest when nothing is new.
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll once, when the messages first arrive
 	useLayoutEffect(() => {
 		const box = list.current;
@@ -586,7 +551,7 @@ function ChannelPanel({
 		if (mark) scrollToMark(box, mark);
 		else box.scrollTop = box.scrollHeight;
 	}, [read.thread]);
-	// Opened at a reply in a thread: that thread opens with the channel.
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: once, when the messages first arrive
 	useEffect(() => {
 		const parent = focus?.threadTs;
@@ -594,7 +559,7 @@ function ChannelPanel({
 		setJustOpened(parent);
 		void openThread(parent);
 	}, [read.thread]);
-	// A thread opened: at the reply asked for, else at its first new reply, else down to its newest.
+
 	useLayoutEffect(() => {
 		const box = list.current;
 		const opened = justOpened && threads[justOpened];
@@ -672,7 +637,7 @@ function ChannelPanel({
 	};
 
 	const sent = write.state.phase === "sent" ? write.state : undefined;
-	// A reply sent: read its thread again, so it shows in place.
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: only when a write was sent
 	useEffect(() => {
 		if (sent?.intent.kind === "slack-reply") void openThread(sent.intent.threadTs);
@@ -878,9 +843,9 @@ function Message({
 }: {
 	message: SlackMessage;
 	reply?: boolean;
-	/** The message opened at (found by search): it stands out. */
+
 	focused?: boolean;
-	/** What can be done with it, shown over its corner while the pointer or the focus is on it. */
+
 	acts?: ReactNode;
 	children?: ReactNode;
 }) {
@@ -901,7 +866,6 @@ function Message({
 	);
 }
 
-/** A reply in a thread as the operator: the gate describes it, he confirms the exact text, and only then it is sent. */
 function ReplyForm({
 	channel,
 	parent,
@@ -985,7 +949,6 @@ function ReplyForm({
 	);
 }
 
-/** The agents who can be asked: the coordinator first (it can hand work on), then everyone awake by name. */
 function askable(world: WorldSnapshot | undefined): Character[] {
 	const awake = world?.characters ?? [];
 	const coordinators = awake.filter((c) => c.role === "coordinator");
@@ -993,7 +956,6 @@ function askable(world: WorldSnapshot | undefined): Character[] {
 	return [...coordinators, ...others];
 }
 
-/** Asking an agent to look into a thread: an instruction naming it, sent to the agent; nothing goes to Slack. */
 function AskForm({
 	channel,
 	parent,
@@ -1022,7 +984,7 @@ function AskForm({
 		if (!chosen || !delegate) return;
 		const id = `square:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
 		setProgress({ state: "sending", text: `Asking ${chosen.name}\u2026` });
-		// The receipt follows: delivered and applied, as for any instruction.
+
 		stop.current?.();
 		stop.current = slack.api().onReceipt?.((receipt) => {
 			if (receipt.commandId !== id) return;

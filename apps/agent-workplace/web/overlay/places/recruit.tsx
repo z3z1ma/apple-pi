@@ -1,7 +1,3 @@
-// The hire form (ticket 10), in the theme's words: at a manager's desk it hires a person who reports to that manager,
-// at the square's recruiter an independent one. It asks for a name, a role from the catalog (each with its mandate; a
-// person hired at the square may have none), a repository (one the world knows, or a typed path), and an opening
-// brief, sends `start`, and shows the receipt; the new person then walks into its manager's room or the square.
 import { useState, useSyncExternalStore } from "react";
 import type { RoleChoice, WorldSnapshot } from "../../../src/world.js";
 import { lookFor, portraitOf } from "../../looks.js";
@@ -17,9 +13,8 @@ import {
 } from "./recruit-state.js";
 import "./recruit.css";
 
-/** The select's value for a directory typed by hand. */
 const TYPED = "";
-/** The role select's value for a session hired into no role. */
+
 const NO_ROLE = "";
 
 export function RecruitPanels({ world }: { world: WorldSnapshot | undefined }) {
@@ -42,7 +37,7 @@ function RecruitForm({
 	const coordinator = worker ? recruit.coordinator : undefined;
 	const [repositories] = useState(() => knownRepositories(world, coordinator?.id));
 	const [name, setName] = useState("");
-	// A hire under a manager takes a role; the first offered until chosen. At the square the choice includes none.
+
 	const [chosen, setChosen] = useState<string>();
 	const role = chosen ?? (worker ? roles?.[0]?.name : NO_ROLE) ?? NO_ROLE;
 	const choice = roles?.find((offered) => offered.name === role);

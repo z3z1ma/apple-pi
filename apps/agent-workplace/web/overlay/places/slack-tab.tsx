@@ -1,6 +1,3 @@
-// Slack in the interface (ticket 27): the side panel's Slack tab (the channels with unread messages, one click from
-// reading, or every channel filtered by name; the crier to search Slack), the unread orb's number, and Settings' Slack
-// sign-in. All read `slack-state`.
 import { useState, useSyncExternalStore } from "react";
 import { useTheme } from "../../theme-store.js";
 import { slack, unreadTotal } from "./slack-state.js";
@@ -9,7 +6,6 @@ import { squarePanels } from "./square-panels.js";
 
 const useSlack = () => useSyncExternalStore(slack.subscribe, slack.get);
 
-/** The Slack tab's icon: two speech bubbles, one answering the other. */
 export function SlackIcon() {
 	const stroke = {
 		fill: "none",
@@ -26,7 +22,6 @@ export function SlackIcon() {
 	);
 }
 
-/** What the unread orb shows: the unread total (`120+` when there are more than counted), or nothing signed out. */
 export function useUnreadOrb(): { text: string; label: string; title: string; signedIn: boolean } {
 	const state = useSlack();
 	if (state.status !== "signed-in")
@@ -51,7 +46,6 @@ export function useUnreadOrb(): { text: string; label: string; title: string; si
 	};
 }
 
-/** The Slack tab: every channel with unread messages, most pressing first, or every channel; the crier to search. */
 export function SlackTab() {
 	const state = useSlack();
 	const theme = useTheme();
@@ -72,7 +66,7 @@ export function SlackTab() {
 	const { channels } = state;
 	return (
 		<section aria-label="Slack" className="aw-slack-tab">
-			{/* The Mail tab's head, with its action beside the title. */}
+			{}
 			<h3 className="aw-mail-head">
 				<span>{state.account?.team ?? "Slack"}</span>
 				<button type="button" className="aw-button aw-mail-write" onClick={() => squarePanels.openCrier()}>
@@ -107,7 +101,6 @@ export function SlackTab() {
 	);
 }
 
-/** Settings: sign in to Slack (its own window, captured by the backend), see the workspace, and sign out. */
 export function SlackSettings() {
 	const state = useSlack();
 	if (state.status === "unavailable") return null;

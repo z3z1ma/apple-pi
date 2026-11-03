@@ -1,5 +1,3 @@
-// What the minimap draws for a place: its painting (cut into strips for a growing place) and its size, from the same
-// layout the world draws, plus the dots and view the world reports.
 import type { PlaceRef, WorldSnapshot } from "../../../src/world.js";
 import { placeKey } from "../../../src/world.js";
 import { layoutFor } from "../../game/layout.js";
@@ -7,7 +5,6 @@ import type { Door, PlaceData, Theme } from "../../theme.js";
 import type { MinimapView } from "../../view-state.js";
 import { placesOf } from "./model.js";
 
-/** The place with this key, as a reference. */
 export function placeRef(key: string, world: WorldSnapshot | undefined): PlaceRef | undefined {
 	return placesOf(world).find((ref) => placeKey(ref) === key);
 }
@@ -37,10 +34,8 @@ export function minimapFor(
 	};
 }
 
-/** The places out of doors that lead on to one another, with no door between them: the square and the street. */
 const OPEN_AIR = new Set(["square", "street"]);
 
-/** The ways from one place out of doors to the next: where each door meets the edge of the place it leaves by. */
 function exitsOf(kind: string, place: PlaceData, labels: Record<string, string>): NonNullable<MinimapView["exits"]> {
 	if (!OPEN_AIR.has(kind)) return [];
 	return place.doors
@@ -48,7 +43,6 @@ function exitsOf(kind: string, place: PlaceData, labels: Record<string, string>)
 		.map((door) => ({ name: labels[door.to] ?? door.name, ...atEdge(door, place) }));
 }
 
-/** The edge a door's rect lies nearest, and the point on that edge across from its middle. */
 function atEdge(door: Door, place: PlaceData): { x: number; y: number; edge: "left" | "right" | "top" | "bottom" } {
 	const [x, y, w, h] = door.rect;
 	const mid = [x + w / 2, y + h / 2];

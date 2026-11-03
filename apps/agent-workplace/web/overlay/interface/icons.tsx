@@ -1,6 +1,3 @@
-// Small drawn icons for the interface's tabs, pips, and buttons: inline SVG, so they stay crisp at any zoom and sit
-// exactly centred (text glyphs ride on font metrics and drift off centre).
-
 const stroke = {
 	fill: "none",
 	stroke: "currentColor",
@@ -29,7 +26,6 @@ export function BellIcon() {
 	);
 }
 
-/** Work, by default: a checklist (a pack may draw its own, `--aw-icon-work`). */
 export function ChecklistIcon() {
 	return (
 		<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
@@ -49,7 +45,6 @@ export function LetterIcon() {
 	);
 }
 
-/** Places, by default: a folded map (a pack may draw its own, `--aw-icon-places`). */
 export function MapIcon() {
 	return (
 		<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
@@ -110,7 +105,6 @@ export function ChevronIcon({ open }: { open: boolean }) {
 	);
 }
 
-/** Two arrows apart (show more) or together (show less). */
 export function GrowIcon({ grown }: { grown: boolean }) {
 	return (
 		<svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">

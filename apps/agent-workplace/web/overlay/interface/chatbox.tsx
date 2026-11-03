@@ -1,6 +1,3 @@
-// The chatbox at the bottom left: world events as lines (the runtime's feed, and what the operator did here), with a
-// toggle per kind. It keeps to the newest line unless the operator has scrolled up to read. It is compact by default
-// (about five lines, so the world stays the hero), shows more lines on demand, and folds down to its bar.
 import { useLayoutEffect, useRef } from "react";
 import type { FeedKind } from "../../../src/world.js";
 import { ChevronIcon, GrowIcon } from "./icons.js";
@@ -46,10 +43,10 @@ export function Chatbox({
 	onAll: () => void;
 	folded: boolean;
 	onFold: () => void;
-	/** Showing more lines than the compact five. */
+
 	tall: boolean;
 	onTall: () => void;
-	/** Whether a character is awake, so its name can be examined from a line. */
+
 	awake: (id: string) => boolean;
 	onName: (id: string) => void;
 }) {
@@ -134,7 +131,6 @@ export function Chatbox({
 	);
 }
 
-/** The line's text, its character's name a link to examine it while it is awake. */
 function LineText({
 	line,
 	awake,

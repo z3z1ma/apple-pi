@@ -1,7 +1,3 @@
-// The function places' own panels and what they send (tickets 15 and 16): the innkeeper's register of dormant agents,
-// the rookery's mail, and ending a session. The world, the side panel, and the panels themselves all act through
-// `placeActions`, so a wake or an ended session reads the same wherever it started. `main.tsx` connects the backend
-// API and the view store. Each change replaces the state object, as useSyncExternalStore needs.
 import type { AgentWorkplaceApi, Character, DormantAgent } from "../../../src/world.js";
 import { conversations } from "../../game/actions.js";
 import { sleeperCharacter } from "../../game/layout.js";
@@ -12,7 +8,6 @@ import { onePanel } from "../one-panel.js";
 
 export type PlacesApi = Pick<AgentWorkplaceApi, "wake" | "endSession" | "sendMail">;
 
-/** What became of something the operator asked for, shown where he asked: sending, done, or failed with why. */
 export interface Progress {
 	state: "sending" | "done" | "failed";
 	text: string;
@@ -20,14 +15,14 @@ export interface Progress {
 
 export interface PlacesState {
 	panel?: "innkeeper" | "rookery";
-	/** Counts each opening, so opening again starts afresh. */
+
 	opening: number;
-	/** The rookery opens on a letter to write (from the Mail tab, or the sorting desk), to `letterTo` when chosen. */
+
 	write?: boolean;
 	letterTo?: string;
-	/** A busy session the operator asked to end: he confirms before anything is sent. */
+
 	confirmEnd?: { id: string; name: string; reason: string };
-	/** Wakes asked for, by character id. */
+
 	wakes: Record<string, Progress>;
 	api?: PlacesApi;
 	view?: ViewStore;
@@ -66,7 +61,6 @@ export const placePanels = {
 onePanel.closes("places", () => placePanels.close());
 
 export const placeActions = {
-	/** Wake a dormant agent: its session opens in a new tmux window, and it walks out of the inn to its place. */
 	async wake(agent: Pick<DormantAgent, "id" | "name">) {
 		const { api, view } = state;
 		if (!api || state.wakes[agent.id]?.state === "sending") return;
@@ -89,16 +83,11 @@ export const placeActions = {
 		}
 	},
 
-	/** Read a dormant agent's last conversation in the conversation panel (it has no actions while asleep). */
 	readConversation(agent: DormantAgent) {
 		placePanels.close();
 		conversations.open(sleeperCharacter(agent));
 	},
 
-	/**
-	 * Mail a character as the operator. Resolves with what the letter form shows: delivered, waiting for a sleeper to
-	 * wake, or why it failed.
-	 */
 	async sendMail(to: { id: string; name: string; asleep: boolean }, body: string): Promise<Progress> {
 		const { api, view } = state;
 		if (!api) return { state: "failed", text: "Agent Workplace is not connected." };
@@ -117,7 +106,6 @@ export const placeActions = {
 		}
 	},
 
-	/** End an awake session; a busy one waits for the operator to confirm (decision 13). */
 	async endSession(character: Pick<Character, "id" | "name">, confirmed = false) {
 		const { api, view } = state;
 		if (!api) return;

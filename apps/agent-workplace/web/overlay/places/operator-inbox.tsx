@@ -14,7 +14,6 @@ export function ThreadMessages({ thread }: { thread: MailThread }) {
 	));
 }
 
-/** Reading clears only the displayed messages; a later arrival keeps its unread badge until Read latest. */
 export function OperatorInbox({ threads }: { threads: MailThreadSummary[] }) {
 	const [thread, setThread] = useState<MailThread>();
 	const [drafts, setDrafts] = useState<Record<string, string>>({});

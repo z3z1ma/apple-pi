@@ -3,7 +3,6 @@ import type { Action } from "../../game/actions.js";
 import "./pointer.css";
 import { pointer } from "./pointer-state.js";
 
-/** RuneScape's pointer chrome as crisp HTML: hover text at the top left and the right-click menu. */
 export function PointerLayer() {
 	const state = useSyncExternalStore(pointer.subscribe, pointer.get);
 	useEffect(() => {
@@ -52,7 +51,6 @@ function HoverText({ actions }: { actions: Action[] }) {
 
 const MARGIN = 6;
 
-/** The menu opens under the pointer, as RuneScape's does, and closes when the pointer leaves it. */
 function Menu({ x, y, actions }: { x: number; y: number; actions: Action[] }) {
 	const ref = useRef<HTMLDivElement>(null);
 	const [at, setAt] = useState<{ left: number; top: number }>({ left: x, top: y });

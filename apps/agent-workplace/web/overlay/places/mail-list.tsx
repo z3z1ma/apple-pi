@@ -1,5 +1,3 @@
-// Mail as the rookery and the Mail tab list it: who wrote to whom, when, a preview, and whether it arrived (delivered
-// once the receiver's transcript holds it, waiting until then, as for a sleeper). A row opens to the whole letter.
 import { useState } from "react";
 import type { MailItem } from "../../../src/world.js";
 import { ago } from "../interface/model.js";

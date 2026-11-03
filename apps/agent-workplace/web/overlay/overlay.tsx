@@ -7,12 +7,11 @@ import { PlacesOverlay } from "./places/places-overlay.js";
 import { PointerLayer } from "./pointer/pointer-layer.js";
 
 const NOTICE_MS = 2600;
-/** A longer line (an ambient character's) stays long enough to read: this much longer per character (ms). */
+
 const NOTICE_MS_PER_CHAR = 45;
-/** A broken theme's problems listed on screen; the rest are counted. */
+
 const THEME_PROBLEMS_SHOWN = 3;
 
-/** The HTML drawn over the world. */
 export function Overlay({ store, view }: { store: WorldStore; view: ViewStore }) {
 	const snapshot = useSyncExternalStore(store.subscribe, store.get);
 	const state = useSyncExternalStore(view.subscribe, view.get);
@@ -64,7 +63,6 @@ function Notice({ text }: { text: string }) {
 	) : null;
 }
 
-/** Shown until dismissed: a pack the world could not wear, what it wears instead, and the pack check's findings. */
 function ThemeNotice({
 	problem,
 	onDismiss,

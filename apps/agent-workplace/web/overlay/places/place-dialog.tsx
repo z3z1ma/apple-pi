@@ -1,18 +1,9 @@
-// The frame every function place's panel opens in: over the dimmed world, carved wood around parchment, closed by
-// its button, Escape, or a click on the world. While it is open the world's keys rest (typing a search must not walk
-// the view or toggle the walk grid); keys typed inside it reach its fields first.
 import { type ReactNode, useEffect, useRef } from "react";
 import { focusWorld, trapTab } from "../focus.js";
 import { placePanels } from "./place-panels.js";
 
-/**
- * Layers over the open panel (a write's confirmation): Escape, the close button, or a click on the world dismiss the
- * top one before the panel. They are kept here, not by the layer's own key listener, because the panel's window
- * capture listener was added first and so sees Escape first.
- */
 const layers: (() => void)[] = [];
 
-/** Put a layer over the open panel; `dismiss` runs instead of closing it. Returns the layer's removal. */
 export function dialogLayer(dismiss: () => void): () => void {
 	layers.push(dismiss);
 	return () => {
@@ -30,7 +21,7 @@ export function PlaceDialog({
 	label: string;
 	className: string;
 	children: ReactNode;
-	/** Closing by the button, Escape, or the world: the place's own panels close themselves (else `placePanels`). */
+
 	onClose?: () => void;
 }) {
 	const ref = useRef<HTMLDivElement>(null);
@@ -62,7 +53,7 @@ export function PlaceDialog({
 		return () => {
 			window.removeEventListener("keydown", capture, { capture: true });
 			document.removeEventListener("keydown", bubble);
-			// Closed: the world has the keys again.
+
 			focusWorld();
 		};
 	}, []);

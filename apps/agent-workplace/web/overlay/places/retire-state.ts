@@ -1,7 +1,3 @@
-// Retiring a person: the small form opened from a character's actions, in the theme's words (leaving the guild,
-// resigning, graduating), and what it sends (the runtime's `retire` with a reason; the person leaves the organization
-// with an optional own-context handoff; cleanup may still be pending). `main.tsx` connects the backend API and the view store. Each change replaces the
-// state object, as useSyncExternalStore needs.
 import type { AgentWorkplaceApi, Character } from "../../../src/world.js";
 import { say } from "../../theme.js";
 import { themeStore } from "../../theme-store.js";
@@ -11,7 +7,7 @@ import type { Progress } from "./place-panels.js";
 
 export interface RetireState {
 	open?: Pick<Character, "id" | "name">;
-	/** Counts each opening, so opening again starts afresh. */
+
 	opening: number;
 	api?: Pick<AgentWorkplaceApi, "retire">;
 	view?: ViewStore;
@@ -40,7 +36,7 @@ export const retiring = {
 	close() {
 		if (state.open) update({ open: undefined });
 	},
-	/** Send `retire` for the person; resolves with what the form shows, and says it in the chatbox. */
+
 	async send(character: Pick<Character, "id" | "name">, given: string, handoff = true): Promise<Progress> {
 		const reason = given.trim();
 		if (!reason) return { state: "failed", text: "Say why it leaves." };

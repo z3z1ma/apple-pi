@@ -1,6 +1,3 @@
-// Delegating from the quest office and the library (decision 25): the operator asks an agent to work on an issue or a
-// page. It is an ordinary instruction (a `talk`, or a `follow_up` to a busy agent) naming the item; nothing is written
-// to Jira or Confluence. Its receipts (sent, delivered, applied) show where he asked, and the chatbox notes it.
 import { useEffect, useRef, useState } from "react";
 import type { DelegationAsk, DelegationItem } from "../../../src/integrations.js";
 import type { Character, WorldSnapshot } from "../../../src/world.js";
@@ -12,16 +9,11 @@ const failure = (error: unknown) => String((error as Error)?.message ?? error);
 const commandId = () =>
 	typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `aw-${Date.now()}-${Math.random()}`;
 
-/** The awake agents to ask, the coordinators first. */
 export function askable(world: WorldSnapshot | undefined): Character[] {
 	const awake = world?.characters ?? [];
 	return [...awake.filter((c) => c.role === "coordinator"), ...awake.filter((c) => c.role !== "coordinator")];
 }
 
-/**
- * Send a delegation and follow its receipts: `onProgress` hears sending, then delivered or applied (done), or why it
- * failed. Resolves once the backend answered.
- */
 export async function delegate(
 	to: string,
 	item: DelegationItem,
@@ -61,7 +53,7 @@ export async function delegate(
 			state: "done",
 			text: result.command === "follow_up" ? `${target} is busy; it gets this after its turn.` : `Sent to ${target}.`,
 		});
-		// Later receipts (delivered, applied) refine the line; stop listening after a while.
+
 		setTimeout(() => stop?.(), 60_000);
 	} catch (error) {
 		stop?.();
@@ -69,10 +61,6 @@ export async function delegate(
 	}
 }
 
-/**
- * The form under an issue or a page: whom to ask (the coordinator for an issue; any awake agent for a page), what to
- * ask (for a page: summarise or update), and a note in the operator's own words.
- */
 export function HandOver({
 	world,
 	item,
@@ -84,9 +72,9 @@ export function HandOver({
 }: {
 	world: WorldSnapshot | undefined;
 	item: DelegationItem;
-	/** What may be asked, the first chosen. */
+
 	asks: { ask: DelegationAsk; label: string }[];
-	/** Always this agent (`coordinator`); otherwise the operator picks one. */
+
 	fixedTo?: "coordinator";
 	title: string;
 	hint: string;

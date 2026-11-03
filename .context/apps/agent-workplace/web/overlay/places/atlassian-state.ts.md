@@ -1,3 +1,8 @@
+## file
+
+Successful sign-in invalidates pre-sign-in assigned/recent results and permits fresh reads.
+Why: signed-out failures no longer describe the current credential state.
+
 ## symbol:atlassian.askSignIn
 
 Opens Settings through the `open-tab` intent and counts the request; `atlassian-settings.tsx` answers a count it has not seen, even when it mounts only after the request (Settings was not the open tab), and puts the cursor in the sign-in form.

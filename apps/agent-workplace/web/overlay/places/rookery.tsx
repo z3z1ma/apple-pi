@@ -1,6 +1,3 @@
-// The rookery keeper's view (ticket 16): mail waiting for sleeping agents, recent mail between agents, and writing a
-// letter to any agent, awake or asleep, as the operator. A letter goes as a `mail` command from the operator's own
-// label; its receipt shows here (delivered, or waiting until its receiver wakes).
 import { useState } from "react";
 import type { WorldSnapshot } from "../../../src/world.js";
 import { portraitOf } from "../../looks.js";
@@ -67,7 +64,6 @@ export function RookeryView({ world }: { world: WorldSnapshot | undefined }) {
 	);
 }
 
-/** A letter to any agent: awake ones first, then those asleep at the inn, whose letters wait until they wake. */
 function LetterForm({ world, to, onDone }: { world: WorldSnapshot | undefined; to?: string; onDone: () => void }) {
 	const awake = world?.characters ?? [];
 	const asleep = world?.dormant ?? [];

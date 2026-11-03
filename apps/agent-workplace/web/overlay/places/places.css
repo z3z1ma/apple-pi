@@ -1,6 +1,3 @@
-/* The function places' panels (the host's list, mail, confirmations): layout only; the look comes from the theme
-   pack's skin. */
-
 .aw-places {
 	z-index: 9;
 }
@@ -166,7 +163,6 @@
 	color: var(--aw-ink-soft);
 }
 
-/* The leaving mark on a former member: the theme's word for it, and why. */
 .aw-register-left {
 	overflow: hidden;
 	font-size: 12px;

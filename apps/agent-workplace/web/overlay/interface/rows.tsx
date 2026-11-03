@@ -1,5 +1,3 @@
-// A character's row in any tab: its state pip, name, what it is doing, and, once chosen, every action on it. Each
-// action works from anywhere; none needs the avatar to walk.
 import type { Character } from "../../../src/world.js";
 import { say } from "../../theme.js";
 import { useTheme } from "../../theme-store.js";
@@ -15,13 +13,8 @@ const PIP_LABEL: Record<Attention, string> = {
 	idle: "Idle",
 };
 
-/** Working with an earlier result unseen: said after the state, as the pip's tick mark shows it. */
 export const UNSEEN_RESULT = "result unseen";
 
-/**
- * The state pip: a question, a tick, three working dots, or a quiet dot, each drawn centred. Working dots carry a
- * small tick when an earlier result is still unseen.
- */
 export function Pip({ attention, unseen = false }: { attention: Attention; unseen?: boolean }) {
 	return (
 		<span className={`aw-pip aw-pip-${attention}`} aria-hidden="true">
@@ -60,7 +53,7 @@ export function ActionButtons({
 		{ action: "go-to", text: "Go to", label: `Go to ${name}` },
 		{ action: "terminal", text: "Terminal", label: `Go to ${name}'s terminal` },
 		{ action: "rename", text: "Rename", label: `Rename ${name}` },
-		// Only a person hired into a role retires; the operator's own sessions have none.
+
 		...(character.facts?.title
 			? [{ action: "retire" as const, text: say(theme, "retire"), label: `Retire ${name}` }]
 			: []),
@@ -100,9 +93,9 @@ export function CharacterRow({
 }: {
 	character: Character;
 	detail: string;
-	/** Its focused task, on a line of its own under the detail. */
+
 	work?: string;
-	/** A time to show at the row's end, such as how long it has needed you. */
+
 	since?: number | null;
 	selected: boolean;
 	onSelect: () => void;

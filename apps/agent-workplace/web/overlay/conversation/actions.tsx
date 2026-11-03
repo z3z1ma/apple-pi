@@ -1,8 +1,3 @@
-// What the operator can do from the foot of the right page, by the character's state (decision 17): idle, Reply
-// (`talk`); busy, Redirect now (`steer`), Tell it after this (`follow_up`), and Stop (`abort`, confirmed first, since
-// it is busy); asking, its questionnaire as a form, or for any other dialog a pointer to its terminal
-// (`question-form.tsx`). Enter sends (Reply, or Redirect now while it works), Shift+Enter starts a new line, and the
-// box keeps the focus. Each instruction sent shows the receipt stages it reached. Drafts outlive closing the panel.
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Character, Instruction, ReceiptStage, WorldSnapshot } from "../../../src/world.js";
 import { useMentions } from "../../workplace-mentions.js";
@@ -11,7 +6,6 @@ import { conversationPanel, type Sent } from "./panel-state.js";
 import { QuestionForm, TerminalOnly } from "./question-form.js";
 import { plainLine, type QuotedMessage, withQuote } from "./quote.js";
 
-/** The message a reply answers, above the box; its quote goes out with the reply. */
 export function ReplyingTo({ message, clear }: { message: QuotedMessage; clear: () => void }) {
 	return (
 		<div className="wp-replying-to">
@@ -26,7 +20,6 @@ export function ReplyingTo({ message, clear }: { message: QuotedMessage; clear: 
 	);
 }
 
-/** The box grows with its text up to this many lines, then scrolls. */
 const MAX_ROWS = 7;
 const PREVIEW = 72;
 
@@ -39,7 +32,6 @@ const LABEL: Record<Instruction["kind"], string> = {
 	withdraw: "Withdraw",
 };
 
-/** The stages shown for a receipt, in order, in the runtime's own words. */
 const STAGES: { stage: ReceiptStage; label: string; title: string }[] = [
 	{ stage: "accepted", label: "Accepted", title: "The session runtime has it" },
 	{ stage: "delivered", label: "Delivered", title: "It reached the agent's session" },
@@ -51,13 +43,8 @@ const preview = (text: string) => {
 	return flat.length > PREVIEW ? `${flat.slice(0, PREVIEW - 1)}\u2026` : flat;
 };
 
-/** A button that acts without taking the focus from the reply box. */
 const keepFocus = (event: React.MouseEvent) => event.preventDefault();
 
-/**
- * The foot of the page by the character's state. When a questionnaire shown here closes, it says who answered it: the
- * operator here, or someone in its terminal.
- */
 export function Footer({
 	character,
 	onSend,
@@ -104,7 +91,6 @@ export function Footer({
 	);
 }
 
-/** The organization a composer can @mention people from; Workplace supplies it, World has none and no mentions. */
 export const MentionPeople = createContext<WorldSnapshot | undefined>(undefined);
 
 export function Actions({ character, note, onSend }: { character: Character; note?: string; onSend: () => void }) {
@@ -130,7 +116,7 @@ export function Actions({ character, note, onSend }: { character: Character; not
 			}),
 		[character.id],
 	);
-	// Stopping is offered only while it works; a confirmation left open closes when it settles by itself.
+
 	useEffect(() => {
 		if (!busy) setConfirming(false);
 	}, [busy]);
@@ -149,7 +135,6 @@ export function Actions({ character, note, onSend }: { character: Character; not
 		onSend();
 		box.current?.focus();
 		void conversationPanel.instruct(character, { kind, text: words }).then((ok) => {
-			// Not taken (say it became busy meanwhile): the words come back to the box, unless it holds new ones.
 			if (!ok && !conversationPanel.draft(character.id)) {
 				conversationPanel.setDraft(character.id, words);
 				setText((now) => now || words);
@@ -260,7 +245,6 @@ export function Actions({ character, note, onSend }: { character: Character; not
 	);
 }
 
-/** Stopping a busy agent asks first; declining sends nothing. */
 function ConfirmStop({ character, onStop, onKeep }: { character: Character; onStop: () => void; onKeep: () => void }) {
 	const keep = useRef<HTMLButtonElement>(null);
 	const keepNow = useRef(onKeep);
@@ -290,7 +274,6 @@ function ConfirmStop({ character, onStop, onKeep }: { character: Character; onSt
 	);
 }
 
-/** The latest instructions sent to this character and how far each got. */
 export function Receipts({ characterId, kinds }: { characterId: string; kinds?: Instruction["kind"][] }) {
 	const sent = useSyncExternalStore(conversationPanel.subscribeSent, conversationPanel.sent);
 	const mine = sent.filter((s) => s.characterId === characterId && (!kinds || kinds.includes(s.kind)));
@@ -308,7 +291,7 @@ function ReceiptLine({ sent }: { sent: Sent }) {
 	const failed = sent.stages.includes("failed");
 	const applied = sent.stages.includes("applied");
 	const state = failed ? "failed" : applied ? "applied" : "pending";
-	// A follow-up the session holds until its run settles can still be taken back.
+
 	const held = sent.kind === "follow_up" && state === "pending" && sent.stages.includes("delivered");
 	return (
 		<li className={`aw-conv-receipt aw-conv-receipt-${state}`} data-command={sent.commandId} data-stage={state}>

@@ -1,7 +1,3 @@
-// The quest office's and the library's shared state (tickets 24-26): whether the operator is signed in to Atlassian
-// (never the token: the backend keeps it and answers only site and email), the issues assigned to him (the quest
-// board's notices), the pages read lately (the library's shelf), and which of their panels is open. The world's notices
-// and the panels both read it, so a write or a sign-in shows everywhere at once. `main.tsx` connects the backend API.
 import type { CredentialStatus, JiraIssue, Outcome, RecentPage } from "../../../src/integrations.js";
 import type { AgentWorkplaceApi } from "../../../src/world.js";
 import type { ViewStore } from "../../view-state.js";
@@ -28,7 +24,6 @@ export type AtlassianApi = Partial<
 	>
 >;
 
-/** Something read from Atlassian: not asked yet, on its way, read, refused (with why), or waiting for a sign-in. */
 export type Reading<T> =
 	| { state: "idle" }
 	| { state: "loading"; items?: T }
@@ -36,7 +31,6 @@ export type Reading<T> =
 	| { state: "failed"; reason: string; items?: T }
 	| { state: "signed-out" };
 
-/** Which panel is open: a host's list (the clerk's board, the librarian's catalogue), or one issue or page. */
 export type AtlassianPanel =
 	| { kind: "clerk" }
 	| { kind: "issue"; key: string; from: "board" | "clerk" }
@@ -44,14 +38,13 @@ export type AtlassianPanel =
 	| { kind: "page"; id: string; title?: string; from?: "librarian" };
 
 export interface AtlassianState {
-	/** The signed-in site and email; null when signed out; undefined until asked. */
 	signedIn?: CredentialStatus["atlassian"];
 	assigned: Reading<JiraIssue[]>;
 	recent: Reading<RecentPage[]>;
 	panel?: AtlassianPanel;
-	/** Counts each opening, so a panel opened again starts afresh. */
+
 	opening: number;
-	/** Counts each request to show the sign-in in Settings, which focuses its first field. */
+
 	signInAsked: number;
 	api?: AtlassianApi;
 	view?: ViewStore;
@@ -65,14 +58,12 @@ const update = (change: Partial<AtlassianState>) => {
 };
 const failure = (error: unknown) => String((error as Error)?.message ?? error);
 
-/** An outcome from the backend as a reading: refused for want of a sign-in is `signed-out`. */
 function reading<T>(outcome: Outcome<Record<string, unknown>>, items: (ok: Record<string, unknown>) => T): Reading<T> {
 	if (outcome.ok) return { state: "ready", items: items(outcome), at: Date.now() };
 	if (outcome.signIn === "atlassian") return { state: "signed-out" };
 	return { state: "failed", reason: outcome.reason };
 }
 
-/** The issues assigned to the operator: open ones first by how pressing they are, as the board pins them. */
 const PRIORITY = ["highest", "blocker", "critical", "high", "medium", "low", "lowest", "trivial"];
 export function urgent(issue: JiraIssue): boolean {
 	const priority = (issue.priority ?? "").toLowerCase();
@@ -86,7 +77,6 @@ function byPressing(a: JiraIssue, b: JiraIssue) {
 	return rank(a) - rank(b) || (b.updated ?? "").localeCompare(a.updated ?? "");
 }
 
-/** Which notice an issue is pinned as: done, in progress, urgent (by priority), or simply open. */
 export type NoticeKind = "done" | "progress" | "urgent" | "open";
 export function noticeOf(issue: JiraIssue): NoticeKind {
 	if (issue.statusCategory === "done") return "done";
@@ -107,7 +97,6 @@ export const atlassian = {
 		update({ api, view });
 	},
 
-	/** Ask the backend who is signed in (site and email only). */
 	async refreshStatus() {
 		const api = state.api;
 		if (!api?.credentialStatus) return;
@@ -117,7 +106,6 @@ export const atlassian = {
 		} catch {}
 	},
 
-	/** Check the email and token against the site, and keep them in the backend: the token is never seen again here. */
 	async signIn(site: string, email: string, token: string): Promise<Outcome<{ name: string | null }>> {
 		const api = state.api;
 		if (!api?.signInAtlassian) return { ok: false, reason: "Agent Workplace is not connected." };
@@ -125,7 +113,7 @@ export const atlassian = {
 			const result = await api.signInAtlassian(site, email, token);
 			if (result.ok) {
 				await atlassian.refreshStatus();
-				// What the places showed before sign-in is stale: read them again.
+
 				update({ assigned: { state: "idle" }, recent: { state: "idle" } });
 				if (state.panel) void atlassian.loadAssigned();
 			}
@@ -147,7 +135,6 @@ export const atlassian = {
 		}
 	},
 
-	/** Read the issues assigned to the operator again (the board and the clerk's list); one read at a time. */
 	loadAssigned(): Promise<void> {
 		loadingAssigned ??= (async () => {
 			const api = state.api;
@@ -170,7 +157,6 @@ export const atlassian = {
 		return loadingAssigned;
 	},
 
-	/** The pages opened in the library lately, newest first. */
 	loadRecent(): Promise<void> {
 		loadingRecent ??= (async () => {
 			const api = state.api;
@@ -192,7 +178,7 @@ export const atlassian = {
 		update({ panel, opening: state.opening + 1 });
 		void atlassian.refreshStatus();
 	},
-	/** Go from one view to another inside the open panel (the list to an issue and back), without opening it anew. */
+
 	show(panel: AtlassianPanel) {
 		update({ panel });
 	},
@@ -200,13 +186,11 @@ export const atlassian = {
 		if (state.panel) update({ panel: undefined });
 	},
 
-	/** Settings, with the Atlassian sign-in ready to fill in (from a place that needs it). */
 	askSignIn() {
 		update({ panel: undefined, signInAsked: state.signInAsked + 1 });
 		state.view?.intend({ kind: "open-tab", tab: "settings" });
 	},
 
-	/** Open a link in the system browser; says why on screen when it cannot. */
 	async openLink(url: string) {
 		const { api, view } = state;
 		if (!api?.openLink) return view?.notify("This window cannot open links.");

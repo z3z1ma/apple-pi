@@ -1,5 +1,3 @@
-// The tabbed side panel at the bottom right, as in Old School RuneScape: everyone by place, who needs you, work by
-// ledger task, every place to travel to, and settings. Clicking the open tab folds the panel down to its tabs.
 import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 import type { JiraIssue, PullRequest, RecentPage } from "../../../src/integrations.js";
 import { TAB_ICONS } from "../../../src/theme-pack.js";
@@ -43,7 +41,6 @@ const TABS: { tab: Tab; title: string; icon: ReactNode }[] = [
 	{ tab: "settings", title: "Settings", icon: <CogIcon /> },
 ];
 
-/** Every function place the world will have: those not open yet are listed so the operator knows they are coming. */
 const FUNCTION_PLACES = ["forge", "quest-office", "library", "inn", "rookery"];
 
 export interface SidePanelProps {
@@ -53,7 +50,7 @@ export interface SidePanelProps {
 	tab: Tab;
 	folded: boolean;
 	onTab: (tab: Tab) => void;
-	/** Fold the panel down to its tabs; a tab opens it again. */
+
 	onFold: () => void;
 	selected: string | undefined;
 	onSelect: (id: string | undefined) => void;
@@ -61,11 +58,11 @@ export interface SidePanelProps {
 	travel: (place: PlaceRef) => void;
 	walkGrid: boolean;
 	onWalkGrid: (shown: boolean) => void;
-	/** The theme's avatar looks, the one the snapshot says the operator chose, and choosing another. */
+
 	avatarLooks: AvatarLook[];
 	avatarLook: string | null | undefined;
 	onAvatarLook: (look: AvatarLook) => void;
-	/** The themes to choose from, the one worn, and wearing another. */
+
 	themes: ThemeOption[];
 	theme: string | undefined;
 	onTheme: (id: string) => void;
@@ -129,10 +126,6 @@ export function SidePanel(props: SidePanelProps) {
 	);
 }
 
-/**
- * A tab's icon: the pack's own drawing when its manifest names one (`--aw-icon-<tab>`, an SVG drawn in the tab's ink
- * through a mask, so the skin's colours still apply), else the world's own.
- */
 function TabIcon({ tab, pack, fallback }: { tab: Tab; pack: string | undefined; fallback: ReactNode }) {
 	if (!pack || !(TAB_ICONS as readonly string[]).includes(tab)) return <>{fallback}</>;
 	return (
@@ -213,7 +206,6 @@ function Groups({
 	);
 }
 
-/** The Mail tab: the rookery's traffic, newest first, and a letter to write from anywhere. */
 function Mail({ world }: SidePanelProps) {
 	const mail = world?.mail ?? [];
 	const theme = useTheme();
@@ -235,7 +227,6 @@ function Mail({ world }: SidePanelProps) {
 	);
 }
 
-/** The forge's line in the Places tab: its open pull requests, and how many fail. Each line fits the tab's width. */
 function forgeDetail(pullRequests: PullRequest[]): string {
 	const open = pullRequests.length;
 	const failing = pullRequests.filter((pr) => pr.ci === "failing").length;
@@ -243,7 +234,6 @@ function forgeDetail(pullRequests: PullRequest[]): string {
 	return `${open} pull ${open === 1 ? "request" : "requests"}${failing ? `, ${failing} failing` : ""}`;
 }
 
-/** The quest office's: the open issues assigned to the operator, and how many are pressing; nothing until read. */
 function questDetail(assigned: Reading<JiraIssue[]>): string {
 	if (!("items" in assigned) || !assigned.items) return "";
 	const open = assigned.items.filter((issue) => issue.statusCategory !== "done");
@@ -252,7 +242,6 @@ function questDetail(assigned: Reading<JiraIssue[]>): string {
 	return pressing ? `${open.length} assigned, ${pressing} pressing` : `${open.length} assigned to you`;
 }
 
-/** The library's: the pages read there lately. */
 function libraryDetail(recent: Reading<RecentPage[]>): string {
 	const read = "items" in recent ? (recent.items?.length ?? 0) : 0;
 	return read ? `${read} ${read === 1 ? "page" : "pages"} read lately` : "";
@@ -262,9 +251,7 @@ function Places({ world, labels, here, travel }: SidePanelProps) {
 	const forgeList = useSyncExternalStore(forge.subscribe, forge.get).list;
 	const { assigned, recent, signedIn } = useSyncExternalStore(atlassian.subscribe, atlassian.get);
 	const theme = useTheme();
-	// The quest office's and the library's counts are cheap to read (one Jira query, the local list of pages read), so
-	// the tab reads them when it opens if nothing has yet; the forge's list costs a `gh` call per pull request and is
-	// counted once the forge has read it.
+
 	useEffect(() => {
 		if (signedIn && atlassian.get().assigned.state === "idle") void atlassian.loadAssigned();
 		if (atlassian.get().recent.state === "idle") void atlassian.loadRecent();
@@ -278,7 +265,7 @@ function Places({ world, labels, here, travel }: SidePanelProps) {
 		})),
 		{ key: "outside", title: "Outside", places: OUTSIDE },
 	];
-	// Open places are listed above, wherever they are; only the rest wait under "Not open yet".
+
 	const open = new Set(places.map((ref) => ref.kind));
 	const notOpen = FUNCTION_PLACES.filter((kind) => !open.has(kind as PlaceRef["kind"]));
 	const count = (ref: PlaceRef) => world?.characters.filter((c) => placeKey(c.place) === placeKey(ref)).length ?? 0;

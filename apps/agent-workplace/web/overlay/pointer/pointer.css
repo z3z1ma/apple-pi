@@ -1,6 +1,3 @@
-/* RuneScape's pointer chrome (hover text and the right-click menu): layout only; the look comes from the theme
-   pack's skin. */
-
 .pointer-hover {
 	position: absolute;
 	top: 10px;

@@ -1,12 +1,9 @@
-// Settings' Atlassian section (ticket 24): the site, email, and API token that let the quest office and the library read
-// and write Jira and Confluence as the operator. The token goes to the backend once, which checks it against the site
-// and keeps it in its private file; from then on Settings knows only that it is set, never the token itself.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { atlassian } from "./atlassian-state.js";
 import type { Progress } from "./place-panels.js";
 
 const TOKENS_URL = "https://id.atlassian.com/manage-profile/security/api-tokens";
-/** The last request to sign in that Settings answered (it may mount only once asked). */
+
 let answeredAsk = 0;
 
 const host = (site: string) => site.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -18,7 +15,6 @@ export function AtlassianSettings() {
 	const [progress, setProgress] = useState<Progress>();
 	const section = useRef<HTMLElement>(null);
 
-	// Asked for from a place (which opened Settings): show the form, bring it into view, and put the cursor in it.
 	useEffect(() => {
 		if (state.signInAsked === answeredAsk) return;
 		answeredAsk = state.signInAsked;
@@ -124,7 +120,7 @@ function SignInForm({
 		if (!ready) return;
 		setProgress({ state: "sending", text: `Checking with ${host(site.trim())}\u2026` });
 		const result = await atlassian.signIn(site.trim(), email.trim(), token.trim());
-		// The token leaves the page either way: it is never kept here.
+
 		setToken("");
 		if (result.ok) onDone(result.name ? `Signed in as ${result.name}.` : "Signed in.");
 		else setProgress({ state: "failed", text: result.reason });

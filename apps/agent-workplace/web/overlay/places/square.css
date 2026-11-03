@@ -1,11 +1,7 @@
-/* The town square's panels (the crier, a channel read in a panel) and Slack in the interface (the tab, Settings):
-   layout only; each theme pack's skin gives them their look. */
-
 .aw-crier.aw-place-panel {
 	width: min(560px, calc(100vw - 48px));
 }
 
-/* Listing channels, the crier keeps one height while results come and go. */
 .aw-crier-listing.aw-place-panel {
 	height: min(620px, calc(100vh - 64px));
 }
@@ -28,7 +24,6 @@
 	min-height: 0;
 }
 
-/* The crier's search: the box and its Search button on one line; it searches only when asked. */
 .aw-crier-search {
 	display: flex;
 	align-items: center;
@@ -46,7 +41,6 @@
 	flex: none;
 }
 
-/* Which channels: the unread, or every one. */
 .aw-slack-views {
 	display: flex;
 	gap: 6px;
@@ -57,7 +51,6 @@
 	margin: 0 0 6px;
 }
 
-/* In the side panel the skins' buttons have no pressed look: the chosen one is marked with the theme's accent. */
 .aw-slack-tab-views .aw-button {
 	flex: 1;
 }
@@ -97,7 +90,6 @@
 	margin: 10px auto 6px;
 }
 
-/* A channel in a list: its kind, its name, mentions and unread, and Read on hover. */
 .aw-slack-list {
 	margin: 0;
 	padding: 0;
@@ -159,7 +151,6 @@
 	opacity: 1;
 }
 
-/* Signing in, wherever Slack is not signed in yet. */
 .aw-slack-signin {
 	display: grid;
 	justify-items: start;
@@ -179,7 +170,6 @@
 	line-height: 1.4;
 }
 
-/* A channel: its head, then its messages, newest last. */
 .aw-slack-title {
 	display: flex;
 	align-items: center;
@@ -302,7 +292,6 @@
 	flex: 0 0 12px;
 }
 
-/* Under a thread's replies: its own Mark read, quiet until there is something new to mark. */
 .aw-slack-thread-foot {
 	display: flex;
 	align-items: center;
@@ -316,7 +305,6 @@
 	cursor: default;
 }
 
-/* A thread opened under its first message: replies and what is being written, set in. */
 .aw-slack-thread {
 	margin: 0 0 8px 22px;
 	padding: 2px 0 4px 12px;
@@ -379,7 +367,6 @@
 	font: inherit;
 }
 
-/* The side panel's Slack tab and Settings' Slack section. */
 .aw-slack-tab .aw-slack-row-main {
 	padding: 6px 6px;
 }
@@ -409,12 +396,10 @@
 	font-size: 11px;
 }
 
-/* The unread orb before Slack is signed in: there, but quiet. */
 .aw-orb-off .aw-orb-glass {
 	opacity: 0.75;
 }
 
-/* A message found: where and when on one line, who and the words that matched below. */
 .aw-slack-row-main.aw-slack-hit-main {
 	grid-template-columns: minmax(0, 1fr);
 	gap: 3px;
@@ -465,13 +450,11 @@
 	font-weight: 700;
 }
 
-/* The message a search opened at stands out. */
 .aw-slack-message.aw-slack-focus {
 	background: color-mix(in srgb, var(--aw-accent-light) 32%, transparent);
 	box-shadow: inset 3px 0 0 var(--aw-accent);
 }
 
-/* Opened at a message with newer ones after it: says so, with the way to the newest. */
 .aw-slack-newer {
 	display: flex;
 	align-items: center;

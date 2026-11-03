@@ -1,13 +1,8 @@
-// The review page (ticket 22): a pull request's diff by file, each line with its old and new line numbers and its
-// hunk's context, and the operator's review as himself: a comment, an approval, or a change request. Each goes through
-// the outside-write gate: the confirmation shows exactly what goes where, and only "Send as you" sends it through `gh`.
-// Declining sends nothing. A sent review shows here, in the chatbox, and in the gate's local record.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { DiffFile, PullRequest } from "../../../src/integrations.js";
 import { forge, prKey } from "./forge-state.js";
 import { ConfirmWrite, confirming, useOutsideWrite } from "./outside-write.js";
 
-/** A file longer than this many diff lines starts folded, so a large diff opens quickly. */
 const FOLD_LINES = 400;
 
 type Event = "comment" | "approve" | "request-changes";
@@ -54,7 +49,6 @@ export function ReviewPage({ pr }: { pr: PullRequest }) {
 		[files],
 	);
 
-	// The file list follows the diff as it scrolls: the file whose header has passed the top is current.
 	useEffect(() => {
 		const scroller = diff.current;
 		if (!scroller) return;
@@ -75,10 +69,10 @@ export function ReviewPage({ pr }: { pr: PullRequest }) {
 		if (!sendable(event)) return;
 		void write.ask({ kind: "github-review", repo: pr.repo, number: pr.number, event, body: draft.trim() });
 	};
-	// While the confirmation shows, Escape or a click on the world declines it instead of closing the forge.
+
 	const asking = confirming(write.state);
 	const sentHere = write.state.phase === "sent";
-	// Once sent, the draft is spent and the page and the list are read again.
+
 	useEffect(() => {
 		if (sentHere) forge.reviewed(pr);
 	}, [sentHere, pr]);
@@ -221,7 +215,6 @@ export function ReviewPage({ pr }: { pr: PullRequest }) {
 	);
 }
 
-/** What became of the last review asked for: being described, sent (with where to see it), or why it was not. */
 function ReviewStatus({
 	state,
 	onDismiss,
@@ -262,7 +255,6 @@ function ReviewStatus({
 	return <p className="aw-review-hint">Nothing is sent until you confirm it.</p>;
 }
 
-/** One file's diff: its header, then each hunk with its context line and every line numbered on both sides. */
 function FileDiff({ file, index }: { file: DiffFile; index: number }) {
 	const lines = lineCount(file);
 	const [open, setOpen] = useState(lines <= FOLD_LINES);

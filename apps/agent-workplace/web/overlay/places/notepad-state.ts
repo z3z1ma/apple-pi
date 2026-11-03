@@ -1,16 +1,11 @@
-// The headquarters' notepad: which coordinator's notes are open, and what the panel sends. The notes are `NOTES.md` in
-// the coordinator's directory; asking an agent to add an update puts a marker line where the cursor is and mails the
-// agent to replace it, and a selection goes to an agent as mail. `main.tsx` connects the backend API. Each change
-// replaces the state object, as useSyncExternalStore needs.
 import type { AgentWorkplaceApi, Character } from "../../../src/world.js";
 import { onePanel } from "../one-panel.js";
 
 export type NotepadApi = Pick<AgentWorkplaceApi, "openNotepad" | "saveNotepad" | "closeNotepad" | "onNotepad">;
 
 export interface NotepadState {
-	/** The coordinator whose notes are open. */
 	open?: Pick<Character, "id" | "name">;
-	/** Counts each opening, so opening again starts afresh. */
+
 	opening: number;
 	api?: NotepadApi;
 }
@@ -44,10 +39,8 @@ export const notepad = {
 
 onePanel.closes("notepad", () => notepad.close());
 
-/** The line an agent replaces with the update it was asked for. */
 export const updateMarker = (id: string) => `<!-- update pending: ${id} -->`;
 
-/** `text` with `marker` on a line of its own at `at` (a cursor position), and where the marker line starts. */
 export function insertMarker(text: string, at: number, marker: string): string {
 	const before = text.slice(0, at);
 	const after = text.slice(at);
@@ -56,7 +49,6 @@ export function insertMarker(text: string, at: number, marker: string): string {
 	return `${before}${lead}${marker}${trail}${after}`;
 }
 
-/** `text` without the marker's line, as it was before a request that was not sent. */
 export const removeMarker = (text: string, marker: string) =>
 	text.replace(`${marker}\n`, "").replace(`\n${marker}`, "").replace(marker, "");
 

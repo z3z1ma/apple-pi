@@ -1,7 +1,3 @@
-// The library's panels (ticket 26), in the theme's words: the librarian searches all of Confluence and keeps the pages
-// read lately; a page reads in the panel (its HTML sanitised, styled by the theme as a book page, a document, or a
-// notebook) or opens in the browser; and an agent can be asked to summarise or update it (an instruction naming the
-// page; nothing is written to Confluence).
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ConfluencePage, ConfluencePageRef } from "../../../src/integrations.js";
 import type { WorldSnapshot } from "../../../src/world.js";
@@ -20,7 +16,6 @@ const edited = (iso: string | null | undefined) => {
 	return !text ? "" : text === "now" ? "edited just now" : `edited ${text} ago`;
 };
 
-/** The last search, kept while the panel goes to a page and back. */
 let lastSearch = "";
 
 export function LibraryPanels({ world }: { world: WorldSnapshot | undefined }) {
@@ -197,7 +192,6 @@ function PageRow({ page, read, onOpen }: { page: ConfluencePageRef; read?: numbe
 	);
 }
 
-/** A page read in the panel, with Open in the browser and Ask an agent. */
 function PageReader({
 	id,
 	title,
@@ -225,7 +219,7 @@ function PageReader({
 				if (!live) return;
 				if (got.ok) {
 					setPage(got.page);
-					// It joins the shelf of pages read lately.
+
 					void atlassian.loadRecent();
 				} else {
 					setReason(got.reason);

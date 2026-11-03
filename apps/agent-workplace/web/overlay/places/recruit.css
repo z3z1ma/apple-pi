@@ -1,10 +1,7 @@
-/* The recruiting form: layout only, on the letter form's fields; the look comes from the theme pack's skin. */
-
 .aw-recruit {
 	width: min(560px, calc(100vw - 48px));
 }
 
-/* The rename form (ticket 12): the same fields, one of them. */
 .aw-recruit.aw-rename {
 	width: min(460px, calc(100vw - 48px));
 }
@@ -17,11 +14,6 @@
 	align-items: flex-start;
 }
 
-/*
- * The form's one column is as wide as the dialog, never as wide as its longest option or path: a grid's auto column
- * grows to its fields' min-content width (a select's is its longest option), which pushed every field and the
- * buttons off the dialog's right edge.
- */
 .aw-recruit-form {
 	grid-template-columns: minmax(0, 1fr);
 }
@@ -39,7 +31,6 @@
 	padding-top: 10px;
 }
 
-/* The chosen role's mandate, under its select, in the field column. */
 .aw-recruit-form .aw-recruit-mandate {
 	margin: -6px 0 0 102px;
 }

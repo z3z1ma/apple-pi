@@ -1,7 +1,3 @@
-// An agent's open question in the conversation panel (decision 17). An `ask_user_question` questionnaire is a themed
-// form: each question with its options and their descriptions, one choice or many as the question allows, and words
-// of the operator's own always offered, as the terminal's dialog offers them. Sending it is the `answer` command, with
-// one reply per question; the dialog in the terminal then closes. Any other dialog is answered only in its terminal.
 import { useEffect, useRef, useState } from "react";
 import type { Character, Question, Questionnaire, QuestionnaireReply } from "../../../src/world.js";
 import { Receipts } from "./actions.js";
@@ -10,11 +6,10 @@ import { conversationPanel, type FormAnswer } from "./panel-state.js";
 const OWN = "In my own words";
 const blank = (questions: Question[]): FormAnswer[] => questions.map(() => ({ chosen: [], own: false, words: "" }));
 
-/** The reply for one question, or undefined while it is not answered yet. */
 function replyOf(question: Question, answer: FormAnswer): QuestionnaireReply | undefined {
 	if (answer.own) return answer.words.trim() ? { custom: answer.words.trim() } : undefined;
 	if (!answer.chosen.length) return undefined;
-	// In the order the options are listed, as the terminal reports them.
+
 	return { selected: question.options.map((o) => o.label).filter((label) => answer.chosen.includes(label)) };
 }
 
@@ -56,7 +51,6 @@ export function QuestionForm({ character, questionnaire }: { character: Characte
 				replies: replies as QuestionnaireReply[],
 			})
 			.then((ok) => {
-				// Taken: the question closes in the world soon. Refused (say the answers no longer fit): try again.
 				if (!ok) setSending(false);
 			});
 	};
@@ -125,7 +119,7 @@ function QuestionField({
 	question: Question;
 	answer: FormAnswer;
 	disabled: boolean;
-	/** `typing`: the operator just chose words of their own, so their box takes the focus. */
+
 	onChange: (next: FormAnswer, typing?: boolean) => void;
 	firstRef?: React.Ref<HTMLInputElement>;
 	ownRef: (el: HTMLTextAreaElement | null) => void;
@@ -175,7 +169,6 @@ function QuestionField({
 						className={`aw-conv-mark aw-conv-mark-${type}`}
 						checked={answer.own}
 						onChange={() => {
-							// Words of one's own replace the choices, as in the terminal's dialog.
 							const on = many ? !answer.own : true;
 							onChange({ ...answer, own: on, chosen: on ? [] : answer.chosen }, on);
 						}}
@@ -204,7 +197,6 @@ function QuestionField({
 	);
 }
 
-/** A dialog other than a questionnaire: its kind and title show, and the terminal answers it. */
 export function TerminalOnly({
 	character,
 	asking,
@@ -235,7 +227,6 @@ export function TerminalOnly({
 	);
 }
 
-/** How the panel names Pi's dialog kinds. */
 const KIND: Record<string, string> = {
 	select: "choice from a list",
 	confirm: "yes-or-no question",

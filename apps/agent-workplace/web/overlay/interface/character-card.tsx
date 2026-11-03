@@ -1,6 +1,3 @@
-// Examining a character: a small card of its observed facts (decision 06): status and time in it, the role it was
-// hired into with its soul and the headings of its self, its ledger tasks, where it works, who it reports to, its
-// tool, model, context, cost, and tmux pane. Nothing here is inferred.
 import type { Character, WorldSnapshot } from "../../../src/world.js";
 import { CloseIcon } from "./icons.js";
 import { activity, ago, attentionOf, placeName, unseenWhileWorking } from "./model.js";
@@ -11,7 +8,6 @@ const STATUS = { asking: "Asking you", finished: "Finished, unseen", working: "W
 const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 const base = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
-/** The card's facts, as term and value rows, in reading order. */
 export function factRows(character: Character, world: WorldSnapshot | undefined): [string, string][] {
 	const facts = character.facts;
 	if (!facts) return [];

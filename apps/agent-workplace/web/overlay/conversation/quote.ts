@@ -1,4 +1,3 @@
-/** A message as another conversation sees it: who wrote it, when, where, and its words. */
 export interface QuotedMessage {
 	author: string;
 	at: number;
@@ -6,7 +5,6 @@ export interface QuotedMessage {
 	where?: string;
 }
 
-/** The message as a Markdown quote, headed by its author, place and time. */
 export function quote(message: QuotedMessage): string {
 	const when = message.at
 		? new Date(message.at).toLocaleString(undefined, {
@@ -20,7 +18,6 @@ export function quote(message: QuotedMessage): string {
 	return [head, "", ...message.text.trim().split("\n")].map((line) => (line ? `> ${line}` : ">")).join("\n");
 }
 
-/** Markdown read as one line of plain words, for a one-line excerpt. */
 export const plainLine = (text: string) =>
 	text
 		.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
@@ -29,6 +26,5 @@ export const plainLine = (text: string) =>
 		.replace(/\s+/g, " ")
 		.trim();
 
-/** Words with the message they answer quoted above them. */
 export const withQuote = (words: string, replyTo: QuotedMessage | undefined) =>
 	replyTo ? `${quote(replyTo)}\n\n${words}` : words;

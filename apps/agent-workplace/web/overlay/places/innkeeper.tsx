@@ -1,6 +1,3 @@
-// The innkeeper's register (ticket 15), in the theme's words: every dormant agent, the most recently stopped first, with its repository, its
-// last ledger task, how long it has slept, and where (at a table, in a bed, or upstairs once the inn's spots are full).
-// From a row the operator reads its last conversation or wakes it; the wake's receipt shows on the row.
 import { useMemo, useState } from "react";
 import type { DormantAgent, WorldSnapshot } from "../../../src/world.js";
 import { lookFor, portraitOf } from "../../looks.js";
@@ -12,7 +9,6 @@ import { placeActions, placePanels } from "./place-panels.js";
 
 const base = (path: string | null) => (path ? (path.split("/").filter(Boolean).pop() ?? path) : null);
 
-/** Where each sleeper is: at a table, in a bed, or upstairs (more sleepers than the inn has spots). */
 function wherePlaces(theme: Theme | undefined, spots: number, beds: Set<number>) {
 	return (index: number) => ({
 		upstairs: index >= spots,

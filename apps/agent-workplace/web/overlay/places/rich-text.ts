@@ -1,12 +1,3 @@
-// Jira's and Confluence's HTML as the world shows it (tickets 24-26). It is untrusted: an issue's description or a page
-// can carry anything its authors pasted. It is parsed in an inert document (DOMParser runs no script and loads
-// nothing) and rebuilt from an allow-list: text and plain structure (paragraphs, headings, lists, tables, code, quotes)
-// survive; scripts, styles, frames, forms, and every event handler and inline style are dropped. Images are not loaded
-// (they would leak that the page was read, and need the operator's session): each shows as its name. Links keep only
-// web and mail addresses, made absolute against the Atlassian site, and open in the system browser (the panel catches
-// the click). Information panels, status lozenges, and mentions keep a class of the world's own so the skin can draw them.
-
-/** Elements kept as they are (their allowed attributes only). */
 const KEEP = new Set([
 	"p",
 	"br",
@@ -59,7 +50,6 @@ const KEEP = new Set([
 	"figcaption",
 ]);
 
-/** Elements dropped with everything in them. */
 const DROP = new Set([
 	"script",
 	"style",
@@ -94,7 +84,6 @@ const DROP = new Set([
 	"portal",
 ]);
 
-/** Containers whose classes mark something the skin draws (Confluence's and Jira's panels and lozenges). */
 function classFor(element: Element): string | undefined {
 	const names = element.getAttribute("class") ?? "";
 	const panel = names.match(/confluence-information-macro-(note|warning|tip|information)/);
@@ -107,7 +96,6 @@ function classFor(element: Element): string | undefined {
 
 const SAFE_URL = /^(https?:|mailto:)/i;
 
-/** A link's address, absolute against `base`, if it is a web or mail address; undefined otherwise. */
 function linkFor(href: string | null, base: string | undefined): string | undefined {
 	if (!href) return undefined;
 	const trimmed = href.trim();
@@ -125,7 +113,6 @@ const number = (value: string | null, max: number) => {
 	return Number.isInteger(n) && n > 0 && n <= max ? String(n) : undefined;
 };
 
-/** An image's name, for where it would have been: its alt text, or the file's name. */
 function imageName(image: Element): string {
 	const alt = image.getAttribute("alt")?.trim();
 	if (alt) return alt;
@@ -146,7 +133,6 @@ function copy(source: Node, into: Element, doc: Document, base: string | undefin
 		const tag = element.localName.toLowerCase();
 		if (DROP.has(tag)) continue;
 		if (tag === "img") {
-			// Emoticons read as their text; anything else as a named placeholder.
 			const name = imageName(element);
 			if (/\bemoticon\b/.test(element.getAttribute("class") ?? "")) into.append(doc.createTextNode(name));
 			else {
@@ -158,7 +144,6 @@ function copy(source: Node, into: Element, doc: Document, base: string | undefin
 			continue;
 		}
 		if (!KEEP.has(tag)) {
-			// Unknown containers (div, span, section...) keep their content; a few keep a class of the world's own.
 			const kind = classFor(element);
 			const block = /^(div|section|article|aside|header|footer|main|nav|center)$/.test(tag);
 			if (kind || block) {
@@ -178,7 +163,6 @@ function copy(source: Node, into: Element, doc: Document, base: string | undefin
 				out.setAttribute("rel", "noreferrer noopener");
 				out.className = classFor(element) === "aw-rich-mention" ? "aw-rich-link aw-rich-mention" : "aw-rich-link";
 			} else {
-				// Not a web link: its text stays, as text.
 				copy(element, into, doc, base, depth + 1);
 				continue;
 			}
@@ -206,23 +190,18 @@ function copy(source: Node, into: Element, doc: Document, base: string | undefin
 	}
 }
 
-/**
- * Untrusted HTML as HTML safe to show: only allowed elements and attributes, links made absolute against `base` (the
- * Atlassian site) and limited to web and mail addresses, images as their names. Empty input gives "".
- */
 export function safeHtml(html: string | null | undefined, base?: string): string {
 	if (!html?.trim()) return "";
 	const parsed = new DOMParser().parseFromString(html, "text/html");
 	const doc = document.implementation.createHTMLDocument("");
 	const root = doc.createElement("div");
 	copy(parsed.body, root, doc, base, 0);
-	// Drop empty paragraphs Jira and Confluence leave between blocks.
+
 	for (const p of [...root.querySelectorAll("p")])
 		if (!p.textContent?.trim() && !p.querySelector("br, span")) p.remove();
 	return root.innerHTML;
 }
 
-/** Plain text as safe HTML paragraphs (when only the text was given). */
 export function textHtml(text: string): string {
 	const doc = document.implementation.createHTMLDocument("");
 	const root = doc.createElement("div");

@@ -44,7 +44,7 @@ export const workplacePanels = {
 	close() {
 		if (state.panel) update({ panel: undefined, task: undefined });
 	},
-	/** Carrying is an intention in this window; giving asks the runtime to change ownership. */
+
 	carry(task: WorkplaceTask) {
 		if (state.progress?.state === "sending") return;
 		update({ carrying: task, progress: undefined, panel: undefined, task: undefined });

@@ -1,10 +1,3 @@
-// The conversation panel (decision 17): talking to a character opens it over the dimmed world, drawn by the theme's
-// skin (an open book in fantasy, a document window in the tech office, a notebook in the anime school). The side pane
-// holds the character's large portrait (its expression follows its state), name,
-// role and place, repository, focused task, what it is doing now, and Go to its terminal; the main pane holds the
-// transcript, newest at the bottom, with older pages loading as the operator scrolls up. Opening it marks the character
-// seen. The foot of the main pane holds what the operator can do by its state (`actions.tsx`), and the reply being
-// written streams in at the bottom of the transcript (`live-reply.ts`).
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Character, TranscriptEntry, WorldSnapshot } from "../../../src/world.js";
 import { type Expression, portraitFor } from "../../looks.js";
@@ -24,9 +17,8 @@ import { useLiveReplies } from "./live-reply.js";
 import { type ConversationApi, conversationPanel } from "./panel-state.js";
 import { BlockView, blockAt, blockKey, blocksOf, blockVisible, dayName, WorkingDirectory } from "./transcript.js";
 
-/** Within this many px of the top, the page before loads. */
 const LOAD_MARGIN = 400;
-/** Within this many px of the bottom, new entries keep the view at the bottom. */
+
 const STICK_MARGIN = 48;
 
 export function ConversationPanel({ store }: { store: WorldStore }) {
@@ -37,7 +29,6 @@ export function ConversationPanel({ store }: { store: WorldStore }) {
 	return <Panel key={`${panel.opening}:${panel.character.id}`} opened={panel.character} world={world} store={store} />;
 }
 
-/** Temporary workplace spike: reuse the session surface without a modal keyboard boundary. */
 export function EmbeddedConversation({
 	character,
 	store,
@@ -119,10 +110,10 @@ function Panel({
 }) {
 	const { api } = conversationPanel.get();
 	const theme = useTheme();
-	// The character as it is now; if it left the world meanwhile, as it was.
+
 	const live = world?.characters.find((c) => c.id === opened.id);
 	const character = live ?? opened;
-	// Asleep at the inn (dormant): it can be woken here instead of reached in a terminal it no longer has.
+
 	const sleeper = live ? undefined : world?.dormant?.find((agent) => agent.id === opened.id);
 	const former = sleeper?.retiredAt != null;
 	const places = useSyncExternalStore(placePanels.subscribe, placePanels.get);
@@ -130,7 +121,6 @@ function Panel({
 	const facts = character.facts;
 	const attention = attentionOf(character);
 
-	// Finished work keeps its happy face while the conversation stays open, though seeing it clears the badge.
 	const [happy, setHappy] = useState(attention === "finished");
 	useEffect(() => {
 		if (attention === "finished") setHappy(true);
@@ -146,9 +136,6 @@ function Panel({
 	const seenNote = useSeenConversation(api, opened.id, facts?.needsYouSince ?? null, position.ready);
 	const [sentCount, setSentCount] = useState(0);
 
-	// Escape closes (a confirmation first); while open, the world's keys (walking, the walk grid) rest. Keys typed in
-	// the book reach its fields and buttons, then stop at the document before the world's listener on the window. Key
-	// releases still reach the world, so no key stays held down.
 	const panelRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		if (embedded) return;
@@ -158,7 +145,7 @@ function Panel({
 				conversationPanel.escape();
 				return;
 			}
-			// Tab stays in the book (in an open confirmation, in that).
+
 			const confirm = panelRef.current?.querySelector<HTMLElement>("[role=alertdialog]");
 			if (trapTab(event, confirm ?? panelRef.current)) {
 				event.stopImmediatePropagation();
@@ -173,13 +160,11 @@ function Panel({
 		return () => {
 			window.removeEventListener("keydown", capture, { capture: true });
 			document.removeEventListener("keydown", bubble);
-			// Closing an invisible frame must leave focus in the Workplace rail.
+
 			if (worldVisible()) focusWorld();
 		};
 	}, [embedded]);
 
-	// Links open through the main process: web links in the system browser, files in their default app (relative paths
-	// from the agent's directory). A refusal or failure shows where Go to does.
 	const openLink = (href: string, file: boolean) => {
 		const open = file ? api?.openFile : api?.openLink;
 		if (!open) return setTerminal("This window cannot open links.");
@@ -381,7 +366,6 @@ function Panel({
 	);
 }
 
-/** What it is doing: a tool and its argument set apart, or the plain state. */
 function Doing({ character, text }: { character: Character; text: string }) {
 	const tool = character.facts?.tool;
 	if (tool && character.facts?.run === "running_tool")
@@ -394,7 +378,6 @@ function Doing({ character, text }: { character: Character; text: string }) {
 	return <>{text}</>;
 }
 
-/** A click on a link in the transcript: the window stays put, and the main process opens the page or the file. */
 function openLinkIn(event: React.MouseEvent, open: (href: string, file: boolean) => void) {
 	const link = event.target instanceof Element ? event.target.closest("a.aw-md-link") : null;
 	if (!link) return;
@@ -417,12 +400,12 @@ function Transcript({
 	onAtLatest?: (latest: boolean) => void;
 	history: ReturnType<typeof useHistory>;
 	showTools: boolean;
-	/** Open a web link in the system browser. */
+
 	onLink: (href: string, file: boolean) => void;
-	/** Replies being written, and written ones the history has not read yet, drawn after it. */
+
 	live: TranscriptEntry[];
 	name: string;
-	/** Counts instructions sent; each one brings the view back to the bottom. */
+
 	sent: number;
 }) {
 	const theme = useTheme();
@@ -448,8 +431,6 @@ function Transcript({
 		placed: false,
 	});
 
-	// Keep the view still when older pages arrive above it, and at the bottom while the operator is there as entries
-	// arrive or a reply grows below; sending brings it back to the bottom.
 	useLayoutEffect(() => {
 		const el = log.current;
 		if (!el) return;
@@ -488,7 +469,6 @@ function Transcript({
 		was.sent = sent;
 	});
 
-	// A first page that does not fill the page loads the one before at once.
 	useEffect(() => {
 		const el = log.current;
 		if (el && history.ready && history.before && el.scrollHeight <= el.clientHeight + LOAD_MARGIN) history.loadOlder();

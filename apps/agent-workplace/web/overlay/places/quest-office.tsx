@@ -1,8 +1,3 @@
-// The quest office's panels (tickets 24 and 25), in the theme's words: the clerk's board of the Jira issues assigned to
-// the operator, with a search across every issue; and one issue read in full (its fields, sanitised description, and
-// comments) with Open in Jira, Comment and Move as the operator (each through the outside-write gate's confirmation,
-// the same one every place shows: `outside-write.tsx`),
-// and Hand to the coordinator (an instruction; nothing is written to Jira).
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { JiraIssue, JiraIssueDetail, JiraTransition } from "../../../src/integrations.js";
 import type { WorldSnapshot } from "../../../src/world.js";
@@ -31,7 +26,6 @@ const NOTICE_WORDS: Record<NoticeKind, string> = {
 	done: "Done",
 };
 
-/** The notice an issue is pinned as, drawn small: the same sprite the board shows. */
 function NoticeIcon({ theme, kind }: { theme: Theme | undefined; kind: NoticeKind }) {
 	if (!theme) return <span className="aw-notice-icon" />;
 	return (
@@ -41,7 +35,6 @@ function NoticeIcon({ theme, kind }: { theme: Theme | undefined; kind: NoticeKin
 	);
 }
 
-/** An issue's status as a small pill, coloured by its category (to do, in progress, done). */
 function StatusPill({ issue }: { issue: JiraIssue }) {
 	if (!issue.status) return null;
 	const category =
@@ -49,7 +42,6 @@ function StatusPill({ issue }: { issue: JiraIssue }) {
 	return <span className={`aw-jira-status aw-jira-status-${category}`}>{issue.status}</span>;
 }
 
-/** The clerk's greeting over the operator's own issues, before sign-in, or while they are read. */
 function greeting(theme: Theme | undefined, reading: ReturnType<typeof atlassian.get>["assigned"], signedOut: boolean) {
 	if (signedOut || reading.state === "signed-out") return say(theme, "quest-signed-out");
 	const items = "items" in reading ? reading.items : undefined;
@@ -84,10 +76,8 @@ export function QuestOfficePanels({ world }: { world: WorldSnapshot | undefined 
 	);
 }
 
-/** The last search, kept while the panel goes to an issue and back. */
 let lastSearch = "";
 
-/** The clerk's list: the issues assigned to the operator, or what a search across every issue found. */
 function ClerkBoard({ onOpen }: { onOpen: (key: string) => void }) {
 	const state = useSyncExternalStore(atlassian.subscribe, atlassian.get);
 	const theme = useTheme();
@@ -100,7 +90,6 @@ function ClerkBoard({ onOpen }: { onOpen: (key: string) => void }) {
 		void atlassian.loadAssigned();
 	}, []);
 
-	// Search as the operator types (a moment after he stops), or at once on Enter.
 	const searched = useRef(0);
 	const search = async (text: string) => {
 		const words = text.trim();
@@ -234,7 +223,6 @@ function IssueRow({ issue, theme, onOpen }: { issue: JiraIssue; theme: Theme | u
 
 type Doing = { kind: "comment" } | { kind: "move" } | { kind: "hand" };
 
-/** One issue: what it is, its description and comments, and what the operator can do with it. */
 function IssueView({
 	issueKey,
 	world,
@@ -301,7 +289,6 @@ function IssueView({
 		}
 	};
 
-	// A write sent (or tried, and Jira said no), or refused before it was sent: say so above the issue, and read it again.
 	const outcome = write.state.phase === "sent" || write.state.phase === "failed" ? write.state : undefined;
 	// biome-ignore lint/correctness/useExhaustiveDependencies: once per outcome
 	useEffect(() => {

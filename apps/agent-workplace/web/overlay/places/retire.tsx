@@ -1,5 +1,3 @@
-// The retire form: a small themed dialog, drawn like the rename form, opened from a person's actions. It asks why the
-// person leaves, sends `retire`, and shows acceptance separately from the runtime's later handoff/cleanup outcome.
 import { useState, useSyncExternalStore } from "react";
 import type { WorldSnapshot } from "../../../src/world.js";
 import { portraitFor } from "../../looks.js";

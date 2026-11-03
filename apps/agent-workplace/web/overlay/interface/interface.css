@@ -1,7 +1,3 @@
-/* The interface around the world, laid out as in Old School RuneScape: layout only. How it looks (frames, type,
-   colours, textures) comes from the theme pack's skin, `themes/<theme>/interface/skin.css`, with the pack's style
-   tokens (`theme.json`). */
-
 .aw-interface {
 	position: absolute;
 	inset: 0;
@@ -90,7 +86,6 @@
 	pointer-events: none;
 }
 
-/* The way on to the next place out of doors: an arrowhead at the edge, pointing out (its colours are the skin's). */
 .aw-minimap-exit {
 	position: absolute;
 	width: 13px;
@@ -216,7 +211,7 @@
 	flex-direction: column;
 	gap: 6px;
 	width: 262px;
-	/* Taller windows give the list more room; the orbs and the minimap keep theirs above it. */
+
 	height: min(max(452px, 60vh), calc(100vh - 214px));
 }
 
@@ -300,7 +295,6 @@
 	cursor: pointer;
 }
 
-/* A pack's own tab icon (`--aw-icon-<tab>`): its SVG's shape filled with the tab's ink, whatever the skin makes it. */
 .aw-tab-icon {
 	display: block;
 	width: 20px;
@@ -386,7 +380,6 @@
 	height: 18px;
 }
 
-/* The tick on working dots whose earlier result is unseen. */
 .aw-pip-mark {
 	position: absolute;
 	right: -4px;
@@ -466,7 +459,6 @@
 	transform: translateY(1px);
 }
 
-/* As many to a row as their words allow; each row stretches to the full width. */
 .aw-actions .aw-button {
 	flex: 1 1 auto;
 }
@@ -737,7 +729,6 @@
 	transform: translateY(-1px);
 }
 
-/* Settings: the themes, one row each, with its line or why its pack is broken. */
 .aw-themes {
 	display: grid;
 	gap: 4px;

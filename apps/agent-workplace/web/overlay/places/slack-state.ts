@@ -1,9 +1,3 @@
-// Slack as the world UI knows it (tickets 27 and 28): whether the operator is signed in and to which workspace, and
-// the channels with unread messages, read through the backend's integrations API (`window.agentWorkplace`). The town
-// square's townsfolk, the unread orb, the Slack tab, Settings, and the crier all read this one store, so they always
-// agree. It also keeps the list of every channel (read when asked for) and the crier's last search, so they survive
-// the crier closing for a channel and opening again. It never sees a token or a cookie: the backend keeps those and
-// answers only with status and messages.
 import type { CredentialStatus, SlackChannel, SlackHit } from "../../../src/integrations.js";
 import type { AgentWorkplaceApi } from "../../../src/world.js";
 
@@ -28,24 +22,23 @@ export type SlackApi = Partial<
 >;
 
 export interface SlackState {
-	/** `unknown` until the backend has said; a fixture backend without Slack stays `unavailable`. */
 	status: "unknown" | "unavailable" | "signed-out" | "signed-in";
 	account?: NonNullable<CredentialStatus["slack"]>;
-	/** Channels with unread messages, most pressing first (mentions, then newest), as the backend lists them. */
+
 	channels: SlackChannel[];
-	/** The unread listing has been read at least once since signing in. */
+
 	listed: boolean;
-	/** Reading the unread listing now. */
+
 	refreshing: boolean;
-	/** Why the last listing failed, shown where Slack is shown; cleared by the next good one. */
+
 	problem?: string;
-	/** The sign-in window is open. */
+
 	signingIn: boolean;
-	/** Why the last sign-in or sign-out did not happen. */
+
 	signInProblem?: string;
-	/** Every channel, direct message, and group the operator belongs to: read when first shown, kept a while. */
+
 	all: { channels?: SlackChannel[]; loading: boolean; problem?: string };
-	/** The crier's search, as last asked (on Enter): what was asked, and what Slack found so far. */
+
 	search?: SlackSearchState;
 }
 
@@ -60,15 +53,10 @@ export interface SlackSearchState {
 	total: number;
 }
 
-/**
- * How often the unread listing is read again while signed in. Each listing costs Slack one `client.counts` and up to
- * `COUNTED_MAX` (30) `conversations.history` calls, which are Tier 3 (about 50 a minute); every two minutes keeps the
- * world well inside that and still fresh for a glance. Entering the square or signing in reads it at once.
- */
 const REFRESH_MS = 120_000;
-/** A listing asked for this soon after the last one is the same listing. */
+
 const FRESH_MS = 15_000;
-/** The list of every channel, once read, is shown again without asking Slack for this long. */
+
 const ALL_FRESH_MS = 60_000;
 
 let api: SlackApi = {};
@@ -81,12 +69,12 @@ let state: SlackState = {
 	all: { loading: false },
 };
 let allAt = -Infinity;
-/** Counts searches, so an answer to an older one is dropped. */
+
 let searches = 0;
 let listedAt = -Infinity;
 let timer: ReturnType<typeof setInterval> | undefined;
 let inFlight: Promise<void> | undefined;
-/** Channels marked read here, up to which message: a listing read before Slack heard of it does not bring them back. */
+
 const markedRead = new Map<string, number>();
 const listeners = new Set<() => void>();
 
@@ -123,7 +111,6 @@ async function readStatus() {
 	}
 }
 
-/** The total the unread orb shows: every counted message, and whether there are more than it says. */
 export function unreadTotal(channels: SlackChannel[]): { count: number; more: boolean } {
 	let count = 0;
 	let more = false;
@@ -134,16 +121,11 @@ export function unreadTotal(channels: SlackChannel[]): { count: number; more: bo
 	return { count, more };
 }
 
-/** A channel's unread count as a badge says it: `12`, `100+`, or a dot when Slack did not count it. */
 export function unreadLabel(channel: Pick<SlackChannel, "unread" | "more">): string {
 	if (channel.unread === null) return "\u2022";
 	return channel.more ? `${channel.unread}+` : String(channel.unread);
 }
 
-/**
- * Every channel as a list shows it: the unread first, in the unread listing's order and with its counts, then the rest
- * as the backend sorted them; `filter` keeps those whose name has it (no call to Slack).
- */
 export function everyChannel(all: SlackChannel[], unread: SlackChannel[], filter = ""): SlackChannel[] {
 	const listed = new Map(unread.map((channel) => [channel.id, channel]));
 	const known = new Set(all.map((channel) => channel.id));
@@ -156,7 +138,6 @@ export function everyChannel(all: SlackChannel[], unread: SlackChannel[], filter
 	return wanted ? every.filter((channel) => channel.name.toLowerCase().includes(wanted)) : every;
 }
 
-/** A channel's name as Slack shows it: `#general` for a channel, the person's or group's name otherwise. */
 export function channelTitle(channel: Pick<SlackChannel, "name" | "kind">): string {
 	return channel.kind === "channel" || channel.kind === "private" ? `#${channel.name}` : channel.name;
 }
@@ -167,7 +148,7 @@ export const slack = {
 		listeners.add(listener);
 		return () => listeners.delete(listener);
 	},
-	/** The backend's API (`window.agentWorkplace`): read the sign-in, then keep the unread listing fresh. */
+
 	connect(next: SlackApi) {
 		api = next;
 		if (timer) clearInterval(timer);
@@ -178,7 +159,6 @@ export const slack = {
 	},
 	api: () => api,
 
-	/** Read the unread listing again (at once with `force`, else only when the last one is not fresh). */
 	refresh(force = false): Promise<void> {
 		if (state.status !== "signed-in" || typeof api.slackUnread !== "function") return Promise.resolve();
 		if (inFlight) return inFlight;
@@ -206,7 +186,6 @@ export const slack = {
 		return inFlight;
 	},
 
-	/** Read the list of every channel (at once with `force`, else only when the last one is not fresh). */
 	async loadAll(force = false): Promise<void> {
 		const list = api.slackConversations;
 		if (state.status !== "signed-in" || typeof list !== "function" || state.all.loading) return;
@@ -226,7 +205,6 @@ export const slack = {
 		}
 	},
 
-	/** Search Slack as its own search bar does: one call, for the first page. Only the crier calls it, on Enter. */
 	async search(text: string): Promise<void> {
 		const find = api.slackSearch;
 		const asked = text.trim();
@@ -249,7 +227,6 @@ export const slack = {
 		}
 	},
 
-	/** The next page of the last search's messages, added under those shown. */
 	async more(): Promise<void> {
 		const find = api.slackSearch;
 		const now = state.search;
@@ -279,13 +256,11 @@ export const slack = {
 		}
 	},
 
-	/** Forget the last search: the crier shows the channels again. */
 	clearSearch() {
 		searches++;
 		if (state.search) update({ search: undefined });
 	},
 
-	/** Open Slack's sign-in window (the backend captures the session); resolves once it closed. */
 	async signIn() {
 		if (state.signingIn || typeof api.signInSlack !== "function") return;
 		update({ signingIn: true, signInProblem: undefined });
@@ -300,7 +275,6 @@ export const slack = {
 		}
 	},
 
-	/** Sign out: the backend deletes the captured session; the square empties at once. */
 	async signOut() {
 		if (typeof api.signOutSlack !== "function") return;
 		try {
@@ -312,11 +286,6 @@ export const slack = {
 		}
 	},
 
-	/**
-	 * Mark a channel read in Slack up to `ts` (its newest message), or with `threadTs` one thread up to its newest
-	 * reply, as the operator. The backend sends it at once (the button is the choice), records it, and announces it to
-	 * the chatbox. A channel marked read leaves the unread listing at once, so its townsperson leaves the square.
-	 */
 	async markRead(
 		channelId: string,
 		ts: string,
@@ -340,7 +309,6 @@ export const slack = {
 		}
 	},
 
-	/** A Slack refusal that says the session ended: the world shows itself signed out. */
 	refused(refusal: { signIn?: string; reason: string }) {
 		if (refusal.signIn === "slack") signedOut(refusal.reason);
 	},

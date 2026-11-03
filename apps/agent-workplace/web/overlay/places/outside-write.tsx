@@ -1,8 +1,3 @@
-// Writing outside as the operator (decision 13), for every function place: a pull request review, a Jira comment or
-// move, a Slack reply. `useOutsideWrite` asks the backend's gate to describe the write (nothing is sent), shows the
-// description in `ConfirmWrite` (what is done, where, and the exact text), and sends it only when the operator confirms,
-// with the token the gate gave for that same write. Declining sends nothing. Each sent write reaches the chatbox (the
-// gate announces it; the answer is shown too, once) and the gate's append-only local record.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	IntegrationsApi,
@@ -16,7 +11,6 @@ import { dialogLayer } from "./place-dialog.js";
 
 export type WriteApi = Pick<IntegrationsApi, "describeWrite" | "confirmWrite">;
 
-/** Where a write is: being described, waiting for the operator, being sent, sent, or refused or failed with why. */
 export type WriteState =
 	| { phase: "idle" }
 	| { phase: "describing"; intent: OutsideWriteIntent }
@@ -27,7 +21,6 @@ export type WriteState =
 
 const failure = (error: unknown) => String((error as Error)?.message ?? error);
 
-/** One outside write at a time, from asking through confirming to its result. */
 export function useOutsideWrite(api: WriteApi | undefined) {
 	const [state, setState] = useState<WriteState>({ phase: "idle" });
 	const current = useRef(state);
@@ -44,14 +37,13 @@ export function useOutsideWrite(api: WriteApi | undefined) {
 		if (alive.current) setState(next);
 	}, []);
 
-	/** Ask the gate to describe the write; the operator then confirms or declines it. Nothing is sent yet. */
 	const ask = useCallback(
 		async (intent: OutsideWriteIntent) => {
 			if (!api) return set({ phase: "failed", intent, reason: "Agent Workplace is not connected." });
 			set({ phase: "describing", intent });
 			try {
 				const described = await api.describeWrite(intent);
-				if (current.current.phase !== "describing") return; // declined meanwhile
+				if (current.current.phase !== "describing") return;
 				if (!described.ok) return set({ phase: "failed", intent, reason: described.reason, signIn: described.signIn });
 				set({ phase: "confirming", intent, token: described.token, description: described.description });
 			} catch (error) {
@@ -61,7 +53,6 @@ export function useOutsideWrite(api: WriteApi | undefined) {
 		[api, set],
 	);
 
-	/** Send the write the operator saw, exactly as described. */
 	const confirm = useCallback(async () => {
 		const asked = current.current;
 		if (asked.phase !== "confirming" || !api) return;
@@ -77,7 +68,6 @@ export function useOutsideWrite(api: WriteApi | undefined) {
 		}
 	}, [api, set]);
 
-	/** Decline (nothing is sent), or put a result away. */
 	const cancel = useCallback(() => {
 		if (current.current.phase !== "sending") set({ phase: "idle" });
 	}, [set]);
@@ -85,14 +75,8 @@ export function useOutsideWrite(api: WriteApi | undefined) {
 	return { state, ask, confirm, cancel };
 }
 
-/** True while the confirmation shows: described and waiting, or being sent. */
 export const confirming = (state: WriteState) => state.phase === "confirming" || state.phase === "sending";
 
-/**
- * The confirmation, over the panel that asked: what is done, where, the exact text, and two buttons, the safe one
- * focused. Render it inside the place's `PlaceDialog`, with the rest of the panel `inert` while it shows, so Tab and
- * clicks stay here; Escape, the panel's close button, or a click on the world decline it and leave the panel open.
- */
 export function ConfirmWrite({
 	state,
 	onConfirm,

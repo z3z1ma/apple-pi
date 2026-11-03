@@ -1,13 +1,8 @@
-// The town square's panels (tickets 27 and 28): the crier, who reaches any Slack channel, and a channel read in a
-// panel, its threads expanding. The world (a townsperson, the crier), the Slack tab, and the crier's own list open
-// them through here. Each change replaces the state object, as useSyncExternalStore needs.
 import type { SlackChannel } from "../../../src/integrations.js";
 import { onePanel } from "../one-panel.js";
 
-/** The channel a panel reads: as listed (with its unread count), or found by the crier. */
 export type ChannelRef = Pick<SlackChannel, "id" | "name" | "kind"> & Partial<Pick<SlackChannel, "unread" | "more">>;
 
-/** A message to open a channel at (one found by search): `ts`, and the thread it is a reply in, if it is one. */
 export interface MessageRef {
 	ts: string;
 	threadTs?: string;
@@ -15,7 +10,7 @@ export interface MessageRef {
 
 export interface SquarePanelsState {
 	panel?: { kind: "crier" } | { kind: "channel"; channel: ChannelRef; look?: string; focus?: MessageRef };
-	/** Counts each opening, so opening again starts afresh. */
+
 	opening: number;
 }
 
@@ -32,15 +27,12 @@ export const squarePanels = {
 		listeners.add(listener);
 		return () => listeners.delete(listener);
 	},
-	/** The crier's list: search any channel, read or unread. */
+
 	openCrier() {
 		onePanel.opening("square");
 		update({ panel: { kind: "crier" }, opening: state.opening + 1 });
 	},
-	/**
-	 * Read a channel; `look` is the townsperson who stands for it, whose portrait heads the panel. With `focus` it opens
-	 * at that message (and its thread), not at the first new one.
-	 */
+
 	openChannel(channel: ChannelRef, look?: string, focus?: MessageRef) {
 		onePanel.opening("square");
 		update({ panel: { kind: "channel", channel, look, ...(focus ? { focus } : {}) }, opening: state.opening + 1 });

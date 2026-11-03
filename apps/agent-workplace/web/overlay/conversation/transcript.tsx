@@ -1,6 +1,3 @@
-// The transcript on the book's right page: the operator's turns and the agent's replies as Markdown, consecutive
-// replies of one turn under one heading, each tool call folded to one line (its tool and main argument) that opens to
-// its input and result, mail as a sealed letter, and other extensions' messages folded like tool calls.
 import { type ComponentType, createContext, memo, type ReactNode, useContext, useState } from "react";
 import type { TranscriptEntry, TranscriptToolCall } from "../../../src/world.js";
 import { FileReferenceCwd, useFileReferenceHtml } from "../../file-references.js";
@@ -11,7 +8,6 @@ import { markdownHtml } from "./markdown.js";
 type ToolResult = Extract<TranscriptEntry, { kind: "tool-result" }>;
 type Assistant = Extract<TranscriptEntry, { kind: "assistant" }>;
 
-/** What the transcript draws: the operator's turn, a run of the agent's replies, mail, a note, or a lone result. */
 export type Block =
 	| { kind: "user"; entry: Extract<TranscriptEntry, { kind: "user" }> }
 	| { kind: "agent"; entries: Assistant[] }
@@ -19,10 +15,6 @@ export type Block =
 	| { kind: "note"; entry: Extract<TranscriptEntry, { kind: "note" }> }
 	| { kind: "result"; entry: ToolResult };
 
-/**
- * Group entries for drawing: consecutive replies (with the tool results between them) form one block, and a tool result
- * goes with its call. A result whose call is not loaded yet (on an older page) stands alone until it is.
- */
 export function blocksOf(entries: TranscriptEntry[]): { blocks: Block[]; results: Map<string, ToolResult> } {
 	const results = new Map<string, ToolResult>();
 	const calls = new Set<string>();
@@ -52,7 +44,6 @@ function clock(at: number) {
 	return at ? TIME.format(at) : "";
 }
 
-/** "Today", "Yesterday", or the date, for the divider where a new day starts. */
 export function dayName(at: number, now = Date.now()): string {
 	const day = (t: number) => new Date(t).toDateString();
 	if (day(at) === day(now)) return "Today";
@@ -105,7 +96,6 @@ export const Markdown = memo(function Markdown({
 	);
 });
 
-/** A folded line that opens on click: a tool call with its result, a thought, or an extension's note. */
 function Fold({
 	className,
 	glyph,
@@ -115,7 +105,7 @@ function Fold({
 	children,
 }: {
 	className: string;
-	/** Which mark the theme's skin draws before the label. */
+
 	glyph: "tool" | "thought" | "note";
 	label: string;
 	arg?: string | null;
@@ -144,19 +134,17 @@ function Fold({
 const STATE_MARK = { ok: "\u2713", error: "\u2717", waiting: "\u2026" };
 const STATE_TITLE = { ok: "Done", error: "Failed", waiting: "No result yet" };
 
-/** The character's working directory, which tool lines leave out of the paths and commands they show. */
 export const WorkingDirectory = createContext<string | undefined>(undefined);
 
-/** A message's words and origin, for an embedding surface that offers actions on it (quote, forward, copy). */
 export interface TranscriptMessageInfo {
 	speaker: "assistant" | "user" | "mail";
 	author: string;
 	at: number;
 	text: string;
-	/** The operator's reactions on the block's first entry. */
+
 	reactions?: { emoji: string; people: string[] }[];
 }
-/** The embedding surface's message element; without one, messages are plain articles. */
+
 export const TranscriptMessage = createContext<
 	ComponentType<{ message: TranscriptMessageInfo; className: string; entry: string; children: ReactNode }> | undefined
 >(undefined);
@@ -212,7 +200,6 @@ function ToolCall({ call, result }: { call: TranscriptToolCall; result?: ToolRes
 	);
 }
 
-/** Text without the blank lines tools print before and after their output (and without trailing space). */
 export function trimBlankLines(text: string): string {
 	return text.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd();
 }
@@ -228,17 +215,11 @@ function ResultText({ result }: { result: ToolResult }) {
 	);
 }
 
-/** What an agent's reply draws, in order: Markdown, one line for each run of thoughts, and folded tool calls. */
 type ReplyItem =
 	| { kind: "text"; key: string; text: string }
 	| { kind: "thoughts"; key: string; texts: string[] }
 	| { kind: "tool"; key: string; call: TranscriptToolCall };
 
-/**
- * Each reply's items. Thoughts with nothing written in them (hidden thinking) are left out, and a run of thoughts
- * with nothing else between them (also across replies of one turn) folds into one line, kept with the reply where the
- * run starts.
- */
 function replyItems(entries: Assistant[]): Map<string, ReplyItem[]> {
 	const items = new Map<string, ReplyItem[]>();
 	let run: Extract<ReplyItem, { kind: "thoughts" }> | undefined;
@@ -266,7 +247,6 @@ function replyItems(entries: Assistant[]): Map<string, ReplyItem[]> {
 	return items;
 }
 
-/** Text-only mode changes presentation, never the loaded history or tool/result index. */
 export function blockVisible(block: Block, showTools: boolean): boolean {
 	if (showTools) return true;
 	if (block.kind === "user") return !!block.entry.text.trim();

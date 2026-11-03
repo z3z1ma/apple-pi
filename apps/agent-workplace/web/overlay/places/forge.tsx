@@ -1,9 +1,3 @@
-// The forge's panel (tickets 21-23), in the theme's words: the smith's list of every open pull request that involves
-// the operator or his agents, each with its CI state; one pull request's card (title, repository, author, branch, CI
-// and its checks, review state, the agent whose branch it is) with Open in GitHub, Review, and delegation; and the
-// review page (`review.tsx`). Delegating asks the agent who built it to address the review, or the coordinator to get
-// it reviewed: an ordinary instruction that never writes to GitHub. With no agent linked, only the coordinator is
-// offered.
 import { type ReactNode, useState, useSyncExternalStore } from "react";
 import type { CiState, PullRequest } from "../../../src/integrations.js";
 import type { Character, WorldSnapshot } from "../../../src/world.js";
@@ -30,7 +24,6 @@ const REVIEW_WORDS: Record<string, string> = {
 	REVIEW_REQUIRED: "Review required",
 };
 
-/** The CI state as a small mark: a tick, a cross, a turning ring, or a dash; its word for screen readers. */
 export function CiMark({ ci, large }: { ci: CiState; large?: boolean }) {
 	return (
 		<span
@@ -42,7 +35,6 @@ export function CiMark({ ci, large }: { ci: CiState; large?: boolean }) {
 	);
 }
 
-/** The coordinator a delegation about `near`'s work goes to: the one it reports to, else the first awake one. */
 export function coordinatorFor(world: WorldSnapshot | undefined, near?: string): Character | undefined {
 	const characters = world?.characters ?? [];
 	const find = (id: string | null | undefined) => (id ? characters.find((c) => c.id === id) : undefined);
@@ -55,7 +47,6 @@ export function coordinatorFor(world: WorldSnapshot | undefined, near?: string):
 	return characters.find((c) => c.role === "coordinator");
 }
 
-/** The forge's panel while it is open, afresh on each opening. */
 export function ForgePanels({ world }: { world: WorldSnapshot | undefined }) {
 	const state = useSyncExternalStore(forge.subscribe, forge.get);
 	return state.page ? <ForgePanel key={state.opening} world={world} /> : null;
@@ -77,7 +68,6 @@ function ForgePanel({ world }: { world: WorldSnapshot | undefined }) {
 	);
 }
 
-/** "read 2m ago", or "reading..." */
 function readWhen(at: number | undefined, loading: boolean) {
 	if (loading) return "Reading GitHub\u2026";
 	const when = ago(at);
@@ -241,7 +231,6 @@ function PullRequestRow({ pr, world }: { pr: PullRequest; world: WorldSnapshot |
 	);
 }
 
-/** A pull request's description as GitHub-flavoured Markdown, its hidden HTML comments left out; links open outside. */
 function Description({ body }: { body: string }) {
 	const text = body.replace(/<!--[\s\S]*?-->/g, "").trim();
 	if (!text) return <p className="aw-place-empty">No description.</p>;
@@ -271,7 +260,6 @@ function Fact({ term, children }: { term: string; children: ReactNode }) {
 	);
 }
 
-/** One pull request: what it is, its CI and review, who built it, and what can be done with it. */
 function PullRequestCard({ pr, world }: { pr: PullRequest; world: WorldSnapshot | undefined }) {
 	const state = useSyncExternalStore(forge.subscribe, forge.get);
 	const key = prKey(pr);
@@ -364,10 +352,9 @@ function PullRequestCard({ pr, world }: { pr: PullRequest; world: WorldSnapshot 
 }
 
 const ORDER = { failing: 0, running: 1, passing: 2, skipped: 3 } as const;
-/** Checks listed before "Show all": a busy repository runs dozens, and the failing ones come first. */
+
 const CHECKS_SHOWN = 8;
 
-/** The pull request's checks, failing first, then running, passing, and skipped; the rest behind "Show all". */
 function Checks({ checks, open }: { checks: { name: string; state: keyof typeof ORDER }[]; open: boolean }) {
 	const [all, setAll] = useState(false);
 	const sorted = checks.slice().sort((a, b) => ORDER[a.state] - ORDER[b.state]);
@@ -412,10 +399,6 @@ const STAGES: { stage: "accepted" | "delivered" | "applied"; label: string }[] =
 	{ stage: "applied", label: "Applied" },
 ];
 
-/**
- * Delegating follow-up: ask the agent whose branch it is to address the review, or the coordinator to get it
- * reviewed, with an optional note of the operator's own. Either is an ordinary instruction; nothing goes to GitHub.
- */
 function Delegate({ pr, world }: { pr: PullRequest; world: WorldSnapshot | undefined }) {
 	const state = useSyncExternalStore(forge.subscribe, forge.get);
 	const [note, setNote] = useState("");

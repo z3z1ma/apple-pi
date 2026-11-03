@@ -1,6 +1,3 @@
-// A conversation's loaded history: the newest page first, older pages prepended as the operator scrolls up, and new
-// entries appended when the character's state changes (a settle, a tool) while the panel is open. Pages come from the
-// backend's `conversation`, which reads them through the runtime without blocking the world.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TranscriptEntry } from "../../../src/world.js";
 import { worldVisible } from "../../world-visibility.js";
@@ -8,27 +5,25 @@ import type { ConversationApi } from "./panel-state.js";
 
 export interface History {
 	entries: TranscriptEntry[];
-	/** The cursor for the page before the oldest loaded entry; null once the start of the conversation is loaded. */
+
 	before: string | null;
-	/** The first page has arrived. */
+
 	ready: boolean;
-	/** The observed run state whose newest page was last read successfully. */
+
 	readPulse?: string;
-	/** Entries the runtime indexed that its transcript no longer holds, in the pages read so far. */
+
 	missing: number;
 	loadingOlder: boolean;
 	error?: string;
 	loadOlder(): void;
-	/** Read the newest page again and append what is new, as when a reply has just been stored. */
+
 	refresh(): void;
 	retry(): void;
 }
 
-/** Run `ask` so that a synchronous throw becomes a rejected promise. */
 const call = <T>(ask: () => Promise<T> | undefined): Promise<T | undefined> => Promise.resolve().then(ask);
 const canRead = (owner: { active: boolean }) => owner.active && (!window.frameElement || worldVisible());
 
-/** Entries of `fresh` (the newest page) that `known` lacks, or undefined when the page no longer reaches `known`. */
 function newer(known: TranscriptEntry[], fresh: TranscriptEntry[]): TranscriptEntry[] | undefined {
 	if (!known.length) return fresh;
 	const last = known.at(-1)!.id;
@@ -37,11 +32,6 @@ function newer(known: TranscriptEntry[], fresh: TranscriptEntry[]): TranscriptEn
 	return fresh.length && fresh[0].at > known.at(-1)!.at ? undefined : [];
 }
 
-/**
- * The history of `characterId`'s conversation. `pulse` changes whenever the character's observed state does; each
- * change reads the newest page again and appends what is new. `textOnly` pages only the written words a text-only view
- * draws, so a long run of tool work between them is never read; changing it starts the history again.
- */
 export function useHistory(
 	api: ConversationApi | undefined,
 	characterId: string,
@@ -73,7 +63,6 @@ export function useHistory(
 		};
 	}, [api, characterId, textOnly]);
 
-	// The newest page, on opening.
 	useEffect(() => {
 		if (!api) return;
 		let gone = false;
@@ -127,7 +116,6 @@ export function useHistory(
 			});
 	}, [api, characterId, textOnly]);
 
-	// Read the newest page again when the character's state changes, and append what is new.
 	const refresh = useCallback(() => {
 		const now = live.current;
 		const owner = lifetime.current;
@@ -149,7 +137,6 @@ export function useHistory(
 				setReadPulse(requestedPulse);
 				const fresh = newer(live.current.entries, page.entries);
 				if (fresh === undefined) {
-					// More happened than a page holds: start again from the newest page.
 					setEntries(page.entries);
 					setBefore(page.before);
 				} else if (fresh.length) setEntries((known) => [...known, ...fresh]);

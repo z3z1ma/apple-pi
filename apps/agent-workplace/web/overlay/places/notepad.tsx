@@ -1,5 +1,3 @@
-// The headquarters' notepad: the operator's free notes, kept in the coordinator's `NOTES.md` and saved as he types. Two
-// actions reach agents: ask one to write an update where the cursor is, and send the selected text to one.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Character, WorldSnapshot } from "../../../src/world.js";
 import {
@@ -16,7 +14,6 @@ import { type Progress, placeActions } from "./place-panels.js";
 import "./notepad.css";
 import "./recruit.css";
 
-/** How long typing pauses before the notes are saved. */
 const SAVE_PAUSE_MS = 500;
 
 export function NotepadPanels({ world }: { world: WorldSnapshot | undefined }) {
@@ -27,10 +24,8 @@ export function NotepadPanels({ world }: { world: WorldSnapshot | undefined }) {
 
 type Loaded = { state: "loading" } | { state: "failed"; reason: string } | { state: "ready"; path: string };
 
-/** What the notes' saving shows: saved, saving, a save that failed, or the file changed on disk under unsaved edits. */
 type Saving = { state: "saved" | "saving" } | { state: "failed"; reason: string } | { state: "changed"; disk: string };
 
-/** A request to an agent being written under the notes: an update at a marker, or the selected text. */
 type Request = { kind: "update"; marker: string } | { kind: "selection"; text: string };
 
 function Notepad({
@@ -48,7 +43,7 @@ function Notepad({
 	const [selection, setSelection] = useState("");
 	const [request, setRequest] = useState<Request>();
 	const field = useRef<HTMLTextAreaElement>(null);
-	// The file's text as last read or saved; edits are saved against it, so a change on disk is never overwritten.
+
 	const base = useRef("");
 	const latest = useRef("");
 	latest.current = text;
@@ -101,7 +96,7 @@ function Notepad({
 		return () => {
 			live = false;
 			stop();
-			// Closing keeps what was typed: the last edits are saved at once.
+
 			void save();
 		};
 	}, []);
@@ -223,7 +218,6 @@ function SaveLine({ saving, resolve }: { saving: Saving; resolve: (keep: "mine" 
 	);
 }
 
-/** Who can be asked: the awake agents, the coordinator first. */
 const agentsOf = (world: WorldSnapshot | undefined, coordinatorId: string): Character[] =>
 	[...(world?.characters ?? [])].sort(
 		(a, b) => Number(b.id === coordinatorId) - Number(a.id === coordinatorId) || a.name.localeCompare(b.name),

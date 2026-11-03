@@ -1,10 +1,7 @@
-// Jira's and Confluence's HTML shown in a place's panel: sanitised by `safeHtml` (or plain text as paragraphs), with
-// its links opening in the system browser rather than in the world's window.
 import { useMemo } from "react";
 import { atlassian } from "./atlassian-state.js";
 import { safeHtml, textHtml } from "./rich-text.js";
 
-/** A click on a link inside sanitised HTML: open it outside, never in the window. */
 function openLinkIn(event: React.MouseEvent, onLink?: (url: string) => void) {
 	const link = event.target instanceof Element ? event.target.closest("a.aw-rich-link") : null;
 	if (!(link instanceof HTMLAnchorElement)) return;
@@ -25,10 +22,10 @@ export function RichView({
 }: {
 	html: string | null | undefined;
 	text?: string;
-	/** The Atlassian site, so relative links lead there. */
+
 	base?: string;
 	className?: string;
-	/** What shows when there is nothing. */
+
 	empty?: string;
 	onLink?: (url: string) => void;
 }) {

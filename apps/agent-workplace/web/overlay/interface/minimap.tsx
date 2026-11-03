@@ -1,11 +1,7 @@
-// The minimap at the top right: the whole current place, its painting scaled to fit, with a dot for each agent,
-// townsperson, and the avatar, the part on screen outlined, and an arrow at the edge where the way on to the next place
-// out of doors leaves (the square's exit to the street). Clicking it asks the world to walk there.
 import type { WorldSnapshot } from "../../../src/world.js";
 import type { MinimapView } from "../../view-state.js";
 import { attentionOf } from "./model.js";
 
-/** The map's drawing area inside its frame, in CSS px. */
 const WIDTH = 204;
 const HEIGHT = 136;
 
@@ -19,7 +15,7 @@ export function Minimap({
 	onWalk: (place: string, at: [number, number]) => void;
 }) {
 	if (!map) return <div className="aw-frame aw-minimap" />;
-	// The place fitted inside the frame, centred.
+
 	const scale = Math.min(WIDTH / map.cols, HEIGHT / map.rows);
 	const width = map.cols * scale;
 	const height = map.rows * scale;

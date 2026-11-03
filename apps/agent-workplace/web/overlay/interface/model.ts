@@ -1,7 +1,3 @@
-// What the interface derives from the world snapshot: each character's attention, the groupings of each tab, the orb
-// counts, and the names of places. Pure, so the views only draw. Attention matches the tmux sidebar: asking means an
-// open prompt; working is any run but idle; finished means idle with a settle not seen yet. What it does now comes
-// first: a character that works again after an unseen settle is working, with the unseen result marked beside it.
 import type { Character, Headquarters, PlaceRef, WorldSnapshot } from "../../../src/world.js";
 import { isOutside, placeKey } from "../../../src/world.js";
 import { shortArg } from "../tool-line.js";
@@ -16,16 +12,14 @@ export function attentionOf(character: Character): Attention {
 	return facts.unseen ? "finished" : "idle";
 }
 
-/** Working, with the result of an earlier run still unseen. */
 export function unseenWhileWorking(character: Character): boolean {
 	return attentionOf(character) === "working" && Boolean(character.facts?.unseen);
 }
 
 export interface Group {
-	/** Stable key, for React and for tests. */
 	key: string;
 	title: string;
-	/** A quieter second part of the heading, such as a task's status or whose headquarters. */
+
 	detail?: string;
 	characters: Character[];
 }
@@ -41,7 +35,6 @@ export function orbCounts(world: WorldSnapshot | undefined): { needsYou: number;
 	return { needsYou, working };
 }
 
-/** Labels the interface falls back to before the theme has loaded. */
 const DEFAULT_LABELS: Record<string, string> = {
 	headquarters: "Headquarters",
 	"common-room": "Common room",
@@ -58,7 +51,6 @@ function headquartersOf(ref: PlaceRef, world: WorldSnapshot | undefined): Headqu
 	return isOutside(ref) ? undefined : world?.headquarters.find((hq) => hq.id === ref.headquarters);
 }
 
-/** A place's name, such as "Guild hall" or "apple-pi wing". */
 export function placeName(ref: PlaceRef, world: WorldSnapshot | undefined, labels?: Record<string, string>): string {
 	if (ref.kind === "wing") {
 		const wing = headquartersOf(ref, world)?.wings.find((w) => w.repository === ref.repository);
@@ -67,14 +59,12 @@ export function placeName(ref: PlaceRef, world: WorldSnapshot | undefined, label
 	return label(labels, ref.kind);
 }
 
-/** Whose headquarters a place belongs to, when there is more than one to tell apart. */
 export function placeOwner(ref: PlaceRef, world: WorldSnapshot | undefined): string | undefined {
 	if (isOutside(ref) || (world?.headquarters.length ?? 0) < 2) return undefined;
 	const hq = headquartersOf(ref, world);
 	return hq ? `${hq.name}'s` : undefined;
 }
 
-/** The places outside any headquarters, in the order the Places tab lists them. */
 export const OUTSIDE: PlaceRef[] = [
 	{ kind: "square" },
 	{ kind: "street" },
@@ -85,7 +75,6 @@ export const OUTSIDE: PlaceRef[] = [
 	{ kind: "rookery" },
 ];
 
-/** Every place that exists now, in the order the world opens them: each headquarters' rooms and wings, then the square. */
 export function placesOf(world: WorldSnapshot | undefined): PlaceRef[] {
 	const places: PlaceRef[] = [];
 	for (const hq of world?.headquarters ?? []) {
@@ -99,7 +88,6 @@ export function placesOf(world: WorldSnapshot | undefined): PlaceRef[] {
 	return places;
 }
 
-/** The Agents tab: everyone grouped by where they are, places in world order, people by session start. */
 export function byPlace(world: WorldSnapshot | undefined, labels?: Record<string, string>): Group[] {
 	const characters = world?.characters ?? [];
 	return placesOf(world).flatMap((ref) => {
@@ -110,7 +98,6 @@ export function byPlace(world: WorldSnapshot | undefined, labels?: Record<string
 	});
 }
 
-/** The Needs you tab: questions first, then finished work, each the longest-waiting first. */
 export function needsYou(world: WorldSnapshot | undefined): Group[] {
 	const waiting = (attention: Attention) =>
 		(world?.characters ?? [])
@@ -123,12 +110,10 @@ export function needsYou(world: WorldSnapshot | undefined): Group[] {
 	return groups.filter((group) => group.characters.length);
 }
 
-/** The explicit focused task, or no work line when the person has not focused an assignment. */
 export function workLine(character: Character): string {
 	return character.facts?.task?.title ?? "";
 }
 
-/** The Work tab: people grouped by focused task; those without a focus last. */
 export function byTask(world: WorldSnapshot | undefined): Group[] {
 	const tasks = new Map<string, Group>();
 	const loose: Character[] = [];
@@ -152,7 +137,6 @@ export function byTask(world: WorldSnapshot | undefined): Group[] {
 	return groups;
 }
 
-/** "3m", "2h", "4d": how long ago, roughly. */
 export function ago(since: number | null | undefined, now = Date.now()): string {
 	if (!since) return "";
 	const seconds = Math.max(0, Math.round((now - since) / 1000));
@@ -163,7 +147,6 @@ export function ago(since: number | null | undefined, now = Date.now()): string 
 	return hours < 48 ? `${hours}h` : `${Math.round(hours / 24)}d`;
 }
 
-/** One line on what a character is doing now, from observed facts only. */
 export function activity(character: Character): string {
 	const facts = character.facts;
 	if (!facts) return "";

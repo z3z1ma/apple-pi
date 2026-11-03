@@ -1,15 +1,11 @@
-// Renaming an awake agent (ticket 12): the small form opened from a character's right-click menu in the world or its
-// side-panel row, and what it sends (the runtime's `rename`, with its receipt). `main.tsx` connects the backend API and
-// the view store. Each change replaces the state object, as useSyncExternalStore needs.
 import type { AgentWorkplaceApi, Character } from "../../../src/world.js";
 import type { ViewStore } from "../../view-state.js";
 import { onePanel } from "../one-panel.js";
 import type { Progress } from "./place-panels.js";
 
 export interface RenameState {
-	/** The character being renamed, as it was when the form opened. */
 	open?: Pick<Character, "id" | "name">;
-	/** Counts each opening, so opening again starts afresh. */
+
 	opening: number;
 	api?: Pick<AgentWorkplaceApi, "rename">;
 	view?: ViewStore;
@@ -22,7 +18,6 @@ const update = (change: Partial<RenameState>) => {
 	for (const listener of listeners) listener();
 };
 
-/** A name as it is sent: one line, single spaces. */
 export const cleanName = (name: string) => name.replace(/\s+/g, " ").trim();
 
 export const renaming = {
@@ -41,10 +36,7 @@ export const renaming = {
 	close() {
 		if (state.open) update({ open: undefined });
 	},
-	/**
-	 * Send `rename` for the character; resolves with what the form shows, and says it in the chatbox. A blank name is
-	 * refused here and nothing is sent.
-	 */
+
 	async send(character: Pick<Character, "id" | "name">, given: string): Promise<Progress> {
 		const name = cleanName(given);
 		if (!name) return { state: "failed", text: "Give it a name." };

@@ -1,5 +1,8 @@
 ## symbol:Actions
 
+A settled run dismisses its stop confirmation. Restore a refused instruction's words only if no newer draft exists; delivered follow-ups remain withdrawable until applied or failed.
+Why: receipt delivery is not application, and late async outcomes must not leave stale actions open or overwrite newer text.
+
 The action buttons cancel their `mousedown`, so clicking one never takes the focus from the reply box; the box takes the focus when the panel opens, after the transcript's own focus effect.
 Why: the ticket asks that the box keep the focus, so the operator can type, send, and type again without clicking back.
 Verify: apps/agent-workplace/tests/world-conversation.test.ts

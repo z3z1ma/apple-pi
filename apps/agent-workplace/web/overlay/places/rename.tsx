@@ -1,6 +1,3 @@
-// The rename form (ticket 12): a small themed dialog, drawn like the recruiting form, opened from an agent's
-// right-click menu in the world or its side-panel row. It holds the agent's current name; saving sends `rename` and
-// shows the receipt. A blank name sends nothing.
 import { useState, useSyncExternalStore } from "react";
 import { NAME_MAX, type WorldSnapshot } from "../../../src/world.js";
 import { portraitFor } from "../../looks.js";
@@ -18,7 +15,7 @@ export function RenamePanels({ world }: { world: WorldSnapshot | undefined }) {
 
 function RenameForm({ opened, world }: { opened: { id: string; name: string }; world: WorldSnapshot | undefined }) {
 	const theme = useTheme();
-	// The name it had when the form opened heads the form; the portrait follows the character as it is now.
+
 	const character = world?.characters.find((c) => c.id === opened.id);
 	const [name, setName] = useState(opened.name);
 	const [progress, setProgress] = useState<Progress>();

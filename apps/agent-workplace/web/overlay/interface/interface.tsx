@@ -1,6 +1,3 @@
-// The interface around the world, in Old School RuneScape's layout and the theme's style: the minimap with its orbs at
-// the top right, the tabbed side panel below it, and the chatbox at the bottom left. Every action on a character works
-// from here wherever the avatar is; walking is for immersion. It frames the world rather than burying it.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Character, PlaceRef } from "../../../src/world.js";
 import { placeKey } from "../../../src/world.js";
@@ -20,11 +17,9 @@ import { orbCounts, placeName } from "./model.js";
 import type { CharacterAction } from "./rows.js";
 import { SidePanel, type Tab } from "./side-panel.js";
 
-/** A place's name after "in" or "to": "the guild hall", and "the inn" for a name that has its own article. */
 const theName = (name: string) =>
 	/^the /i.test(name) ? `t${name.slice(1)}` : `the ${name.charAt(0).toLowerCase()}${name.slice(1)}`;
 
-/** Lines the interface itself adds to the chatbox (what the operator did here), kept beside the runtime's feed. */
 const GAME_KEPT = 100;
 
 export function Interface({ store, view }: { store: WorldStore; view: ViewStore }) {
@@ -55,7 +50,6 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 		setGame((lines) => [...lines, line].slice(-GAME_KEPT));
 	}, []);
 
-	// The world in another theme: say so once it wears it (not when it first opens).
 	const themeName = theme?.name;
 	const lastTheme = useRef(themeName);
 	useEffect(() => {
@@ -64,13 +58,11 @@ export function Interface({ store, view }: { store: WorldStore; view: ViewStore 
 		lastTheme.current = themeName;
 	}, [themeName, say]);
 
-	// Where you are, as the world's title says.
 	const placeTitle = state.title;
 	useEffect(() => {
 		if (placeTitle) say(`You enter ${theName(placeTitle)}.`);
 	}, [placeTitle, say]);
 
-	// The interface handles examining and the terminal itself, whoever asks (a row here, or the world's own menu).
 	const characters = world?.characters;
 	const find = (id: string) => characters?.find((character) => character.id === id);
 	const findRef = useRef(find);
