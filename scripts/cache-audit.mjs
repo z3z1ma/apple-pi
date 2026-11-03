@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-// Prompt-cache audit over Pi session logs.
-//   node scripts/cache-audit.mjs [substring] [--turns]
-// Healthy after turn 2: cacheRead ≈ previous turn's total, cacheWrite ≈ new content only.
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";

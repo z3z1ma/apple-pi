@@ -12,7 +12,6 @@ const agentDir = process.env.PI_CODING_AGENT_DIR;
 const stateDir = join(agentDir, "state");
 const controlPath = join(agentDir, "peer-control.json");
 const control = existsSync(controlPath) ? JSON.parse(readFileSync(controlPath, "utf8")) : {};
-// Like the real role resolver, a launch profile picks the first model of that profile from the profile file.
 const profilesPath = join(agentDir, "model-profiles.json");
 const profileModel =
 	roleProfile && existsSync(profilesPath)

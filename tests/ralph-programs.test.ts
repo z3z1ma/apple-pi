@@ -9,10 +9,7 @@ import { createProgramSession, executeProgram } from "../components/pi-exec/src/
 
 const source = (name: string, skill = "ralph") => readFileSync(join("skills", skill, "references", name), "utf8");
 type Host = (ref: string, args: any) => Promise<any>;
-/** Runs the actual packaged Python in Monty through pi_exec's real stubs, bindings, and evidence functions.
- * Model and core-tool answers are deterministic fixtures keyed by host ref; any fixture error fails the test.
- */
-async function run(
+async function runPackagedProgram(
 	name: string,
 	inputs: Record<string, string>,
 	host: Host,
@@ -63,7 +60,7 @@ describe("Ralph Python programs", () => {
 			const cwd = checkout();
 			let calls = 0;
 			try {
-				const result = await run(
+				const result = await runPackagedProgram(
 					program,
 					{
 						goal: "One coherent increment",
@@ -103,7 +100,7 @@ describe("Ralph Python programs", () => {
 		try {
 			const path = join(cwd, "new ' file.txt");
 			writeFileSync(path, "before");
-			const result = await run(
+			const result = await runPackagedProgram(
 				"ralph-simple.py",
 				{ goal: "increment", iterations: "3" },
 				async () => {
@@ -126,7 +123,7 @@ describe("Ralph Python programs", () => {
 			try {
 				const path = join(cwd, "asset.bin");
 				writeFileSync(path, Buffer.from([0, 1, 2]));
-				const result = await run(
+				const result = await runPackagedProgram(
 					program,
 					{ goal: "increment", iterations: "3", task: ".ledger/task/task.md", stack: ".ledger/task/task.md" },
 					async (name) => {
@@ -148,7 +145,7 @@ describe("Ralph Python programs", () => {
 		const inputs = { goal: "increment", iterations: "4", stack: "README.md", task: ".ledger/task/task.md" };
 		try {
 			await expect(
-				run(
+				runPackagedProgram(
 					"ralph-simple.py",
 					{ ...inputs, iterations: "04" },
 					async () => {
@@ -157,7 +154,7 @@ describe("Ralph Python programs", () => {
 					cwd,
 				),
 			).rejects.toThrow("canonical positive integer");
-			const failed = await run(
+			const failed = await runPackagedProgram(
 				"ralph-simple.py",
 				inputs,
 				async () => ({ status: "failed", error: "peer failed" }),
@@ -169,7 +166,7 @@ describe("Ralph Python programs", () => {
 				failedAt: 1,
 				failures: [{ iteration: 1, error: "peer failed" }],
 			});
-			const stopped = await run(
+			const stopped = await runPackagedProgram(
 				"ralph-ledger.py",
 				inputs,
 				async (name) => {

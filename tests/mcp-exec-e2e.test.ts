@@ -102,7 +102,6 @@ describe("native MCP through Python pi_exec", () => {
 				await expect.poll(() => session.getAllTools().some((tool) => tool.name === "mcp__test__echo")).toBe(true);
 				const nativeTool = session.getAllTools().find((tool) => tool.name === "mcp__test__echo");
 				expect(nativeTool?.sourceInfo?.path).toBe("builtin:mcp");
-				// Pi registers both indirect MCP exposures as deferred tools; they differ only in which reaching tool it activates.
 				expect(nativeTool?.exposure).toBe(exposure === "direct" ? "direct" : "deferred");
 				expect(session.getAllTools().map((tool) => tool.name)).not.toContain("mcp");
 				if (exposure === "codemode" || exposure === "codemode-deferred")
@@ -110,7 +109,6 @@ describe("native MCP through Python pi_exec", () => {
 				if (exposure === "deferred") expect(session.getActiveToolNames()).toContain("tool_search");
 
 				expect(session.getActiveToolNames()).toContain("pi_exec");
-				// MCP waits for every server before a program runs.
 				expect(
 					session
 						.getAllTools()
@@ -122,7 +120,6 @@ describe("native MCP through Python pi_exec", () => {
 				expect(codeDescription).toContain("tools_search(query)");
 				expect(codeDescription).not.toContain("mcp__test__echo");
 
-				// A real turn: pi_exec reaches the MCP tool through Pi's nested tool pipeline.
 				faux.setResponses([
 					fauxAssistantMessage(
 						fauxToolCall(
@@ -154,7 +151,6 @@ describe("native MCP through Python pi_exec", () => {
 				expect((composed?.details as any)?.trace.operations).toEqual([
 					expect.objectContaining({ ref: "extensions.mcp__test__echo", outcome: "succeeded" }),
 				]);
-				// Session tool_call hooks govern nested calls from Python too.
 				const denied = results.find((message) => message.toolCallId === "mcp-denied");
 				expect(denied?.content.find((part) => part.type === "text")?.text).toContain("denied by policy");
 			} finally {

@@ -1,5 +1,8 @@
 ## symbol:fauxSession
 
+`replies` is a queue, or a function of the request and its abort signal. Return `"until-aborted"` to hold the request until its signal aborts, or a promise to hold it until the test releases a reply. `options.cwd` runs in that existing directory and `dispose` leaves it in place. The agent directory stays outside a supplied cwd, which may be a repository under test. `options.streamText` also emits start, delta and end events. An aborted request ends as aborted whatever reply was scripted; a run aborted between requests sends its next request already aborted.
+Why: a supplied repository must not receive the fixture's agent directory, and a scripted reply must not hide a real abort.
+
 Use the callback form returning a Promise to hold a request, including multi-turn scripts; the array form holds complete assistant messages. Run typecheck alongside these integration tests.
 Why: Vitest transpiles without typechecking. A callback mistakenly put in the array was emitted as a malformed message and settled the supposedly busy turn, so timing assertions were testing an invalid fixture.
 Verify: components/session-state/tests/workplace.test.ts

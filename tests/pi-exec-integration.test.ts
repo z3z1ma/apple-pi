@@ -61,7 +61,6 @@ async function harness(setup?: (cwd: string) => void, extensions = ["./extension
 		.filter((path: string) => extensions.includes(path))
 		.map((path: string) => join(process.cwd(), path));
 	if (peerFixture) {
-		// Resolve the role in the same real extension-loader graph as pi_exec, not Vitest's module graph.
 		const roleExtension = join(cwd, "manager-extension.ts");
 		writeFileSync(
 			roleExtension,
@@ -79,7 +78,6 @@ export default function(pi) {
 	const loaded = await loadExtensions(paths, cwd, events, runtime);
 	expect(loaded.errors).toEqual([]);
 	const screen = fakeTui(200, 50);
-	// The above-editor widgets Pi would currently mount, keyed as Pi keys them: a later mount replaces an earlier one.
 	const widgets = new Map<string, { factory: any; instance?: { render(): string[] } }>();
 	const statuses = new Map<string, string>();
 	const ctx = {
@@ -102,7 +100,6 @@ export default function(pi) {
 			},
 		},
 	} as any;
-	/** Renders every mounted above-editor widget through its factory, as Pi's TUI would. */
 	const passive = () =>
 		[...widgets.entries()].map(([key, widget]) => {
 			widget.instance ??= widget.factory(screen.tui, plainTheme);
@@ -114,7 +111,6 @@ export default function(pi) {
 	};
 	shutdown = () => emit("session_shutdown");
 	await emit("session_start");
-	// Role-aware registration can replace definitions during startup; track the settled tools.
 	for (const extension of loaded.extensions)
 		for (const { definition } of extension.tools.values()) {
 			const execute = definition.execute;
@@ -209,11 +205,9 @@ async function peerRuntime(cwd: string, caller: string): Promise<() => Promise<v
 	};
 }
 
-/** A Python literal for a controlled fixture-peer task that runs one tool until its gate responds. */
 const gatedTask = (gate: string, tool: string, args: Record<string, unknown>, holdTerm = false) =>
 	JSON.stringify(JSON.stringify({ gate, tool, args, ...(holdTerm ? { holdTerm } : {}) }));
 
-/** The registered package loads managed tasks beside Pi Exec. */
 async function mixedHarness() {
 	const h = await harness(undefined, ["./extensions/pi-exec.ts", "./extensions/tasks.ts"]);
 	const scheduleTask = () =>
@@ -672,21 +666,18 @@ describe("Pi Exec shared passive activity", () => {
 		void run.catch(() => {});
 		await vi.waitFor(() => expect(gate.responses.size).toBe(2));
 
-		// One shared surface carries both kinds of work; Pi Exec mounts no widget of its own.
 		await vi.waitFor(() => expect(h.passiveText()).toContain("2 running"));
 		expect(h.passive().map((widget) => widget.key)).toEqual(["active-work"]);
 		const active = h.passiveText();
 		expect(active).toContain("● Active work");
 		expect(active).toContain("Mixed program");
 		expect(active).toContain("Deferred check");
-		// The program is one unit of work, independent of its number of peers.
 		expect(active.match(/Mixed program/g)).toHaveLength(1);
 		expect(h.statuses.get("tasks")).toBe("tasks:1");
 		expect(h.statuses.get("pi-exec")).toBe("exec:1");
 		for (const line of h.passive()[0]!.lines) expect(visibleWidth(line)).toBeLessThanOrEqual(200);
 		expect(h.screen.stack).toHaveLength(0);
 
-		// Observed activity and timing follow host-call progress.
 		const now = Date.now();
 		vi.spyOn(Date, "now").mockReturnValue(now + 12_000);
 		expect(h.passiveText()).toMatch(/Mixed program.*1[23]\.\ds/);

@@ -26,14 +26,6 @@ const model = {
 	maxTokens: 10_000,
 } as Model<string>;
 
-/**
- * A real AgentSession on a scripted model, with `app.ts` in a temporary cwd. Call `dispose` when done.
- * `replies` is a queue, or a function of the request (and its abort signal) for runs whose order is not fixed. A function may
- * return `"until-aborted"` to hold the request open until its signal aborts, or a promise to hold it until
- * the test releases a reply. With `options.cwd`, the
- * session runs in that existing directory instead, which `dispose` leaves in place. With `options.streamText`,
- * each reply's text blocks also arrive as start, delta, and end events, as a streaming provider sends them.
- */
 export async function fauxSession(
 	extensionFactories: ExtensionFactory[],
 	replies: Reply[] | ((context: Context, signal?: AbortSignal) => Reply | "until-aborted" | Promise<Reply>),
@@ -42,7 +34,6 @@ export async function fauxSession(
 ) {
 	const owned = options.cwd === undefined;
 	const cwd = options.cwd ?? mkdtempSync(join(tmpdir(), "apple-pi-faux-session-"));
-	// The agent directory stays out of a supplied cwd, which may be a repository under test.
 	const agentDir = owned ? join(cwd, "agent") : mkdtempSync(join(tmpdir(), "apple-pi-faux-agent-"));
 	if (owned) {
 		mkdirSync(agentDir);
@@ -74,8 +65,6 @@ export async function fauxSession(
 			else events.push({ type: "done", reason: reply.stopReason === "toolUse" ? "toolUse" : "stop", message: reply });
 			events.end(reply);
 		};
-		// Like a real provider, an aborted request ends as aborted, whatever reply was scripted. A run
-		// aborted between requests (say, from a tool hook or turn ceiling) sends its next request already aborted.
 		const abort = () => settle({ ...fauxAssistantMessage(""), stopReason: "aborted", errorMessage: "aborted" });
 		if (options?.signal?.aborted) abort();
 		else if (message === "until-aborted" || message instanceof Promise)

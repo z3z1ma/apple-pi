@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 
 it("guides work through interns and peers instead of removed delegation tools", () => {
-	// Python's agent function remains valid; the native agent tool is gone.
 	const removed =
 		/\b(?:get_subagent_result|steer_subagent|stop_subagent|subagent_type)\b|\bsub-?agents?\b|<subagent-team>|`agent` (?:tool|session)|direct `agent`|subagents\.json|\.pi\/agents/;
 	const stale: string[] = [];

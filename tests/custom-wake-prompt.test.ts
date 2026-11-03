@@ -11,11 +11,6 @@ afterEach(() => {
 	for (const session of sessions.splice(0)) session.dispose();
 });
 
-/**
- * Task notifications, schedules, monitors, and pair findings start runs with a triggered custom
- * message. Those runs must carry the package's prompt sections on every provider request, or the
- * prompt changes mid-run and the provider's prefix cache breaks.
- */
 describe("runs started by a custom message", () => {
 	it("keep package prompt sections on their first and later provider requests", async () => {
 		let api: ExtensionAPI | undefined;

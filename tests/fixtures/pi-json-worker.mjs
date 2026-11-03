@@ -10,11 +10,8 @@ const usage = {
 	totalTokens: 5,
 	cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, total: 3 },
 };
-// Controlled mode: a JSON task such as {"gate":"http://…/alpha","tool":"read","args":{"path":"a.txt"}}
-// starts one child tool, waits for the gate response, and reports it failed when the body starts with "error:".
 const controlled = task?.startsWith("{") ? JSON.parse(task) : undefined;
 if (controlled) {
-	// holdTerm models a worker that keeps running briefly after cancellation and then reports late events.
 	if (controlled.holdTerm) process.on("SIGTERM", () => {});
 	const tools = (controlled.tools ?? [controlled]).map((tool, index) => ({ ...tool, id: `${tool.tool}-${index + 1}` }));
 	send({ type: "message_start", message: { role: "assistant" } });

@@ -5,11 +5,6 @@ import { describe, expect, it } from "vitest";
 const ROOT = join(import.meta.dirname, "..");
 const SOURCE_ROOTS = ["components", "extensions"];
 
-/**
- * Provider prompt caches match on an exact prefix. A `context` hook that
- * rebuilds, moves, or removes a message on every request invalidates the
- * cache for the whole history and re-sends it at cache-write prices.
- */
 const ALLOWED_CONTEXT_HOOKS: string[] = [];
 
 function sourceFiles(dir: string): string[] {

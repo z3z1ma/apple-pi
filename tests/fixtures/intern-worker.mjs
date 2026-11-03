@@ -13,7 +13,6 @@ const record = {
 	material: context ? JSON.parse(readFileSync(context.slice(1), "utf8")) : undefined,
 };
 let child;
-// Like Pi print mode, SIGTERM cleans up tools detached into their own process groups before exiting.
 process.on("SIGTERM", () => {
 	if (child?.pid) process.kill(-child.pid, "SIGKILL");
 	writeFileSync(join(dir, `${task}.stopped`), "stopped");

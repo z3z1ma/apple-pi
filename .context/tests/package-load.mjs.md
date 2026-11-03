@@ -9,6 +9,9 @@ Compaction and notebook delivery require the SDK integration cases, not a former
 Why: another handler can keep that count positive even when notebook delivery is disconnected, and an extension rename says nothing about native summarization behavior.
 The watchdog assertion verifies the manifest-to-lifecycle registration boundary, not a stall recovery.
 Why: the loader intentionally does not start sessions, so handler registration can pass with broken enforcement. The configured-transport and SDK lifecycle tests own proof of request abort, native retry and cleanup. Keep the smoke test's registration claim separate from those behavior claims.
+Browser skills are self-contained: their Markdown links must not leave that skill's directory.
+Why: a relative link into another skill would make the browser skill depend on guidance it does not ship with.
+
 The process-skill names and the seven explicit-entry exceptions are independent public catalog expectations. Keep the shared process reference in link checks as well as the entry skills; a loaded entry can still lead its reader to a missing supporting procedure.
 Why: discovery and invocation policy were explicit acceptance criteria. Deriving the expected names or policy from the loaded skills would let a missing skill or accidental model-invocation restriction validate itself. These checks establish reachable guidance, not model comprehension or useful collaboration.
 Coupled: package.json, components/session-state/src/work-tools.ts, components/pi-exec/src/index.ts, extensions/anthropic-watchdog.ts, skills/handbook-writing/SKILL.md, skills/handbook-writing/references/processes.md

@@ -1,6 +1,5 @@
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 
-/** Operator sizing policy, not measured benchmark scores. Higher effort can exceed a workload's minimum band. */
 export function modelSizingBand(model: string, thinking: ModelThinkingLevel): number {
 	const effort = ["off", "minimal", "low", "medium", "high", "xhigh", "max"].indexOf(thinking);
 	if (["openai/gpt-6-astra", "anthropic/claude-fable-5-1"].includes(model) && effort >= 3) return 4;

@@ -13,12 +13,6 @@ function parseSize(value: number | string | undefined, total: number): number | 
 	return match ? Math.floor((total * Number.parseFloat(match[1]!)) / 100) : undefined;
 }
 
-/**
- * A fake TUI that models the parts of Pi's overlay stack persistent panels rely on:
- * overlay options are read on every render, `hideOverlay()` pops the topmost
- * entry, and `custom()` follows Pi's `showExtensionCustom`, including a factory
- * that completes synchronously (the editor is restored and nothing is mounted).
- */
 export function fakeTui(columns = 160, rows = 40) {
 	const editor = { name: "editor", text: "draft to main agent" };
 	const stack: FakeOverlayEntry[] = [];
@@ -66,7 +60,6 @@ export function fakeTui(columns = 160, rows = 40) {
 		}),
 	};
 
-	/** Lay out an overlay the way pi-tui does on each render: options are resolved against the current terminal. */
 	const layout = (entry: FakeOverlayEntry) => {
 		const { columns: termWidth, rows: termHeight } = tui.terminal;
 		const options = entry.options ?? {};
@@ -101,10 +94,6 @@ export const plainTheme = {
 	bold: (text: string) => text,
 };
 
-/**
- * `ctx.ui.custom()` as Pi implements it. Modal scripts run against capturing
- * overlays that stay open; a factory may also call `done` synchronously.
- */
 export function fakeCustom(screen: FakeScreen, theme: any = plainTheme, keybindings: any = undefined) {
 	const modalScripts: Array<(component: any) => void> = [];
 	const custom = vi.fn(async (factory: any, options?: any) => {
