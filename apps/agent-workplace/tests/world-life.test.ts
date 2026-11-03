@@ -8,19 +8,13 @@ import type { SlackChannel } from "../src/integrations.js";
 import type { Character, CharacterFacts, WorldSnapshot } from "../src/world.js";
 import type { PlaceData, Point } from "../web/theme.js";
 
-// Seam 2 for life in the places (tickets 06 and 07): the committed, built world UI in headless Chrome over a fixture
-// backend, with life sped up (`window.agentWorldLife`). Standing characters idle now and then, never in step; townsfolk
-// stroll between the square's points of interest; an idle agent steps out and back while a working one stays; the host
-// shifts behind its counter; and nobody pauses on a door's stand point or keeps the avatar from its way.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-life-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const THEMES = ["fantasy", "tech-office", "anime-school"] as const;
 const placeOf = (theme: string, name: string): PlaceData =>
 	JSON.parse(readFileSync(fileURLToPath(new URL(`../themes/${theme}/places/${name}.json`, import.meta.url)), "utf8"));
-/** How much faster than life (idles, outings, pauses); walking keeps its speed. */
 const PACE = 10;
 
 let browser: Browser;
@@ -186,7 +180,6 @@ describe.each(THEMES)("%s", (theme) => {
 			await vi.waitFor(async () => expect((await view<FolkView[]>(page, "townsfolk()")).length).toBe(5), {
 				timeout: 8000,
 			});
-			// Agents hold the first spots in the order they started; townsfolk stand on spots too (any of the rest).
 			const homes = new Map<string, Point>([
 				["wren", square.spots[0]],
 				["bram", square.spots[1]],
@@ -214,7 +207,6 @@ describe.each(THEMES)("%s", (theme) => {
 				await page.waitForTimeout(90);
 			}
 
-			// Idles: several play, and at no moment do two characters play the same one.
 			const idles = new Set<string>();
 			for (const { figures, folk, host } of samples) {
 				const playing = [...figures, ...folk, ...(host ? [host] : [])].map((w) => w.idle).filter((i) => i);
@@ -222,7 +214,6 @@ describe.each(THEMES)("%s", (theme) => {
 				for (const name of playing) idles.add(name!);
 			}
 			expect(idles.size).toBeGreaterThanOrEqual(3);
-			// Working and asking keep their poses and their spots; their frames are the working and asking ones.
 			for (const { figures } of samples) {
 				const bram = figures.find((f) => f.id === "bram")!;
 				const ivy = figures.find((f) => f.id === "ivy")!;
@@ -231,7 +222,6 @@ describe.each(THEMES)("%s", (theme) => {
 				expect(bram).toMatchObject({ pose: "busy", idle: null, wander: "home" });
 				expect(ivy).toMatchObject({ pose: "asking", frame: 15, idle: null, wander: "home" });
 			}
-			// Townsfolk stroll: they leave their spots, pause only at points of interest, and never on a doorstep.
 			const visited = new Set<string>();
 			for (const { folk } of samples)
 				for (const f of folk) {
@@ -243,7 +233,6 @@ describe.each(THEMES)("%s", (theme) => {
 					for (const door of doors) expect(dist(door, at)).toBeGreaterThanOrEqual(1);
 				}
 			expect(visited.size).toBeGreaterThanOrEqual(2);
-			// The idle agent steps out and comes back.
 			const wren = samples.map((s) => s.figures.find((f) => f.id === "wren")!);
 			const out = wren.findIndex((f) => dist([f.x, f.y], homes.get("wren")!) > 0.3);
 			expect(out, "Wren leaves her spot").toBeGreaterThanOrEqual(0);
@@ -256,7 +245,6 @@ describe.each(THEMES)("%s", (theme) => {
 						.map((f) => [f.x.toFixed(2), f.y.toFixed(2), f.moving, f.wander]),
 				)}`,
 			).toBe(true);
-			// The crier shifts a little behind its counter.
 			const shifts = samples.map((s) => dist([s.host!.x, s.host!.y], hostHome));
 			expect(Math.max(...shifts)).toBeGreaterThan(0.3);
 			expect(Math.max(...shifts)).toBeLessThan(0.6);
@@ -283,7 +271,6 @@ test("a wanderer never keeps the avatar from its way: the avatar walks up beside
 			},
 			{ timeout: 30_000, interval: 100 },
 		);
-		// Click just beside it: the avatar's walk is found, and the wanderer heads home out of its way.
 		const goal: Point = [paused!.x + 0.9, paused!.y + 0.3];
 		const [sx, sy] = await screen(page, ...goal);
 		await page.mouse.click(sx, sy);

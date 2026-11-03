@@ -9,14 +9,9 @@ import type { ThemeManifest } from "../src/theme-pack.js";
 import type { Character, WorldSnapshot } from "../src/world.js";
 import type { PlaceData } from "../web/theme.js";
 
-// Seam 2 for the second exterior (ticket 09 of the alive pass): the committed, built world UI in headless Chrome over a
-// fixture backend. The street beyond the square is a place of its own in every pack: listed in the Places tab, shown
-// on the square's minimap as an arrow at its edge, reached by walking out of the square and left by walking back, and
-// it holds the townsfolk (unread Slack channels) the square has no room for.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots there as aw-alive-09-*.png.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const THEMES = ["fantasy", "tech-office", "anime-school"] as const;
 const read = <T>(path: string): T =>
@@ -47,7 +42,6 @@ const world = (theme: string): WorldSnapshot => ({
 	mail: [],
 	theme,
 });
-/** Forty unread channels, the most pressing first: more than the square and the street hold together. */
 const CHANNELS: SlackChannel[] = Array.from({ length: 40 }, (_, i) => ({
 	id: `C${String(i).padStart(4, "0")}`,
 	name: `team-${i}`,
@@ -94,7 +88,7 @@ async function openWorld(first: WorldSnapshot) {
 	);
 	await page.goto(`${ORIGIN}/index.html?world`);
 	await vi.waitFor(async () => expect(await view(page, "avatar()")).toBeTruthy(), { timeout: 15000 });
-	await page.waitForTimeout(500); // the arrival fade
+	await page.waitForTimeout(500);
 	return { page, errors };
 }
 
@@ -112,7 +106,6 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `aw-alive-09-${name}.png`), animations: "disabled" });
 }
 
-/** Wait until the avatar has stopped walking. */
 async function stopped(page: Page) {
 	await vi.waitFor(async () => expect((await view<{ moving: boolean }>(page, "avatar()")).moving).toBe(false), {
 		timeout: 15000,
@@ -129,7 +122,6 @@ test.each(THEMES)(
 		const street = place(theme, "street");
 		const { page, errors } = await openWorld(world(theme));
 		expect(await here(page)).toBe("square");
-		// The square: its spots less the two agents' hold the first channels.
 		const room = square.spots.length - AGENTS.length;
 		await vi.waitFor(async () => expect(await townsfolk(page)).toHaveLength(room), { timeout: 10000 });
 		await page.getByRole("tab", { name: "Places", exact: true }).click();
@@ -138,7 +130,6 @@ test.each(THEMES)(
 		expect(names.slice(0, 2)).toEqual([labels(theme).square, labels(theme).street]);
 		await outside.getByTitle(`Travel to ${labels(theme).street}`, { exact: true }).dispatchEvent("click");
 		await vi.waitFor(async () => expect(await here(page)).toBe("street"), { timeout: 5000 });
-		// The street: the next channels, one on each of its spots.
 		await vi.waitFor(async () => expect(await townsfolk(page)).toHaveLength(street.spots.length), { timeout: 10000 });
 		const ids = (await townsfolk(page)).map((f) => f.id).sort();
 		expect(ids).toEqual(CHANNELS.slice(room, room + street.spots.length).map((c) => c.id));
@@ -160,12 +151,10 @@ test.each(THEMES)(
 		const street = place(theme, "street");
 		const { page, errors } = await openWorld(world(theme));
 		await page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
-		// The square's minimap marks the exit at the edge it leaves by, named for the street.
 		const exit = page.locator(".aw-minimap-exit");
 		await exit.waitFor({ timeout: 5000 });
 		expect(await exit.getAttribute("title")).toBe(`To ${labels(theme).street}`);
 		const door = square.doors.find((d) => d.to === "street")!;
-		// Hovering the way out offers to go there; clicking it walks out of the square.
 		await page.evaluate((name) => (window as any).agentWorldView.lookAt(name), door.name);
 		await page.waitForTimeout(800);
 		const [x, y, w, h] = door.rect;
@@ -181,7 +170,6 @@ test.each(THEMES)(
 		await page.locator(".aw-minimap-exit").waitFor({ timeout: 5000 });
 		expect(await page.locator(".aw-minimap-exit").getAttribute("title")).toBe(`To ${labels(theme).square}`);
 		await shot(page, `${theme}-street-arrived`);
-		// And back the way it came.
 		const back = street.doors.find((d) => d.to === "square")!;
 		const [bx, by, bw, bh] = back.rect;
 		const [tx, ty] = await screen(page, bx + bw / 2, by + bh / 2);

@@ -7,14 +7,9 @@ import { appFile, contentType } from "../src/app-files.js";
 import type { Character, WorldSnapshot } from "../src/world.js";
 import type { PlaceData, Point } from "../web/theme.js";
 
-// Seam 2 for the cursor and click markers (ticket 01 of the aliveness task): the committed, built world UI in headless
-// Chrome over a fixture backend. In each theme the world's cursor is the pack's hand (never the default arrow): it taps
-// over something to do, is a fist over floor nobody can walk to, and points over open floor; a left click drops a
-// yellow X where the avatar is heading or a red X on what it acts on, gone within about half a second.
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const ORIGIN = "http://localhost";
 const appDir = fileURLToPath(new URL("..", import.meta.url));
-// AGENT_WORLD_SHOTS=<dir> saves screenshots as aw-alive-01-<theme>-*.png, the cursor drawn where the pointer is.
 const SHOTS = process.env.AGENT_WORLD_SHOTS;
 const THEMES = ["fantasy", "tech-office", "anime-school"] as const;
 
@@ -101,7 +96,6 @@ const passThrough = (page: Page) =>
 	page.addStyleTag({ content: ".aw-interface, .aw-interface * { pointer-events: none !important; }" });
 const onScreen = ([x, y]: [number, number]) => x > 60 && x < 1220 && y > 60 && y < 740;
 
-/** Draw the hand where the pointer is (screenshots leave the system cursor out), then take the shot. */
 async function shot(page: Page, name: string, at: [number, number]) {
 	if (!SHOTS) return;
 	mkdirSync(SHOTS, { recursive: true });
@@ -129,7 +123,6 @@ async function shot(page: Page, name: string, at: [number, number]) {
 	await page.evaluate(() => document.getElementById("shot-cursor")?.remove());
 }
 
-/** A blocked spot on screen with nothing to do there (its hover text is only Walk here), found by pointing at each. */
 async function wallOnScreen(page: Page, hall: PlaceData) {
 	for (const [x, y, w, h] of hall.blocked) {
 		const at: Point = [x + w / 2, y + h / 2];
@@ -152,7 +145,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 		const { page, errors } = await openWorld(theme);
 		await passThrough(page);
 
-		// Open floor: the plain pointing hand, the pack's art scaled to a cursor (never the default arrow).
 		const floor = await screen(page, hall.entries.start);
 		await page.mouse.move(floor[0], floor[1]);
 		await vi.waitFor(async () => expect((await pointerView(page)).cursor).toBe("walk"), { timeout: 3000 });
@@ -162,7 +154,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 		});
 		await shot(page, `aw-alive-01-${theme}-floor`, floor);
 
-		// A character: the hand taps, alternating the pointing and tapping art.
 		const orla = (await view<{ x: number; y: number }[]>(page, "figures()"))[0];
 		const over = await screen(page, [orla.x, orla.y - 0.6]);
 		await page.mouse.move(over[0], over[1]);
@@ -178,7 +169,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 		expect(csses.size).toBe(2);
 		await shot(page, `aw-alive-01-${theme}-act`, over);
 
-		// Floor nobody can walk to, with nothing to do there: the fist.
 		const wall = (await wallOnScreen(page, hall))?.screen;
 		expect(wall, "a blocked spot with nothing to do on screen").toBeDefined();
 		expect((await pointerView(page)).art).toBe("cursor-blocked");
@@ -205,7 +195,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 		const { page, errors } = await openWorld(theme);
 		await passThrough(page);
 
-		// Open floor: the yellow X at the destination.
 		const [sx, sy] = hall.entries.start;
 		const to: Point = [sx + 2, sy - 1];
 		const floor = await screen(page, to);
@@ -218,7 +207,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 		await page.waitForTimeout(650);
 		expect((await pointerView(page)).marks).toEqual([]);
 
-		// Floor nobody can walk to: the yellow X where the avatar is heading instead, the nearest open floor.
 		await vi.waitFor(async () => expect((await view<{ moving: boolean }>(page, "avatar()")).moving).toBe(false), {
 			timeout: 8000,
 		});
@@ -234,7 +222,6 @@ describe.each(THEMES)("in the %s theme", (theme) => {
 		expect(Math.hypot(heading[0].x - stopped.x, heading[0].y - stopped.y)).toBeLessThan(0.2);
 		expect(Math.hypot(heading[0].x - wall!.at[0], heading[0].y - wall!.at[1])).toBeGreaterThan(0.2);
 
-		// A character: the red X on it.
 		await vi.waitFor(async () => expect((await view<{ moving: boolean }>(page, "avatar()")).moving).toBe(false), {
 			timeout: 8000,
 		});
