@@ -22,6 +22,7 @@ interface CodeAsk {
 	language: string;
 	state: "draft" | "sending" | "sent" | "failed";
 	to?: string;
+	toId?: string;
 	thread?: string;
 	review?: string;
 	error?: string;
@@ -75,6 +76,7 @@ function subjectOf(ask: CodeAsk): string {
 
 function AskThread({
 	ask,
+	asleep,
 	visible,
 	onSend,
 	onClose,
@@ -82,6 +84,7 @@ function AskThread({
 	onOpenReviews,
 }: {
 	ask: CodeAsk;
+	asleep: boolean;
 	visible: boolean;
 	onSend(text: string): void;
 	onClose(): void;
@@ -142,7 +145,13 @@ function AskThread({
 		setReply("");
 		await api.communications.post({ attempt: crypto.randomUUID(), thread: ask.thread, body });
 	};
-	const operator = OPERATOR;
+	const [calling, setCalling] = useState<"idle" | "calling" | "failed">("idle");
+	const callIn = async () => {
+		if (!ask.toId) return;
+		setCalling("calling");
+		const receipt = await api.wake(ask.toId);
+		setCalling(receipt.ok ? "idle" : "failed");
+	};
 	return (
 		<section
 			className="wp-code-ask"
@@ -186,6 +195,18 @@ function AskThread({
 				<p className="wp-code-ask-status">Sending...</p>
 			) : (
 				<div className="wp-code-ask-thread">
+					{asleep && ask.to && (
+						<p className="wp-code-ask-away" role="status">
+							{calling === "calling"
+								? `Calling in ${ask.to}...`
+								: calling === "failed"
+									? `${ask.to} could not be called in. The question waits until they are.`
+									: `${ask.to} is at home. The question waits until they are called in.`}
+							<button type="button" disabled={calling === "calling"} onClick={() => void callIn()}>
+								Call in
+							</button>
+						</p>
+					)}
 					{ask.review ? (
 						<>
 							<p className="wp-code-ask-status">
@@ -214,12 +235,12 @@ function AskThread({
 						<>
 							<ol className="wp-code-ask-messages">
 								{messages.map((message) => (
-									<li key={message.id} className={message.from === operator ? "is-mine" : ""}>
-										<strong>{message.from === operator ? "You" : message.fromName}</strong>
+									<li key={message.id} className={message.from === OPERATOR ? "is-mine" : ""}>
+										<strong>{message.from === OPERATOR ? "You" : message.fromName}</strong>
 										<Markdown text={message.body} />
 									</li>
 								))}
-								{messages.length > 0 && messages.every((message) => message.from === operator) && (
+								{messages.length > 0 && messages.every((message) => message.from === OPERATOR) && (
 									<li className="wp-code-ask-waiting">Waiting for a reply...</li>
 								)}
 							</ol>
@@ -358,7 +379,7 @@ export function useCodeAsks({
 				const thread = "effect" in result ? result.effect?.thread?.id : undefined;
 				if (!thread)
 					throw new Error("reason" in result && result.reason ? result.reason : "The message was not delivered.");
-				update(ask.id, { state: "sent", thread, to: to.name });
+				update(ask.id, { state: "sent", thread, to: to.name, toId: to.id });
 			} catch (error) {
 				update(ask.id, { state: "failed", error: (error as Error).message });
 			}
@@ -461,6 +482,7 @@ export function useCodeAsks({
 			<div key={ask.id} ref={measure(ask.id, ask.end)} className="wp-code-ask-slot">
 				<AskThread
 					ask={ask}
+					asleep={!!ask.toId && !world.characters.some((person) => person.id === ask.toId)}
 					visible={visible}
 					onSend={(text) => void send(ask, text)}
 					onClose={() => setAsks((all) => all.filter((other) => other.id !== ask.id))}

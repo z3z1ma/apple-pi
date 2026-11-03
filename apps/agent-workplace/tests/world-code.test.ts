@@ -767,7 +767,11 @@ test("editor actions reach agents with the selected code and show their replies 
 		await openMain(page);
 		await page.evaluate(() => {
 			const w = window as any;
-			w.askCalls = { mail: [], posts: [], previews: [], enqueues: [], authors: [] };
+			w.askCalls = { mail: [], posts: [], previews: [], enqueues: [], authors: [], wakes: [] };
+			w.agentWorkplace.wake = async (id: string) => {
+				w.askCalls.wakes.push(id);
+				return { ok: true };
+			};
 			w.threadMessages = {};
 			w.agentWorkplace.codeAuthor = async (path: string) => {
 				w.askCalls.authors.push(path);
@@ -860,7 +864,11 @@ test("editor actions reach agents with the selected code and show their replies 
 		const authorAsk = page.getByRole("region", { name: "Ask Whoever Wrote This: lines 1-2", exact: true });
 		await authorAsk.getByRole("textbox").fill("What was the intent?");
 		await authorAsk.getByRole("button", { name: "Ask the author", exact: true }).click();
-		await authorAsk.getByText(/Niamh/).waitFor();
+		await authorAsk.getByText("src/main.ts:1-2 \u00b7 Niamh", { exact: true }).waitFor();
+		const away = authorAsk.getByRole("status");
+		await away.getByText("Niamh is at home. The question waits until they are called in.").waitFor();
+		await away.getByRole("button", { name: "Call in", exact: true }).click();
+		await vi.waitFor(async () => expect((await calls()).wakes).toEqual(["author-1"]));
 		expect((await calls()).authors).toEqual(["/fixture/project/src/main.ts"]);
 		expect((await calls()).mail[1]).toMatchObject({ to: ["author-1"] });
 		expect((await calls()).mail[1].body).not.toContain("```");

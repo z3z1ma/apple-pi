@@ -56,7 +56,9 @@
 .wp-code-toolbar button,
 .wp-code-editor-toolbar button,
 .wp-code-diff-header button,
-.wp-code-conflict button {
+.wp-code-conflict button,
+.wp-code-ask-away button,
+.wp-code-ask-actions button:not(.wp-primary) {
 	border: 1px solid var(--wp-border);
 	border-radius: 5px;
 	padding: 6px 9px;
@@ -562,6 +564,19 @@
 	background: none;
 	color: var(--wp-link);
 	font: inherit;
+}
+.wp-code-ask-away {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 12px 0;
+	padding: 6px 8px;
+	border-radius: 6px;
+	background: var(--wp-hover);
+	color: var(--wp-muted);
+}
+.wp-code-ask-away button {
+	margin-left: auto;
 }
 .wp-code-ask-messages {
 	margin: 0;
