@@ -71,7 +71,6 @@ function result(details: unknown) {
 	return { content: [{ type: "text" as const, text: JSON.stringify(details, null, 2) }], details };
 }
 
-/** Schemas and selection guidance stay at the SDK boundary; shared queries and mutations belong to communication.ts. */
 export function installCommunicationTools(pi: ExtensionAPI): void {
 	function action<P extends TProperties>(
 		name: string,

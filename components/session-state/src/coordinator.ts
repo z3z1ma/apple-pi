@@ -11,7 +11,6 @@ import { goalTitle, goalWorth, installAssignments, requireTitle } from "./work-t
 
 const MANAGER_TOOLS = ["hire", "call_in", "send_home", "rename", "move", "let_go", "assign", "unassign"];
 
-/** The tmux pane this session runs in, which new windows open next to. */
 function ownPane(): { socket: string; pane: string } | undefined {
 	const socket = process.env.TMUX?.split(",")[0];
 	const pane = process.env.TMUX_PANE;
@@ -40,7 +39,6 @@ const personParameter = Type.String({
 	description: "The person: a name in your organization or a session id.",
 });
 
-/** Manager tools follow the shared management capability gate. */
 export function installCoordinator(pi: ExtensionAPI): void {
 	installAssignments(pi);
 	pi.registerTool(

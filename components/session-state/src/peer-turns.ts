@@ -17,7 +17,6 @@ interface Request extends PeerTurn {
 
 const failed = (error: string): TurnResult => ({ status: "failed", text: "", error, operations: [], changes: [] });
 
-/** Runs correlated requests in this person's session; it owns no person or process. */
 export function installPeerTurns(pi: ExtensionAPI) {
 	let current: ExtensionContext | undefined;
 	let active: { request: Request; observer: ReturnType<typeof createTurnObserver> } | undefined;
@@ -104,7 +103,6 @@ export function installPeerTurns(pi: ExtensionAPI) {
 			hideReturn(done.request);
 			done.request.finish(done.observer.finish({ aborted: event.aborted, outputSchema: done.request.outputSchema }));
 		}
-		// Settlement handlers are notification-only, and isIdle stays false until every handler returns.
 		schedule();
 	});
 	return {

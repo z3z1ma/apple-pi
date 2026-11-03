@@ -107,7 +107,6 @@ function transition(state: ObservedState, row: Recorded, data: Record<string, un
 	return observation;
 }
 
-/** Read endpoint evidence after a cutoff too, without allowing a later input to reclassify its prefix. */
 function executionSpans(db: DatabaseSync, cutoff: number) {
 	const rows = db
 		.prepare(`select seq, at, session_id, generation, source, type,

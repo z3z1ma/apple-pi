@@ -21,7 +21,6 @@ export type RunObservation =
 
 const UNKNOWN: RunInput = { kind: "unknown", command: null };
 
-/** Deliberately select typed identifiers: prompts, custom-message bodies and arbitrary details stay private. */
 export function runInput(message: unknown): RunInput {
 	if (!message || typeof message !== "object") return UNKNOWN;
 	const value = message as { role?: string; customType?: string; details?: Record<string, unknown> };
@@ -51,7 +50,6 @@ function activeRuns() {
 	return global[RUNS];
 }
 
-/** Process-local identity survives extension reload only; journal snapshots make every reconnect explicit. */
 export class RunObserver {
 	private run?: ActiveRun;
 	private readonly person: string;

@@ -1,10 +1,6 @@
 import { organizationOf, reportingOf } from "../../organization/src/directory.js";
 import { OPERATOR } from "./threads.js";
 
-/**
- * Turn addresses into session ids: `my-manager`, `my-team` (your reports, or your teammates under your manager when
- * you have none), a person's name in your organization, or any session id. Throws naming the address it cannot place.
- */
 export function resolveAddresses(self: string, addresses: string[]): string[] {
 	const members = organizationOf(self).members;
 	const me = reportingOf(self);
@@ -49,7 +45,6 @@ export function managerAddress(self: string): string {
 	return reportingOf(self)?.reportsTo ?? OPERATOR;
 }
 
-/** One person, by name in your organization or by session id; aliases such as my-team are refused. */
 export function resolvePerson(self: string, address: string): string {
 	if (address.toLowerCase() === OPERATOR) throw new Error("The operator is a person, not a Pi session to manage.");
 	if (address === "my-team") throw new Error("Name one person, not my-team.");

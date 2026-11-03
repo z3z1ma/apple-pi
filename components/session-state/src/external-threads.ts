@@ -14,7 +14,6 @@ export type ExternalCommand =
 	| { kind: "external"; action: "follow" | "unfollow"; url: string }
 	| { kind: "external"; action: "watch"; repo: string; events?: ("pulls" | "issues" | "ci")[] };
 type Publish = (id: string, post: ThreadPost, now: number, recipientBodies?: Record<string, string>) => void;
-/** The runtime commits source cursors, messages and its ordinary mail outbox together, then dispatches. */
 export type ExternalCommit = (write: (publish: Publish) => void) => void;
 interface Source {
 	id: string;
@@ -101,7 +100,6 @@ export function externalAddress(text: string): {
 	throw new Error("Give a GitHub PR/issue URL or a Jira issue URL/key.");
 }
 
-/** One runtime-owned poller; stopping cancels I/O before the runtime closes its database. */
 export class ExternalThreads {
 	private readonly abort = new AbortController();
 	private polling = false;

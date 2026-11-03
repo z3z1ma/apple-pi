@@ -1,7 +1,3 @@
-/**
- * Reviews this Pi process is waiting on, or has waited out. Their milestone mail still reaches the transcript (the
- * delivery record) but as a short pointer, because the wait result already carries the review's outcome.
- */
 const waiting = new Map<string, number>();
 const returned = new Map<string, number>();
 
@@ -20,7 +16,6 @@ export function reviewWaitReturned(review: string, generation: number): void {
 
 const MILESTONES = new Set(["plan", "findings", "outcome"]);
 
-/** Milestone message IDs are `review:<review>:<generation>:<milestone>`; comments from people are never covered. */
 export function coveredByReviewWait(messageId: string | undefined): boolean {
 	const [prefix, review, generation, milestone] = messageId?.split(":") ?? [];
 	if (prefix !== "review" || !review || !MILESTONES.has(milestone ?? "")) return false;

@@ -76,7 +76,6 @@ export function workOf(
 	};
 }
 
-/** Only ledgers visible from this organization's directories; discovering a task never assigns it. */
 export function backlogOf(db: DatabaseSync, organization: string, directories: string[]): TaskSummary[] {
 	if (!hasWork(db)) return [];
 	const anchors = anchorsOf(db, organization);

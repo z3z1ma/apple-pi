@@ -3,7 +3,6 @@ import { departedPeople } from "./departures.js";
 import { temporaryCallers } from "./program-peers.js";
 import { nameOf, participateIn } from "./threads.js";
 
-/** Reconcile team channels from the tree. Invited people stay when their reporting line changes. */
 export function syncChannels(db: DatabaseSync, now: number): void {
 	const people = db.prepare("select id, reports_to, manages, retired_at from sessions where kind = 'root'").all() as {
 		id: string;

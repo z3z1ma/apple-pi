@@ -65,7 +65,6 @@ function taskAssociations(db: DatabaseSync, organization: string, context: Inspe
 	};
 }
 
-/** Metadata-only projections: durable effects/outbox identities are read, never message bodies or present cursors. */
 function communicationRecords(db: DatabaseSync, from: number, to: number) {
 	const messages = db
 		.prepare(`select m.id, m.seq, m.thread_id as thread, m.sender, m.at, t.kind from thread_messages m

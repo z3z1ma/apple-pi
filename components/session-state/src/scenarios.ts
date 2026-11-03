@@ -144,7 +144,6 @@ export function readScenario(raw: unknown): Scenario {
 	return scenario;
 }
 
-/** The scenario adapter emits the same point/interval representation as history; U owns all window arithmetic. */
 function scenarioFitness(scenario: Scenario, recordingAt: number) {
 	const decisionAt = scenario.decisionAt === "recording" ? recordingAt : scenario.decisionAt;
 	boundEnd(decisionAt, scenario.horizonMs);
@@ -279,7 +278,6 @@ export interface Prediction {
 	endsAt?: number;
 }
 
-/** Calibration reads unchanged link data; no predictions or binding table is persisted. */
 export function predictions(db: DatabaseSync, organization: string, now: number): Prediction[] {
 	const rows = db
 		.prepare(

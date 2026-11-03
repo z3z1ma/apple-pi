@@ -1,5 +1,3 @@
-// The runtime daemon's entrypoint. A bridge starts it detached with Node's type stripping and register.mjs;
-// stdout and stderr go to the runtime log. Exit 0 means another runtime already runs; any other code is a failure.
 import { statePaths } from "./paths.js";
 import { Runtime } from "./runtime.js";
 

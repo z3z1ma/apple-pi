@@ -64,7 +64,6 @@ export function reviewLimits(assessment: ReviewAssessment): string[] {
 	return limits;
 }
 
-/** Called inside the runtime's command transaction, after retained-source verification. */
 export function recordReviewDecision(
 	db: DatabaseSync,
 	commandId: string,

@@ -39,7 +39,6 @@ export function intervalUnion(intervals: Interval[]): number {
 	return total;
 }
 
-/** A query-local historical scope shared by work, execution and coordination projections. */
 export function inspectionContext(db: DatabaseSync, organization: string, window: Window, scope: Scope = {}) {
 	const to = window.to ?? Date.now();
 	const from = window.from;
@@ -116,7 +115,6 @@ export function inspectionContext(db: DatabaseSync, organization: string, window
 
 export type InspectionContext = ReturnType<typeof inspectionContext>;
 
-/** Only committed focus transitions with their atomic task post establish historical focus. */
 export function focusChanges(db: DatabaseSync, context: InspectionContext) {
 	const rows = db
 		.prepare(`select w.person, w.task_id, w.action, m.at, m.seq, m.id from work_changes w
