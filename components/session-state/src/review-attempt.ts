@@ -15,7 +15,6 @@ export interface ReviewPassRequest {
 	id: string;
 	role: string;
 	policyFingerprint: string | undefined;
-	/** Model tier for the role; planner and validators run standard. */
 	depth?: ReviewDepth;
 	kind: "planner" | "focused" | "integration" | "validation";
 	goal: string;
@@ -26,7 +25,6 @@ export interface ReviewPassRequest {
 	reuse?(value: unknown): boolean;
 }
 
-/** The persisted attempt, not a requested cwd or a new security policy, owns this launch. */
 export function reviewScope(
 	db: DatabaseSync,
 	program: string,
@@ -43,7 +41,6 @@ export function reviewScope(
 	return active;
 }
 
-/** One ordinary peer turn, with durable identity before launch and guarded cleanup before completion. */
 export async function runReviewAttempt(
 	db: DatabaseSync,
 	paths: StatePaths,
@@ -53,7 +50,6 @@ export async function runReviewAttempt(
 ): Promise<{ attempt: string; output: unknown }> {
 	const artifact = job.artifact;
 	if (!artifact) throw new Error("Review execution requires an admitted artifact");
-	// The planner starts every review and resume, so full integrity is proven once before any reviewer reads the source.
 	await (pass.kind === "planner" ? verifyArtifact : verifyCapturedSource)(artifact, signal);
 	signal.throwIfAborted();
 	const policy = reviewRolePolicy(artifact.source, pass.role, pass.depth);
@@ -130,7 +126,6 @@ export async function runReviewAttempt(
 			{
 				kind: "start",
 				role: pass.role,
-				// The pass's depth chose this profile; the peer must select its mind from it, not the role's own.
 				...(policy.profile ? { profile: policy.profile } : {}),
 				goal: { by: job.owner, text: pass.goal },
 			},
@@ -177,8 +172,6 @@ export async function runReviewAttempt(
 	const eligible = current(db, job) && !signal.aborted;
 	if (!failure && signal.aborted) cancelled = true;
 	if (!eligible && !failure) failure = new Error("The attempt was interrupted or superseded");
-	// Cancelled only when the stop caused the failure; an attempt that failed on its own stays failed even when a
-	// sibling pass's failure has since stopped the rest of the review.
 	const state = !cleaned ? "interrupted" : failure ? (cancelled ? "cancelled" : "failed") : "completed";
 	db.prepare("update review_attempts set state = ?, reason = ?, finished_at = ? where id = ?").run(
 		state,

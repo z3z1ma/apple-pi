@@ -1,15 +1,10 @@
-// The organization's notes: durable knowledge that outlives one task (who owns what, how a system works, which
-// threads are about the same thing), written by the scout and the desk, readable by them and shown to the operator.
-// A connection is a note whose refs name the things it connects: outside activity items, links, tasks and threads.
 import type { DatabaseSync } from "node:sqlite";
 
 export interface Note {
 	id: string;
 	title: string;
 	body: string;
-	/** Short words to find it by: a system, a team, a customer. */
 	topics: string[];
-	/** What it is about: activity item ids, URLs, task ids, thread ids. */
 	refs: string[];
 	by: string;
 	createdAt: number;
@@ -41,7 +36,6 @@ const note = (row: Row): Note => ({
 export const notesAvailable = (db: DatabaseSync) =>
 	Boolean(db.prepare("select 1 from sqlite_master where name = 'notes'").get());
 
-/** Write a new note (`id` is its new id) or replace the fields given of an existing one (`update`). */
 export function writeNote(
 	db: DatabaseSync,
 	id: string,
@@ -86,7 +80,6 @@ export function removeNote(db: DatabaseSync, id: string): void {
 	if (db.prepare("delete from notes where id = ?").run(id).changes === 0) throw new Error(`No note ${id}.`);
 }
 
-/** Notes newest first; `words` must all appear in the title, body or topics, `ref` among its refs. */
 export function readNotes(db: DatabaseSync, filter: { words?: string; ref?: string; limit: number }): Note[] {
 	const where = ["1 = 1"];
 	const args: string[] = [];

@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 import { rootOf, taskOrganization } from "./tree.js";
 
-/** The kinds of things a link can join; an id is a task id, a session id, a thread or message id, a SHA, a URL, or a path. */
 export const ENTITY_KINDS = [
 	"task",
 	"person",
@@ -45,7 +44,6 @@ export interface Link {
 	resolution: string | null;
 }
 
-/** Things the runtime records must exist; commits, PRs, files, and check runs live outside it and are taken as named. */
 const KNOWN: Record<string, string> = {
 	task: "select 1 from work_tasks where id = ?",
 	person: "select 1 from sessions where id = ? and kind = 'root'",
@@ -54,10 +52,8 @@ const KNOWN: Record<string, string> = {
 	organization: "select 1 from sessions where id = ? and kind = 'root' and reports_to is null",
 };
 
-/** Waits keep work open until their target task is done. */
 export const WAITS = ["blocks", "requires_decision"];
 
-/** The defined vocabulary, one relation and its meaning per line, read fresh so a new line needs no other code. */
 export function relations(): Record<string, string> {
 	return JSON.parse(readFileSync(new URL("./relations.json", import.meta.url), "utf8"));
 }
@@ -75,7 +71,6 @@ export function recordLink(db: DatabaseSync, id: string, sender: string, link: L
 		const known = KNOWN[entity.kind];
 		if (known && !db.prepare(known).get(entity.id)) throw new Error(`No ${entity.kind} ${entity.id}`);
 	}
-	// Links stay inside the recorder's organization: another organization's tasks and people are not ours to join.
 	const root = rootOf(db, sender);
 	for (const entity of [link.from, link.to]) {
 		const owner =
@@ -114,7 +109,6 @@ export function recordLink(db: DatabaseSync, id: string, sender: string, link: L
 	);
 }
 
-/** A link resolves once; `replay` accepts the same resolution again after a restart. */
 export function resolveLink(
 	db: DatabaseSync,
 	sender: string,
@@ -135,10 +129,6 @@ export function resolveLink(
 	db.prepare("update links set resolved_at = ?, resolution = ? where id = ?").run(now, resolution ?? null, id);
 }
 
-/**
- * New links retain their originating organization independently of recorder lifetime. Legacy links use surviving
- * endpoints or the recorder; missing evidence remains unknown rather than assigning ownership to the resolver.
- */
 function organizationOf(db: DatabaseSync, link: Link): string | undefined {
 	if (link.organization) return rootOf(db, link.organization);
 	for (const [kind, id] of [
@@ -157,7 +147,6 @@ function organizationOf(db: DatabaseSync, link: Link): string | undefined {
 		: undefined;
 }
 
-/** A task closed done ends every wait on it; a cancelled one ends none. */
 export function resolveWaitsOn(db: DatabaseSync, taskId: string, now: number): void {
 	db.prepare(
 		`update links set resolved_at = ?, resolution = 'done'

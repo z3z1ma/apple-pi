@@ -1,13 +1,8 @@
-// The operator's canvases: his own documents, like Slack canvases or Notion pages, kept as Markdown so the desk and
-// the scout can read them and, when he asks, write in them. Every write names the version it started from; a write
-// against an older version is refused with the current text, so his typing and an agent's edit never overwrite each
-// other silently.
 import type { DatabaseSync } from "node:sqlite";
 
 export interface CanvasSummary {
 	id: string;
 	title: string;
-	/** The first words of the body, for lists. */
 	preview: string;
 	by: string;
 	createdAt: number;
@@ -50,7 +45,6 @@ const summary = (row: Omit<Row, "body"> & { preview: string }): CanvasSummary =>
 export const canvasesAvailable = (db: DatabaseSync) =>
 	Boolean(db.prepare("select 1 from sqlite_master where name = 'canvases'").get());
 
-/** Canvases newest first, pinned ones before the rest; bodies stay unread except for a short preview. */
 export function listCanvases(
 	db: DatabaseSync,
 	filter: { words?: string; limit: number; before?: number },
@@ -82,7 +76,6 @@ export type CanvasWrite =
 	| { update: string; base: number; title?: string; body?: string; pinned?: boolean }
 	| { remove: string };
 
-/** Apply a write; an update against a version other than the current one throws with the canvas as it is now. */
 export function writeCanvas(db: DatabaseSync, id: string, by: string, write: CanvasWrite, now: number): number {
 	if ("remove" in write) {
 		if (db.prepare("delete from canvases where id = ?").run(write.remove).changes === 0)

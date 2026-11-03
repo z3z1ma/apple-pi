@@ -1,6 +1,3 @@
-// Task spans: the stretches of each person's transcript written while they were focused on a task. Triggers on
-// `work_focus` record spans as focus changes (schema.ts); this module replays the earlier history once, and answers who
-// may search a task's spans and which spans a task has.
 import type { DatabaseSync } from "node:sqlite";
 import { OPERATOR } from "./threads.js";
 
@@ -8,15 +5,10 @@ export interface FocusSpan {
 	person: string;
 	task: string;
 	from: number;
-	/** Null while the person is still focused on the task. */
 	to: number | null;
 	reconstructed: boolean;
 }
 
-/**
- * Spans for the focus history before spans were recorded, replayed from retained work changes and their task posts.
- * Runs once, while the table is empty. A gap in that history is a gap in spans, not a guess.
- */
 export function reconstructSpans(db: DatabaseSync, now: number): void {
 	if (db.prepare("select 1 from focus_spans limit 1").get()) return;
 	const rows = db
@@ -40,7 +32,6 @@ export function reconstructSpans(db: DatabaseSync, now: number): void {
 		else if (row.action === "close")
 			for (const [person, span] of open) if (span.task === row.task_id) end(person, row.at);
 	}
-	// What is still open must agree with today's focus; anything else ended at an unrecorded time before now.
 	const current = new Map(
 		(db.prepare("select person, task_id from work_focus").all() as { person: string; task_id: string }[]).map((row) => [
 			row.person,
@@ -57,7 +48,6 @@ export function reconstructSpans(db: DatabaseSync, now: number): void {
 	for (const span of spans) insert.run(span.person, span.task, span.from, span.to);
 }
 
-/** The spans of these tasks, oldest first. */
 export function taskSpans(db: DatabaseSync, tasks: string[]): FocusSpan[] {
 	if (!tasks.length) return [];
 	return (
@@ -82,10 +72,6 @@ export function taskSpans(db: DatabaseSync, tasks: string[]): FocusSpan[] {
 	}));
 }
 
-/**
- * Whether `caller` may read `session`'s entry written at `at`: their own, or one inside a span of a task they may
- * search. An entry with no indexed time cannot be placed in a span.
- */
 export function mayReadEntry(db: DatabaseSync, caller: string, session: string, at: number | undefined): boolean {
 	if (caller === OPERATOR || caller === session) return true;
 	if (at === undefined) return false;
@@ -97,10 +83,6 @@ export function mayReadEntry(db: DatabaseSync, caller: string, session: string, 
 	return covering.some((row) => maySearchTask(db, caller, row.task_id));
 }
 
-/**
- * Whether `caller` may search a task's spans: the operator; anyone ever assigned to the task; and anyone above, in
- * today's reporting tree, a person who worked on it (operator decision, 2026-11-02).
- */
 export function maySearchTask(db: DatabaseSync, caller: string, task: string): boolean {
 	if (caller === OPERATOR) return true;
 	const workers = (
