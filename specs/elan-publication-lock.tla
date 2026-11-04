@@ -1,6 +1,7 @@
 ------------------------ MODULE ElanPublicationLock -------------------------
-(* lean.ts: elanHome stages a complete install, then publish() takes the
-   lock file <home>.lock (created exclusively, holding the owner's pid),
+(* The earlier lean.ts protocol, replaced by elan-publication.tla and kept for
+   its counterexample: elanHome staged a complete install, then publish() took
+   the lock file <home>.lock (created exclusively, holding the owner's pid),
    keeps a complete home, or moves an incomplete one aside and renames the
    staged install into place, and finally removes the lock file.
    A waiter that reads a lock owned by a dead pid removes the lock file. *)

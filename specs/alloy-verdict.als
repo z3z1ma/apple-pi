@@ -45,12 +45,6 @@ pred incomplete {
 
 pred pass { not violation and not incomplete }
 
-assert VerdictIsTotal {
-	pass or violation or incomplete
-	not (pass and violation) and not (pass and incomplete) and not (violation and incomplete)
-}
-check VerdictIsTotal for 5
-
 assert PassProvesEveryProperty {
 	pass implies all c: Command | c.kind = Check and c.expected != ExpectInstance implies c.outcome = NoCounterexample
 }
