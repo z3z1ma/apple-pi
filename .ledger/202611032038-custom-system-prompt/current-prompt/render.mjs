@@ -124,6 +124,7 @@ const main = payload.system[1].text;
 const parts = [{ tag: "identity", body: identity }, ...sections(main)];
 const full = `${identity}\n\n${main}`;
 const toolText = JSON.stringify(payload.tools);
+const tools = payload.tools.filter((tool) => tool.name !== "__pi_deferred_placeholder__");
 
 writeFileSync(join(here, "system-prompt.txt"), `${full}\n`);
 
@@ -164,24 +165,22 @@ writeFileSync(
 	].join("\n"),
 );
 
-const toolDocs = payload.tools
-	.filter((tool) => tool.name !== "__pi_deferred_placeholder__")
-	.map((tool) =>
-		[
-			`## ${tool.name}`,
-			"",
-			readable(tool.description ?? ""),
-			"",
-			"<details><summary>Parameters</summary>",
-			"",
-			"```json",
-			JSON.stringify(tool.input_schema, null, 2),
-			"```",
-			"",
-			"</details>",
-			"",
-		].join("\n"),
-	);
+const toolDocs = tools.map((tool) =>
+	[
+		`## ${tool.name}`,
+		"",
+		readable(tool.description ?? ""),
+		"",
+		"<details><summary>Parameters</summary>",
+		"",
+		"```json",
+		JSON.stringify(tool.input_schema, null, 2),
+		"```",
+		"",
+		"</details>",
+		"",
+	].join("\n"),
+);
 writeFileSync(
 	join(here, "tools.md"),
 	[
@@ -189,10 +188,7 @@ writeFileSync(
 		"",
 		`Every tool definition in the same request: ${toolDocs.length} tools, ${toolText.length.toLocaleString("en")} characters of JSON, about ${tokens(toolText).toLocaleString("en")} tokens. The model reads each description and parameter schema as prompt text, so these count as much as the system prompt. On Anthropic, Pi renames the four core tools to Claude Code's names (\`Read\`, \`Bash\`, \`Edit\`, \`Write\`) and \`task\` to \`Task\`; OpenAI keeps the lower-case names. MCP tools are not here: they are deferred, and \`tool_search\` loads them.`,
 		"",
-		`Index: ${payload.tools
-			.filter((tool) => tool.name !== "__pi_deferred_placeholder__")
-			.map((tool) => `[\`${tool.name}\`](#${tool.name.toLowerCase()})`)
-			.join(" · ")}`,
+		`Index: ${tools.map((tool) => `[\`${tool.name}\`](#${tool.name.toLowerCase()})`).join(" · ")}`,
 		"",
 		...toolDocs,
 	].join("\n"),
@@ -217,7 +213,7 @@ writeFileSync(
 		`| | Characters | About |`,
 		`|---|---:|---:|`,
 		`| System prompt | ${full.length.toLocaleString("en")} | ${tokens(full).toLocaleString("en")} tokens |`,
-		`| Tool definitions (${payload.tools.length - 1} tools) | ${toolText.length.toLocaleString("en")} | ${tokens(toolText).toLocaleString("en")} tokens |`,
+		`| Tool definitions (${tools.length} tools) | ${toolText.length.toLocaleString("en")} | ${tokens(toolText).toLocaleString("en")} tokens |`,
 		`| Together | ${(full.length + toolText.length).toLocaleString("en")} | ${tokens(full + toolText).toLocaleString("en")} tokens |`,
 		"",
 		"Token counts are characters ÷ 4, an estimate.",
