@@ -8,7 +8,7 @@ import { type Static, Type } from "typebox";
 import { type GitOptions, gitBytes } from "./git.js";
 
 export const GIT_TARGET_HELP =
-	'The change: {"kind":"working-tree","base":"HEAD"} for tracked, staged and untracked edits against an exact base; {"kind":"staged"} for the index against HEAD; {"kind":"commit","commit":"X"} for one commit against its parent (merges need "parent"); {"kind":"range","base":"A","head":"B"} for exact endpoints; {"kind":"branch","base":"main","head":"feature"} for feature since its merge base with main, as a pull request shows it.';
+	"The change, by kind: working-tree is tracked, staged and untracked edits against base; staged is the index against HEAD; commit is one commit against its parent (merges need parent); range is exact endpoints; branch is head since its merge base with base, as a pull request shows it.";
 const ref = Type.String({ minLength: 1, pattern: "\\S" });
 const strict = { additionalProperties: false } as const;
 export const GitTargetSchema = Type.Union(

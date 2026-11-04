@@ -334,9 +334,9 @@ try {
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "economics");
 	assert(
-		fitnessTool?.definition.description.includes("optional economic comparison") &&
-			fitnessTool.definition.description.includes("not a compulsory objective") &&
-			["bottlenecks", "progress", "coordination", "experience"].every((name) =>
+		fitnessTool?.definition.description.includes("optional instrument") &&
+			fitnessTool.definition.description.includes("not an objective") &&
+			["bottlenecks", "progress"].every((name) =>
 				fitnessTool.definition.description.includes(name),
 			),
 		"economics must teach optional economic comparison alongside inspection",

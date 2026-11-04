@@ -140,7 +140,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		name: SIGN_OFF_CODE_TOOL_NAME,
 		label: "Sign off code",
 		description:
-			'Open a code review page in the user\'s browser and wait for their verdict. You supply the structure: chapters in the order you reasoned, a brief for each, the diff pieces by file and line range, notes on lines, and real judgment calls. The page shows the real diff from git, so you cannot hide or invent code: any hunk you do not place appears under "Not in the story". With review, it renders that retained artifact and assessment; human submission binds its digest/revision and waits for the runtime to commit the verdict. Changed checkout/policy and review limits remain explicit. Returns the verdict, line-anchored comments, decision answers, and which hunks were seen.',
+			'Open a code review page in the user\'s browser and wait for their verdict. You supply the structure: chapters in the order you reasoned, a brief for each, the diff pieces by file and line range, notes on lines, and real judgment calls. The page shows the real diff from git: any hunk you do not place appears under "Not in the story". With review, it shows that captured review and its assessment instead. Returns the verdict, line-anchored comments, decision answers, and which hunks were seen.',
 		promptSnippet: "Open a structured code review of your change in the user's browser and get line-anchored feedback",
 		promptGuidelines: [
 			"Use sign_off_code when the user asks to review your work or when a finished change deserves their review before you continue. It blocks until they submit, so call it at a natural stopping point.",
@@ -271,7 +271,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 		name: EXPLAIN_CHANGE_TOOL_NAME,
 		label: "Explain change",
 		description:
-			"Open an explanation of a code change in the user's browser, so they understand it well enough to build on it. You write it: a one-minute summary, background (with an optional primer for newcomers), the intuition before the details, a walkthrough of steps in a sensible order, and a five-question quiz. Cite code with `code path:FROM-TO` fences: the page shows the real lines from git with diff marks, and lists every changed file the walkthrough skips. Returns at once with the page's address and a saved copy to attach to a pull request or a page. While the session lives, the reader can talk the explanation through with you in a Socratic sidebar; a note on their quiz results and questions arrives with your next turn.",
+			"Open an explanation of a code change in the user's browser, so they understand it well enough to build on it. You write it: a one-minute summary, background (with an optional primer for newcomers), the intuition before the details, a walkthrough of steps in a sensible order, and a five-question quiz. Cite code with `code path:FROM-TO` fences: the page shows the real lines from git with diff marks, and lists every changed file the walkthrough skips. Returns at once with the page's address and a saved copy. While the session lives, the reader can discuss it with you in a sidebar; their quiz results and questions arrive with your next turn.",
 		promptSnippet:
 			"Open a rich explanation of a code change (background, intuition, walkthrough over real code, quiz) in the user's browser",
 		promptGuidelines: [

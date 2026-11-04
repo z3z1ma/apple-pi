@@ -56,14 +56,10 @@ export const sessionSearchTool = defineTool({
 	name: SESSION_SEARCH_TOOL_NAME,
 	label: "Session search",
 	description:
-		"Search this session's earlier conversation, tool calls, and write/edit payloads. " +
-		"Use it after compaction when you need to remember a prior decision, recover earlier tool output, or revisit a file version written during the session. " +
-		"This looks through session history, not git history or the current repository. " +
-		"Search text or regex, list touched files, inspect only write/edit payloads, expand entries, recover a written file with query:'#N:path', or recover an omitted tool result with query:'call:<id>'. " +
-		"Expand any source by query:'entry:<id>[:offset[:limit]]' (zero-based lines). New custom, summary and notebook records use stable IDs, not message ordinals. " +
-		"It follows the active lineage by default; scope:'all' includes other branches. " +
-		"Natural-language history discovery uses the runtime's index. Use tasks:[id] to search what people wrote while focused on those authorized tasks; task queries match words, not regex patterns, and punctuation is ignored. Use fields:'words' to omit tool payloads from indexed discovery. " +
-		"Other people's sources use entry:<session>/<id>[:offset[:limit]]. Runtime failures/refusals are reported, not replaced with another engine.",
+		"Search this session's earlier conversation, tool calls and write/edit payloads (not git history or the repository), including before compaction. " +
+		"Search text or regex, list touched files, or search only write/edit payloads. " +
+		"Recover exactly with query:'#N:path' (a written file), 'call:<id>' (an omitted tool result) or 'entry:<id>[:offset[:limit]]' (any source; zero-based lines; another person's as entry:<session>/<id>). " +
+		"scope:'all' includes other branches; tasks:[id] searches what people wrote while focused on those tasks (words, not regex).",
 	promptSnippet: "Recover earlier conversation, tool results, and file operations from this session.",
 	promptGuidelines: [
 		"Use search_session for earlier work or evidence missing from context, including after compaction. Use grep, find, or read for current repository files; use revisit_note for a known notebook id.",

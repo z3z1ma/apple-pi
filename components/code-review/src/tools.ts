@@ -205,7 +205,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "resolve_finding",
 			label: "Respond to finding",
 			description:
-				"Append an accountable finding response to a settled captured assessment. Supply its current revision and digest from read_review. Rejection needs counterevidence; accepted risk needs evidence and explicit scope. A claimed fix remains unverified. Fixed requires a specific completed, unchallenged question on a different captured target and supporting evidence; this records your judgment, not a correctness certificate. A fix in later code never changes the original snapshot. Responses retain the original allegation and invalidate older assessment approval. Only the operator can approve code through sign-off.",
+				"Respond to a finding of a settled review, with the revision and digest from read_review. Rejection needs counterevidence; accepted risk needs evidence and a scope. A claimed fix stays unverified; fixed needs a completed question on a newer captured target. The original allegation is kept, and only the operator approves code, through sign-off.",
 			promptSnippet: "Record finding responses with evidence, scope and explicit new-target fix verification.",
 			parameters: Type.Object(
 				{
@@ -241,7 +241,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "review_code",
 			label: "Review code",
 			description:
-				"Capture an exact commit, range, branch, staged index or working tree and enqueue independent semantic/risk-based review through ordinary role peers. This starts model work under the configured role profiles. Return after target capture and admission, not after review. The author's index and checkout stay unchanged. Supply approved intent when available; absent intent stays unassessed. The owner (you, by default) receives mail when the plan is ready, as each pass's findings are confirmed, and when the review settles; keep working and course-correct as findings arrive, or pass wait to block until it settles and get the outcome in the result instead of the mail. Exact request replay retains the original captured target even if the checkout changes.",
+				"Capture an exact commit, range, branch, staged index or working tree and queue an independent review by role peers; this starts model work. Returns once captured, leaving your checkout unchanged. Give the approved intent when there is one. The owner (you by default) gets mail when the plan is ready, as each pass's findings are confirmed, and when it settles; pass wait to block until it settles instead.",
 			promptSnippet: "Capture exact code and enqueue independent review; inspect its durable result separately.",
 			promptGuidelines: [
 				"For an already assigned review pass, inspect its captured source and return the requested report. Route additional questions to the plan owner through that report; the requester initiates new reviews.",
@@ -297,7 +297,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "review_queue",
 			label: "Review queue",
 			description:
-				"Inspect the durable review queue in your organization. Without limit, return state counts; with limit, return a page of meaningful status, coverage, findings and captured-target identity. Active work precedes queued priority/FIFO work and history. Reported cost covers retained primary turns across all attempts, including failures; missing observations stay explicit. Completion is not approval or proof of correctness. These reads do not establish current-checkout freshness.",
+				"Inspect your organization's review queue: state counts without limit, or a page of status, coverage, findings and captured target with one. Completion is not approval or proof of correctness.",
 			promptSnippet: "See review progress and incomplete work, with explicit detail paging.",
 			parameters: Type.Object(
 				{
@@ -335,7 +335,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "read_review",
 			label: "Read review",
 			description:
-				"Read one captured review progressively. Summary separates execution, missing intent, question coverage, findings and reported primary-turn cost across all attempts. Cost excludes unobserved internal activity; missing observations and unavailable totals stay explicit. Freshness explicitly rechecks the requested target, current checkout and recorded review policy at a stated time; changed or unavailable is not current, and this read never transfers coverage/approval. Configuration shows captured review instructions and declared model/profile references, not a frozen ambient environment; actual role/model policy belongs to each attempt. Target gives captured source and Git revisions; ordinary tools remain available there. Source browses retained Git objects on the before or after side: omit path to list files, or name a captured file to read lines. It never follows symlinks or automatically appends .context sidecars; inspect captured context files and applicable docs separately. Source and the other collections return counts until limit is supplied; source file offsets are zero-based line offsets. Plan, changes, regions, findings, coverage and attempts also page explicitly. Pass requires its pass ID; attempt requires its attempt ID and exposes that retained input policy, raw result, observed turn usage and validated output. Thread pages the review's mail (milestones and comments). Log shows the recent transcript of the running passes, or of one attempt. Original allegations and validation remain distinct. These reads establish neither freshness nor approval.",
+				"Read one captured review part by part. summary: execution, intent, coverage, findings and cost. freshness: rechecks the target and current checkout now. configuration, target: the captured instructions, source and revisions. source: the retained files on the before or after side (omit path to list; offsets are zero-based lines). plan, changes, regions, findings, coverage, attempts: counts until you give limit. pass and attempt need their id. thread: the review's mail. log: the running passes' recent transcript. No read establishes approval.",
 			promptSnippet: "Inspect review scope, evidence and retained attempts without treating partial work as clean.",
 			parameters: Type.Object(
 				{
@@ -374,7 +374,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "manage_review",
 			label: "Manage review",
 			description:
-				"Cancel unfinished review work and wait for guarded cleanup, explicitly resume interrupted/failed/incomplete work on the same verified artifact, reprioritize queued work, reassign responsibility, or rerun the original capture request as a new review linked to this one (owned by you unless owner is supplied). Resume checks current role/profile policy before reusing exact-input work. A changed policy or advisory catalog requires a new plan and fresh inspections; challenged or incomplete work also reruns. Rerun resolves mutable targets again and grants no old coverage credit. Extend explicitly authorizes a concrete additional question with its reason and doneWhen evidence on the same retained target, bound to the current revision/digest. It replans required work and can incur new model cost; old attempts remain history, not automatic coverage credit. Resume alone is not a waiver or authorization of new questions.",
+				"Manage a review: cancel unfinished work, resume interrupted, failed or incomplete work on the same artifact, change its queue priority, reassign it, rerun the original capture as a new linked review (fresh target, no inherited coverage), or extend it with one more concrete question, its reason and doneWhen evidence, bound to the current revision and digest. Resume and extend can start new model work.",
 			promptSnippet: "Manage review responsibility, recovery and fresh reruns without recapturing silently.",
 			parameters: Type.Object(
 				{
