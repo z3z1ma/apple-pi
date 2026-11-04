@@ -199,7 +199,7 @@ async function execute(
 	};
 }
 
-export async function modelFingerprint(spec: string): Promise<string> {
+async function modelFingerprint(spec: string): Promise<string> {
 	const root = dirname(spec);
 	const files = (await readdir(root, { recursive: true }))
 		.filter((file) => file.endsWith(".als") && !/(^|\/)(node_modules|\.git)\//.test(file))
@@ -252,8 +252,7 @@ export async function runAlloy(options: AlloyOptions): Promise<AlloyResult> {
 		throw new Error(`solver must be one of ${ALLOY_SOLVERS.join(", ")}`);
 	const jar = await alloyJar(options.signal);
 	const spec = resolve(options.spec);
-	const fingerprint = () => modelFingerprint(spec);
-	const before = await fingerprint();
+	const before = await modelFingerprint(spec);
 	const temporal = /\bvar\b/.test(await readFile(spec, "utf8"));
 	const base = { version: ALLOY_VERSION, commands: [] as AlloyCommand[] };
 	const listing = await runJava({
@@ -290,7 +289,7 @@ export async function runAlloy(options: AlloyOptions): Promise<AlloyResult> {
 	} finally {
 		await rm(scratch, { recursive: true, force: true });
 	}
-	if ((await fingerprint()) !== before)
+	if ((await modelFingerprint(spec)) !== before)
 		return { ...base, commands, verdict: "error", message: "The model changed while it was being checked.", output };
 	const [verdict, message] = judge(commands);
 	return { ...base, commands, verdict, message, output };
