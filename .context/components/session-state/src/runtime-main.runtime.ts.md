@@ -5,6 +5,9 @@ Why: Node strips types without transforming code; a parameter property fails to 
 Coupled: components/session-state/src/register.mjs, components/session-state/src/runtime.ts, components/session-state/src/paths.ts, components/session-state/src/protocol.ts, components/session-state/src/schema.ts
 Verify: components/session-state/tests/runtime.test.ts
 
+Test suites spawn runtimes against temporary state directories, and an interrupted run can leave them alive for days. Identify each runtime by the database it serves before stopping it: list them with `ps -eo pid,etime,command | grep runtime-main`, then `lsof -p <pid> | grep -o '/[^ ]*apple-pi\.db'`. Test runtimes serve `.../T/aps-*/state/apple-pi.db`; the operator's live runtime is the pid in `~/.pi/agent/state/apple-pi-runtime.pid` and serves `~/.pi/agent/state/apple-pi.db`.
+Why: every runtime runs the same command line, so only the open database tells a stale test daemon from the live one.
+
 Exit code 0 means another runtime holds the lock; any other exit code is a failed start.
 Why: the bridge warns the session only on a non-zero exit, so several bridges starting runtimes at once stay quiet.
 Coupled: components/session-state/src/bridge.ts

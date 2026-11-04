@@ -23,3 +23,13 @@ Checked on Pi 1.0 with OpenAI: the fork's first request read the parent's whole 
 - The copied callbacks still belong to the parent. Tools and hooks act on the parent's session, UI, and services.
 - `streamFunction` starts Pi's cache warmer for any request carrying the session's ID. A fork request therefore replaces the parent's pending warming run.
 - Print mode has no UI, so `ask_user_question` is deactivated there. A headless `pi --print` subprocess therefore declares different tools from an interactive session and does not reproduce its request.
+- Pi's built-in extensions (`tool_search`, MCP) live in `pi-coding-agent/dist/extensions/<name>/`, not `dist/core/`. Find one with `rg -l '"tool_search"' -g '*.js'` under `node_modules/@earendil-works/`. `tool_search` can load any registered tool whose `exposure` is `codemode` or `deferred`, extension tools included (`isSearchable` in `extensions/tool-search/tool.js`).
+
+## Capturing the exact request
+
+Pi does not store the system prompt or the tool definitions in the session JSONL. To see them, run `pi --mode rpc -e capture.ts` with a throwaway extension whose `before_provider_request` handler writes `event.payload` to disk and then throws: the request is never sent, so nothing is billed.
+
+- Anthropic payloads carry `system[0]` (the Claude Code identity line pi-ai adds), `system[1]` (Pi's prompt) and `tools`. OpenAI payloads carry a developer `additional_tools` item and a developer string.
+- Keep the run out of the operator's organization: point `PI_CODING_AGENT_DIR` at a temporary directory that symlinks every entry of `~/.pi/agent` except `state` and `sessions`.
+- Start that directory's session-state runtime first (`spawnRuntime` from `components/session-state/src/client.ts`). Otherwise the prompt is built before the person is registered, and it gets the non-root `org` text with no `role-catalog` or `pi-exec-peers`; that race, not the provider, explained a first capture's diff. Afterwards kill the runtime by its pid file, and check again, because the bridge can respawn it while pi exits.
+- A reusable script: `.ledger/202611032038-custom-system-prompt/current-prompt/capture.mjs` (it moves under `.ledger/history/` when that task closes).

@@ -52,6 +52,10 @@ For authorized local diagnostics of a known session, inspect the runtime databas
 
 Source: session learning `2a6ea7faf4c1`, from a communication-verification handoff that stalled after an earlier successful acknowledgment; field ownership is in `components/session-state/src/schema.ts` and `components/session-state/src/runtime.ts`. This is a diagnostic lesson, not a new directory or access contract.
 
+## Counting tool calls
+
+Count `"type":"toolCall","id":"...","name":"X"` matches across recent logs, for example `find ~/.pi/agent/sessions -name '*.jsonl' -mtime -14 -print0 | xargs -0 rg -o --no-filename '"type":"toolCall","id":"[^"]*","name":"[^"]*"' | sort | uniq -c` (268 files took about a minute). Calls made inside `pi_exec` programs are not counted, and renamed tools still appear under old names (`mailbox_send`, `schedule`). Low usage measures what the prompt teaches, not what a tool is worth: the operator rejected hiding rarely used tools for that reason.
+
 ## Traps
 
 - **Mixed populations.** The sessions directory holds root sessions, persisted child sessions, and temporary test or review sessions under `--private-tmp-…`. Filter or report the mix.

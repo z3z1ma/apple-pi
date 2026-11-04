@@ -14,10 +14,11 @@
 
 ## Method
 
-- [[session-log-analysis]]: measuring agent behavior from Pi session JSONL, and the traps.
+- [[session-log-analysis]]: measuring agent behavior from Pi session JSONL (including tool-call counts), and the traps.
+- [[closing-tasks]]: closing runtime and ledger tasks in bulk: which tool closes what, and the path upkeep after archiving.
 
 - [[terminal-rendering-visual-checks]]: synthetic ANSI renderer checks with Bun, Rich SVG conversion, and the HTML-embedded SVG screenshot fallback.
 
 ## Pi internals
 
-- [[pi-request-internals]]: how Pi builds a provider request, and how to continue a conversation with an identical one.
+- [[pi-request-internals]]: how Pi builds a provider request, how to capture it exactly without sending it, and how to continue a conversation with an identical one.
