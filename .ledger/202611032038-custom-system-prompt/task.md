@@ -27,8 +27,9 @@ Done when:
 - **Step 1, done (`284987b8`):** `components/system-prompt` composes the prompt as the last extension. Re-captured from real Pi, it held the same text in the new order. A first version read the session-start tool list instead of the live one; a real-session test caught it.
 - **Step 2, done (`2460d225`):** the operating model replaces Pi's preamble; a toolbox grouped by job replaces Pi's tool list, 77-bullet rules and docs; interns get a short intern preamble (`--intern`). The pair tool is active only while the pair is on. Real capture: system prompt 28.4k → 25.5k tokens (it now also carries the operating model); the root fixture budget is 38,749 and the intern budgets 2,289 / 2,301.
 - Two parts stay outside the composer: Pi's built-in MCP extension writes `mcp_servers` after apple-pi's handlers run, and the Anthropic provider adds its identity line.
-- Tools still carry their old `promptGuidelines`; root sessions no longer render them, `/btw` still does. They go in step 4.
-- **Next:** step 3, the person sections (`org` as instructions, the role catalog grouped by posture).
+- **Step 3, done (`ba1c167b`):** `org` holds facts and norms only (tool mechanics moved to the toolbox and tool descriptions); the role catalog is grouped by posture. `docs/system-prompt.md` documents the design; AGENTS.md maps the component.
+- **Step 4, partly done:** `/btw` composes through the same composer (`a0c58027`); the heaviest descriptions were cut (`e4512865`). Root fixture budget 38,749 → 35,056 tokens; tool schemas 113.6k → 107.5k chars; real capture system prompt 102k → 93k chars.
+- **Open:** (a) the projection table: activation is still decided by each component's own gate, and only root pair on/off is tested end to end; (b) the pair sidecar keeps its own authored, user-overridable prompt; (c) more tool-definition trimming; (d) `promptGuidelines` on grouped tools are no longer rendered anywhere and can be deleted; (e) `npm run audit:cache` needs real sessions started on the new composer.
 
 ## Outcome
 
