@@ -161,7 +161,6 @@ export default installTasks;
 export {
 	createBackgroundTaskBashTool,
 	createBashToolDefinition,
-	createExecBashToolDefinition,
 	prepareShellCommand,
 } from "./bash-tool.js";
 export { createMonitorTool } from "./monitor-tool.js";

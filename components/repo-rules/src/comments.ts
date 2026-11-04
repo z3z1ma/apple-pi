@@ -3,7 +3,7 @@ import ts from "typescript";
 export const COMMENTED_SOURCE = /\.(ts|tsx|mts|cts|js|mjs|cjs|jsx|css)$/;
 
 const DIRECTIVE =
-	/^(\/\/\s*(biome-ignore|@ts-(expect-error|ignore|nocheck)|@vitest-environment)|\/\/\/\s*<reference|\/\*\s*(biome-ignore|@vite-ignore|[#@]__PURE__|webpackIgnore))/;
+	/^(\/\/\s*(biome-ignore|@ts-(expect-error|ignore|nocheck)|@vitest-environment|@program:|@options:)|\/\/\/\s*<reference|\/\*\s*(biome-ignore|@vite-ignore|[#@]__PURE__|webpackIgnore))/;
 
 export interface SourceComment {
 	line: number;

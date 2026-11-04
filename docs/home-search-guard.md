@@ -23,7 +23,7 @@ The guard covers:
 - agent `bash` calls that use `rg`, `ripgrep`, `grep`, `egrep`, `fgrep`, `find`, `fd`, or `fdfind` with a protected literal search root the guard can resolve;
 - path aliases that resolve through an existing symlink to a protected root;
 - the same tools in root sessions, interns, and the `/btw` session;
-- direct `pi.grep`, `pi.find`, and `pi.bash` calls inside `pi_exec`.
+- nested `tools.grep`, `tools.find` and `tools.bash` calls from codemode scripts and saved programs.
 
 A path below a protected root remains valid. For example, Pi `grep` or shell `rg` may search `$HOME/code_projects/work/repos/service`; searching `$HOME/code_projects/work` is blocked.
 

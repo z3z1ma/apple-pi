@@ -23,10 +23,10 @@ RTK is off by default. Set `RTK_ENABLED=1` in the environment Pi starts with to 
    - `▲ Bash(git status)`: Executed with RTK output compression.
 
 5. **Where it loads**:
-   Every top-level session loads the RTK extension, including each peer and the temporary peers that `pi_exec` starts. [Interns](interns.md) and the [`/btw`](btw.md) session do not load it, so their shell output is not rewritten.
+   Every top-level session loads the RTK extension, including each peer and the temporary peers that programs start. [Interns](interns.md) and the [`/btw`](btw.md) session do not load it, so their shell output is not rewritten.
 
 6. **Raw execution boundaries**:
-   Inside `pi_exec`, `bash` is isolated from both RTK rewriting and background tasks. Monty programs receive deterministic, unaltered command output for parsing. The root `monitor` tool also bypasses RTK because each stdout line is an agent event and rewriting would change that protocol. Pi Exec's Python `bash` accepts `command`, `timeout`, and `stdin` keyword arguments without `verbatim` or `run_in_background`; `monitor` accepts its own command and optional event-delivery limit.
+   A `bash` call from a codemode script or saved [program](programs.md) runs on pipes, without RTK rewriting or backgrounding, so the script receives plain output. The root `monitor` tool also bypasses RTK because each stdout line is an agent event and rewriting would change that protocol. `monitor` accepts its own command and optional event-delivery limit.
 
 ## The `verbatim` Parameter
 

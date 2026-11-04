@@ -4,7 +4,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { Value } from "typebox/value";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTaskActiveWorkSource } from "../src/active-work.js";
-import { createBackgroundTaskBashTool, createExecBashToolDefinition } from "../src/bash-tool.js";
+import { createBackgroundTaskBashTool, createBashToolDefinition } from "../src/bash-tool.js";
 import installTasks from "../src/index.js";
 import { createMonitorTool } from "../src/monitor-tool.js";
 import { OutputBuffer } from "../src/output-buffer.js";
@@ -925,11 +925,11 @@ describe("tasks component", () => {
 		});
 	});
 
-	describe("createExecBashToolDefinition", () => {
+	describe("a bash call another tool made", () => {
 		it("returns plain text to the model and the command's colors in details", async () => {
-			const tool = createExecBashToolDefinition();
+			const tool = createBashToolDefinition();
 			const result = await tool.execute(
-				"ansi-output",
+				"script/1",
 				{ command: "node -e \"process.stdout.write('\\u001b[31mred\\ncontinued\\u001b[0m\\n')\"", timeout: 5 },
 				undefined,
 				undefined,
@@ -939,27 +939,11 @@ describe("tasks component", () => {
 			expect(result.details.styledOutput).toBe("\x1b[31mred\x1b[0m\n\x1b[31mcontinued\x1b[0m\n");
 		});
 
-		it("excludes run_in_background and verbatim from parameter schema", () => {
-			const tool = createExecBashToolDefinition();
-			const props = (tool.parameters as any).properties;
-			expect(props.command).toBeDefined();
-			expect(props.timeout).toBeDefined();
-			expect(props.stdin).toBeDefined();
-			expect(props.run_in_background).toBeUndefined();
-			expect(props.verbatim).toBeUndefined();
-		});
-
-		it("does not advertise backgrounding in its description", () => {
-			const tool = createExecBashToolDefinition();
-			expect(tool.description).not.toContain("run_in_background");
-			expect(tool.description).not.toContain("Ctrl+B");
-		});
-
-		it("executes commands directly without backgrounding support", async () => {
-			const tool = createExecBashToolDefinition();
+		it("runs in the foreground even when asked to background", async () => {
+			const tool = createBashToolDefinition();
 			const result = await tool.execute(
-				"call-exec",
-				{ command: "node -e \"console.log('direct output');\"" },
+				"script/2",
+				{ command: "node -e \"console.log('direct output');\"", run_in_background: true },
 				undefined,
 				undefined,
 				{ cwd: process.cwd() } as any,

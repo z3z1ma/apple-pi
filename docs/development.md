@@ -11,7 +11,7 @@
 
 ## Retained cohesive modules
 
-`PairRuntime` and Pi Exec's invocation controller remain intact because each owns a single state machine or algorithm with shared lifecycle state. Splitting them by file length would obscure ownership without creating a consumer or test seam.
+`PairRuntime` remains intact because it owns one state machine with shared lifecycle state. Splitting it by file length would obscure ownership without creating a consumer or test seam.
 
 ## Capability guidance
 
@@ -38,7 +38,7 @@ Choose the composition path by intent:
 - When the next workflow requires a separate human invocation, report `/skill:<name>`. This lets Pi expand model-visible or human-only targets through the full resource catalog without implying that the current skill invoked them.
 - When only one supporting procedure is needed, link that exact reference file rather than loading its complete parent skill.
 
-Pi Exec's `skills.list()` and `skills.body()` remain introspection APIs for model-visible skills only. Direct skill-to-skill references need no runtime invocation bridge.
+Direct skill-to-skill references need no runtime invocation bridge.
 
 ## Execution paths
 
@@ -116,7 +116,7 @@ Sources that misled earlier work in this repository, and what to read instead:
 - **Search summaries** of a recent product feature can be truncated or secondhand; confirm them against an official source.
 - **Upstream Pi facts** come from the tagged file on `raw.githubusercontent.com`. For a minimum-version safety claim, read the consuming code at each patch tag, not release notes: Git 2.45.0 parses `GIT_NO_LAZY_FETCH`, but only 2.45.1's `promisor-remote.c` honours it.
 - **The installed Pi package:** grep `dist/core/` and `dist/modes/`, not `dist/bundle/chunks/`, whose minified single lines flood the output.
-- **npm versions:** fetch `https://registry.npmjs.org/-/package/<name>/dist-tags`, then `/<name>/<version>`. The full packument can exceed `pi_exec` fetch's 10 MB limit.
+- **npm versions:** fetch `https://registry.npmjs.org/-/package/<name>/dist-tags`, then `/<name>/<version>`. Prefer these narrow endpoints to the much larger full packument.
 - **A reference project's features** live in its ADRs, specs and tool contract as well as its README; read them before saying it lacks one.
 - **Citations into source:** take line numbers from `rg -n`, and check both ends of a cited range against the file's length. Citing a test's source is not evidence of running it.
 

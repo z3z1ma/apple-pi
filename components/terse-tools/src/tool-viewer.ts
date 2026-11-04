@@ -59,10 +59,10 @@ function formatInputsLines(args: unknown, theme: Theme, toolName: string, fileAr
 		const header = theme.bold(theme.fg("accent", `${key}:`));
 		const source =
 			(toolName === "write" && key === "content") || (toolName === "edit" && (key === "oldText" || key === "newText"));
-		const python = toolName === "pi_exec" && key === "code";
-		if (typeof val === "string" && (val.includes("\n") || source || python)) {
-			const body = python
-				? highlightCode(val.replace(/\t/g, "   "), "python")
+		const script = toolName === "codemode" && key === "code";
+		if (typeof val === "string" && (val.includes("\n") || source || script)) {
+			const body = script
+				? highlightCode(val.replace(/\t/g, "   "), "javascript")
 				: source
 					? fileTextLines(val, fileArgs, theme)
 					: val.split("\n");

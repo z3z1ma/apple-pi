@@ -27,7 +27,7 @@ export function needsYou(character: Character): boolean {
 
 export function tempoFor(character: Character): number {
 	const tool = character.facts?.tool?.name ?? "";
-	if (/^(edit|write|bash|pi_exec)$/.test(tool)) return 1.9;
+	if (/^(edit|write|bash|codemode)$/.test(tool)) return 1.9;
 	if (/^(read|grep|find|ls|web_?search|fetch)/.test(tool)) return 0.7;
 	return 1;
 }

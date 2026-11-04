@@ -58,7 +58,7 @@ For every authorized mutation:
 - do not create pages, links, retained sources, or edits merely to satisfy a quota;
 - leave `.wiki/` out of Git and ignore rules unless the operator decides otherwise.
 
-Use ordinary tools directly for small operations. Use the existing researcher, explorer, MCP, or `pi_exec` capabilities only when source acquisition or bounded fan-out materially helps. Acquisition and synthesis are separate boundaries: inspect a source before changing wiki knowledge, and keep fetch, extraction, privacy, and format failures visible.
+Use ordinary tools directly for small operations. Use the existing researcher, explorer, MCP, or `codemode` capabilities only when source acquisition or bounded fan-out materially helps. Acquisition and synthesis are separate boundaries: inspect a source before changing wiki knowledge, and keep fetch, extraction, privacy, and format failures visible.
 
 ## Procedure Router
 

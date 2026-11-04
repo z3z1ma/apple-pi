@@ -136,7 +136,7 @@ Inside Pi:
 
 ## 7. Optional configuration
 
-- **MCP servers:** add them to `~/.pi/agent/mcp.json` with `"exposure": "deferred"`, add `"extensions": ["-builtin:codemode"]` to `~/.pi/agent/settings.json` so `pi_exec` is the only composition runtime, then run `/reload` and `/mcp`. See [MCP](mcp.md).
+- **MCP servers:** add them to `~/.pi/agent/mcp.json`, then run `/reload` and `/mcp`. The default `codemode` exposure lets scripts call them; use `"exposure": "deferred"` when the model should also discover them with `tool_search`. Keep Pi's built-in `codemode` enabled; remove `-builtin:codemode` from `settings.json` if an older setup disabled it. See [MCP](mcp.md) and [programs](programs.md).
 - **Validation:** add `"$schema"` to Pi's configuration files so your editor validates and completes them: `https://pi.dev/schemas/settings.schema.json` in `settings.json`, and `models`, `keybindings`, or `theme` in place of `settings` for the others. The settings schema accepts apple-pi's own keys, such as `pair`, but does not check them.
 - **Remote clipboard:** when you attach to tmux from another machine, set `PI_CLIPBOARD_OSC52=1` so copies (including `/btw`'s `Ctrl+X`) also reach that machine's clipboard.
 - **Editor:** set `EDITOR` in your shell profile (for example `export EDITOR=nvim`) for `Ctrl+E` prompt editing.

@@ -15,7 +15,7 @@ Use TDD for concrete behavior with an input, an observable output, and an expect
 
 For a hard or unexplained bug, read and follow [`diagnosing-bugs`](../diagnosing-bugs/SKILL.md) to establish the exact behavior, cause, and correct regression seam first. Once the behavior and seam are known, this red → green loop can drive the regression test and authorized fix.
 
-TDD is a sequential reference, not an implementation driver. It does not need team fan-out or Pi Exec composition. Follow the repository's test layout. Durable tests and fixtures belong in the normal repository test tree; this skill creates no mandatory ledger artifact. Commits, dependency installation, publication, deployment, destructive actions, shared-system access, and other external effects require their own authority.
+TDD is a sequential reference, not an implementation driver. Use the loop directly; team fan-out or program composition is optional. Follow the repository's test layout. Durable tests and fixtures belong in the normal repository test tree; this skill creates no mandatory ledger artifact. Commits, dependency installation, publication, deployment, destructive actions, shared-system access, and other external effects require their own authority.
 
 ## What a good test is
 

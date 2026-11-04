@@ -167,7 +167,7 @@ describe("classifyPairWork", () => {
 				toolResults: [{ toolName: "bash", content: "components/pair-programmer/src/review-scheduler.ts" }],
 			}).phase,
 		).toBe("exploration");
-		expect(classifyPairWork({ toolCalls: [{ name: "pi_exec" }] }).phase).toBe("execution");
+		expect(classifyPairWork({ toolCalls: [{ name: "codemode" }] }).phase).toBe("execution");
 		expect(classifyPairWork({ toolCalls: [{ name: "mystery" }] }).phase).toBe("execution");
 		for (const name of ["hire", "call_in", "rehire", "assign"]) {
 			expect(classifyPairWork({ toolCalls: [{ name }] }).phase).toBe("delegation");
@@ -190,15 +190,15 @@ describe("classifyPairWork", () => {
 		).toBe("verification");
 		expect(classifyPairWork({ toolCalls: [{ name: "write" }, { name: "typecheck" }] }).phase).toBe("verification");
 		expect(classifyPairWork({ toolCalls: [{ name: "assign" }, { name: "edit" }] }).phase).toBe("mutation");
-		expect(classifyPairWork({ toolCalls: [{ name: "assign" }, { name: "pi_exec" }] }).phase).toBe("delegation");
-		expect(classifyPairWork({ toolCalls: [{ name: "read" }, { name: "pi_exec" }] }).phase).toBe("execution");
+		expect(classifyPairWork({ toolCalls: [{ name: "assign" }, { name: "codemode" }] }).phase).toBe("delegation");
+		expect(classifyPairWork({ toolCalls: [{ name: "read" }, { name: "codemode" }] }).phase).toBe("execution");
 	});
 });
 
 describe("sticky phases", () => {
 	it("does not regress from mutation or verification to exploration or execution", () => {
 		const exploration = classifyPairWork({ toolCalls: [{ name: "read" }] });
-		const execution = classifyPairWork({ toolCalls: [{ name: "pi_exec" }] });
+		const execution = classifyPairWork({ toolCalls: [{ name: "codemode" }] });
 		expect(nextPairWorkPhase("mutation", exploration)).toBe("mutation");
 		expect(nextPairWorkPhase("mutation", execution)).toBe("mutation");
 		expect(nextPairWorkPhase("verification", exploration)).toBe("verification");
@@ -282,7 +282,7 @@ describe("PairReviewScheduler", () => {
 		h.scheduler.observe(toolTurn(1, "read"));
 		h.settle(h.take(), { outcome: "ok", silent: true });
 		h.due.length = 0;
-		h.scheduler.observe(toolTurn(2, "pi_exec"));
+		h.scheduler.observe(toolTurn(2, "codemode"));
 		expect(h.take().reason).toBe("phase_transition");
 	});
 
@@ -291,7 +291,7 @@ describe("PairReviewScheduler", () => {
 		h.scheduler.observe(toolTurn(1, "read"));
 		h.settle(h.take(), { outcome: "ok", silent: true });
 		h.due.length = 0;
-		h.scheduler.observe(toolTurn(2, "pi_exec"));
+		h.scheduler.observe(toolTurn(2, "codemode"));
 		h.settle(h.take(), { outcome: "ok", silent: true });
 		h.due.length = 0;
 		h.scheduler.observe(toolTurn(3, "read"));
@@ -458,7 +458,7 @@ describe("PairReviewScheduler", () => {
 		expect(h.scheduler.snapshot().attention).toBe("close");
 		expect([...h.scheduler.snapshot().wakeOn]).toEqual(["mutation"]);
 		h.due.length = 0;
-		h.scheduler.observe(toolTurn(3, "pi_exec"));
+		h.scheduler.observe(toolTurn(3, "codemode"));
 		h.scheduler.observe(toolTurn(4, "edit"));
 		expect(h.due).toHaveLength(0);
 		h.scheduler.observe(toolTurn(5, "read", { result: [{ isError: true }] }));

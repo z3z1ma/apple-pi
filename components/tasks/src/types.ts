@@ -129,14 +129,6 @@ export const bashParameters = Type.Object({
 
 export type BashParameters = Static<typeof bashParameters>;
 
-export const execBashParameters = Type.Object({
-	command: Type.String({ description: "Shell command to execute" }),
-	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
-	stdin: Type.Optional(Type.String({ description: "Optional standard input to pass to the command" })),
-});
-
-export type ExecBashParameters = Static<typeof execBashParameters>;
-
 export const MAX_SCHEDULE_DELAY_SECONDS = 2_147_483_647 / 1000;
 
 export const scheduleParameters = Type.Object(

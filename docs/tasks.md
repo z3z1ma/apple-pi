@@ -15,7 +15,7 @@ All command forms share the same `TaskManager`, `task-*` IDs, rolling output, pr
 
 ## Interactive visibility and management
 
-Scheduled, due, and running tasks join running [Pi Exec programs](exec.md) and [intern](interns.md) calls in one width-bounded active-work widget above the editor. Prompt, command, and monitor rows show their kind and current timing; monitor rows also show delivered events and whether delivery is active or silent. The editor metadata shows `tasks:N` only while active tasks exist. Terminal tasks leave these passive surfaces because their delivered prompts and transcript notifications remain the outcome record.
+Scheduled, due, and running tasks join [intern](interns.md) calls in one width-bounded active-work widget above the editor. Prompt, command, and monitor rows show their kind and current timing; monitor rows also show delivered events and whether delivery is active or silent. The editor metadata shows `tasks:N` only while active tasks exist. Terminal tasks leave these passive surfaces because their delivered prompts and transcript notifications remain the outcome record.
 
 Inspect the roster and later output with the `task` tool. Its `status` action retains prompt/command details, timing, exit state, monitor delivery state, truncation notices and full-output paths; `cancel` stops owned work and reports its terminal outcome. The transcript and tool inspector retain returned results.
 
@@ -55,7 +55,7 @@ Foreground, background, and scheduled commands, and the operator's own `!` comma
 - A process left running in the background (`server &`) keeps the terminal open; the command still finishes once its shell exits and the output falls quiet.
 - `!` and `!!` commands get the same terminal, without RTK. Their live TUI output keeps colors through a display-only patch; Pi records each line's final plain text, so model context and output files remain plain. Colors are held by the UI component only; resuming a session shows the recorded plain output.
 - When no pseudo-terminal can be opened (Windows, a platform without the prebuilt `@lydell/node-pty` binary, or none free), the command runs on pipes as before and `details.terminalUnavailable` says why.
-- `monitor` and Pi Exec's `pi.bash` keep pipes: programs read their output. Their text also reaches the model without colors.
+- `monitor` and `bash` calls from codemode scripts or saved [programs](programs.md) keep pipes for plain output. Scripted Bash calls bypass RTK and backgrounding.
 - With [RTK](rtk.md) enabled (`RTK_ENABLED=1`), RTK rewrites some commands (for example `git status`) into its own compact output, which has no colors; `verbatim: true` runs the original command.
 
 ### `remind_me`
@@ -146,4 +146,4 @@ Output:
 - **Session local**: Reminders and monitors are in memory. Session start, fork, tree navigation, switch, and shutdown stop active work and clear the prior session's task roster without terminal notifications.
 - **Process cleanup**: Cancellation terminates the complete process tree and removes temporary output files during lifecycle cleanup.
 - **Memory bounded**: Command output keeps a rolling tail. Full truncated output streams to a temporary file.
-- **Pi Exec isolation**: `remind_me`, `monitor`, and `task` are excluded from captured extension tools. Programs may call `send_mail` and `reply` ([mail](session-state.md#mail-and-threads)), because it wakes another session, not this one. Pi Exec's `pi.bash` remains direct, verbatim, and without background, scheduling, or monitoring parameters.
+- **Scripts**: Codemode scripts can call session tools through Pi's tool pipeline. Managed reminders, monitors and tasks still belong to the owning root session. A scripted `bash` call runs in the foreground on pipes, without RTK, even when its arguments request background execution. See [programs](programs.md#the-shell-inside-scripts).

@@ -70,7 +70,7 @@ function storedRole(ctx: ExtensionContext): RoleEntry | undefined {
 	return stored;
 }
 
-const EXECUTION_TOOLS = new Set(["bash", "edit", "write", "pi_exec", "search_branches", "monitor"]);
+const EXECUTION_TOOLS = new Set(["bash", "edit", "write", "codemode", "search_branches", "monitor"]);
 
 function applyPosture(pi: ExtensionAPI, role: Role): void {
 	if (role.writes) return;

@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, test } from "vitest";
-import { runTlc } from "../components/tla/src/tlc.js";
+import { runTlc } from "../components/formal-verification/src/tlc.js";
 
 const model = resolve("specs/command-journal.tla");
 const configuration = resolve("specs/command-journal.cfg");

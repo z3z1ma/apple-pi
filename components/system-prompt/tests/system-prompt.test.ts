@@ -57,7 +57,7 @@ async function rootSession(flags: Record<string, string> = {}) {
 test("in every posture the toolbox teaches exactly the active tools", async () => {
 	const root = await rootSession();
 	expect(root.gaps).toEqual({ untaught: [], absent: [] });
-	expect(root.active).toEqual(expect.arrayContaining(["hire", "progress", "pi_exec"]));
+	expect(root.active).toEqual(expect.arrayContaining(["hire", "progress"]));
 	const cases = [
 		{ role: "implementation-engineer", has: ["edit"], lacks: ["hire", "progress", "activity"] },
 		{ role: "coordinator", has: ["hire", "progress", "activity"], lacks: [] },

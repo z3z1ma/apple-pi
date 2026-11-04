@@ -26,7 +26,7 @@ const TOOL_NAME_MAP: Record<string, string> = {
 	manage_task: "ManageTask",
 	remind_me: "RemindMe",
 	monitor: "Monitor",
-	pi_exec: "Exec",
+	codemode: "Code",
 	ask_user_question: "AskUserQuestion",
 };
 
@@ -286,14 +286,8 @@ function formatScheduleArgs(args: any): string {
 	return dur ? `${dur}: ${work}` : work;
 }
 
-function formatExecArgs(args: any): string {
-	const title = args.display?.name || args.display?.description || args.title || args.name || args.goal;
-	if (title) return String(title);
-	if (typeof args.code === "string") {
-		const firstLine = args.code.split(/[\r\n]+/)[0]?.trim() || "";
-		return firstLine.slice(0, 80);
-	}
-	return "";
+function formatScriptArgs(args: any): string {
+	return typeof args.code === "string" ? (args.code.split(/[\r\n]+/)[0]?.trim() ?? "").slice(0, 80) : "";
 }
 
 function formatUpdateNotebookArgs(args: any): string {
@@ -416,8 +410,8 @@ export function formatToolArgs(toolName: string, args: any, _cwd?: string): stri
 		}
 		case "remind_me":
 			return formatScheduleArgs(args);
-		case "pi_exec":
-			return formatExecArgs(args);
+		case "codemode":
+			return formatScriptArgs(args);
 		case "ask_user_question":
 			return Array.isArray(args.questions) && args.questions[0]
 				? String(args.questions[0].question || args.questions[0].prompt || "")

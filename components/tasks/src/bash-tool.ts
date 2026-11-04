@@ -23,13 +23,7 @@ import {
 	TerminalProcess,
 	terminalEnvironment,
 } from "./terminal.js";
-import {
-	type BackgroundTask,
-	type BashParameters,
-	bashParameters,
-	type ExecBashParameters,
-	execBashParameters,
-} from "./types.js";
+import { type BackgroundTask, type BashParameters, bashParameters } from "./types.js";
 
 const BASH_UPDATE_THROTTLE_MS = 100;
 
@@ -69,7 +63,7 @@ export interface PreparedShellCommand {
 
 export async function prepareShellCommand(
 	cwd: string,
-	params: BashParameters | ExecBashParameters,
+	params: BashParameters,
 	signal: AbortSignal | undefined,
 	ctx: ExtensionContext | undefined,
 	allowRtk: boolean,
@@ -177,7 +171,7 @@ function surpriseNote(expected: BashParameters["expect"], failed: boolean): stri
 
 async function executeBashImpl(
 	cwd: string,
-	params: BashParameters | ExecBashParameters,
+	params: BashParameters,
 	signal: AbortSignal | undefined,
 	onUpdate: any,
 	ctx: ExtensionContext | undefined,
@@ -420,31 +414,17 @@ export function createBashToolDefinition(
 		description:
 			"Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB. If truncated, full output is saved to a temp file. Supports standard input via stdin and background execution via run_in_background: true.",
 		parameters: bashParameters,
-		async execute(_toolCallId, params: BashParameters, signal, onUpdate, ctx) {
-			return executeBashImpl(cwd, params, signal, onUpdate, ctx, taskManager, true);
-		},
-		renderCall(args, theme, context) {
-			return renderBashCall(args, theme, context, defaultBashDef);
-		},
-		renderResult(result, options, theme, context) {
-			return renderBashResult(result, options, theme, context, defaultBashDef);
-		},
-	};
-}
-
-export function createExecBashToolDefinition(
-	cwd: string = process.cwd(),
-): ToolDefinition<typeof execBashParameters, any, any> {
-	const defaultBashDef = createDefaultBashToolDefinition(cwd);
-
-	return {
-		name: "bash",
-		label: "bash",
-		description:
-			"Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last 2000 lines or 50KB. If truncated, full output is saved to a temp file. Supports standard input via stdin.",
-		parameters: execBashParameters,
-		async execute(_toolCallId, params: ExecBashParameters, signal, onUpdate, ctx) {
-			return executeBashImpl(cwd, params, signal, onUpdate, ctx, undefined, false);
+		async execute(toolCallId, params: BashParameters, signal, onUpdate, ctx) {
+			const nested = toolCallId.includes("/");
+			return executeBashImpl(
+				cwd,
+				nested ? { ...params, run_in_background: false } : params,
+				signal,
+				onUpdate,
+				ctx,
+				taskManager,
+				!nested,
+			);
 		},
 		renderCall(args, theme, context) {
 			return renderBashCall(args, theme, context, defaultBashDef);

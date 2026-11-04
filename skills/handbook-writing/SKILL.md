@@ -36,7 +36,7 @@ The role owns a standing job: how the person thinks, what they own and what they
 
 Check the inverse too: an overlooked role may expose a missing perspective or useful process, or may already be served through another skill. Repeated reliance on a few roles is a question about fit, discovery and overlap, not a participation quota. A new job should earn its responsibility rather than complete a matrix or require another reporting layer.
 
-Write the process in prose. Add a `pi_exec` program only when it does what prose cannot do reliably, such as typed fan-in or exact coverage accounting.
+Write the process in prose. Add a codemode program only when it does what prose cannot do reliably, such as tool-result reduction or exact coverage accounting.
 
 ## Skills
 

@@ -1,6 +1,6 @@
 ## file
 
-This is an ordinary program-peer client owned by the runtime, not another model runner. Persist attempt, program, person and command identities before launch; the runtime derives a review scope from that stored program ID. The scope's generation, plan revision, owner, person and role must still match at launch. Ordinary Pi Exec program scopes retain their original behavior.
+This is an ordinary program-peer client owned by the runtime, not another model runner. Persist attempt, program, person and command identities before launch; the runtime derives a review scope from that stored program ID. The scope's generation, plan revision, owner, person and role must still match at launch. The review-specific scope checks are separate from ordinary peer-tool scopes.
 
 Save a terminal turn's structured output, observed usage and failure before rejecting cancellation or beginning cleanup. Keep the raw result distinct from validated output, and keep both distinct from completed cleanup. A malformed report can come from a completed model turn that incurred usage. A closed socket cannot prove disposal; scope disappearance under the existing guarded lifecycle does. Preserve partial results when cleanup fails.
 

@@ -87,14 +87,6 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 - Local paths: `components/anthropic-watchdog/`, `extensions/anthropic-watchdog.ts`
 - Independently implemented from the reported failure and Undici diagnostics behavior; no source copied from the reference probe. Its logging, header capture, warnings and configuration are not adopted. apple-pi owns request-scoped deadlines and lifecycle cleanup; Pi retains authentication, provider conversion and retries.
 
-## Monty (runtime dependency)
-
-- Source: <https://github.com/pydantic/monty>
-- Pinned npm version: `@pydantic/monty@1.0.0`
-- License: MIT
-- Integration: `pi_exec` executes type-checked Python snippets in Monty's local subprocess pool. The upstream package and platform-specific worker binaries remain normal npm dependencies; no Monty source is copied into apple-pi.
-- Monty supplies the Python subset, worker isolation, and resource limits. apple-pi owns the Pi tool bridge, tool-call policy, cancellation, result conversion, and traces. Monty's local worker is not an OS-level security boundary.
-
 ## Terminal dependency
 
 - @lydell/node-pty (<https://github.com/lydell/node-pty>), MIT, a prebuilt distribution of Microsoft's node-pty (Copyright (c) 2012-2015 Christopher Jeffrey, (c) 2016 Daniel Imms, (c) 2018 Microsoft Corporation): a runtime npm dependency, pinned at `1.1.0`, whose native module opens the pseudo-terminals Bash commands write to. No source is copied.
@@ -171,7 +163,7 @@ SOFTWARE.
 No source code was copied from these projects:
 
 - `pi-blackhole` (`49ab560`) and Sting8k's `pi-vcc` (`09c4a74`) informed the single compaction owner and progressive touched-file / `#N:path` recall design. Their unified and reverse-recall implementations were not adopted.
-- `pi-fabric` (`843dadb`) informed `pi_exec`'s guest program, host-tool and registered-extension bridge, programmable subagents, durable nested traces, code preview, live-call rendering, and activity-widget concepts. apple-pi independently implements the execution-focused runtime with Node's standard worker and VM modules.
+- `pi-fabric` (`843dadb`) informed tool composition, saved programs, peer turns, and activity presentation. Programs now run on Pi's native `codemode`; no upstream source code was copied.
 - `pi-btw` (`763850adf8c51e1dbc13765ad1197e20853ab631`, <https://github.com/QuangThai/pi-btw>) informed the private `/btw` side-conversation, answer-first UI, and explicit injection behavior. apple-pi independently implements them with one directly owned private Pi SDK session and Pi TUI primitives; no upstream source code, RPC process layer, slot system, settings, logs, fallback inference, or history store was copied.
 - Plannotator (<https://github.com/backnotprop/plannotator>) informed the browser review pages: a local page that returns anchored feedback to the agent, and the rule that every changed file appears in a guide. No source code was copied.
 - Geoffrey Huntley's Ralph writings (<https://ghuntley.com/ralph/> and <https://ghuntley.com/loop/>) informed the fresh-context, one-increment-per-loop, deterministic-stack, backpressure, and outer-harness model. No source code was copied.

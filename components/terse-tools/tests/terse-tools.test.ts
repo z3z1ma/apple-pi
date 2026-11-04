@@ -90,7 +90,7 @@ describe("terse tool formatters", () => {
 		expect(stripAnsi(formatToolName("manage_task", testTheme))).toBe("ManageTask");
 		expect(stripAnsi(formatToolName("remind_me", testTheme))).toBe("RemindMe");
 		expect(stripAnsi(formatToolName("monitor", testTheme))).toBe("Monitor");
-		expect(stripAnsi(formatToolName("pi_exec", testTheme))).toBe("Exec");
+		expect(stripAnsi(formatToolName("codemode", testTheme))).toBe("Code");
 		expect(stripAnsi(formatToolName("ask_user_question", testTheme))).toBe("AskUserQuestion");
 		expect(stripAnsi(formatToolName("update_notebook", testTheme))).toBe("UpdateNotebook");
 		expect(stripAnsi(formatToolName("acknowledge_pair_findings", testTheme))).toBe("AcknowledgePairFindings");
@@ -150,16 +150,7 @@ describe("terse tool formatters", () => {
 			"tail -F app.log | grep ERROR",
 		);
 
-		expect(formatToolArgs("pi_exec", { title: "Trace prior cron and sensor design" })).toBe(
-			"Trace prior cron and sensor design",
-		);
-		expect(
-			formatToolArgs("pi_exec", {
-				code: "await pi.read({ path: 'test.ts' })",
-				display: { name: "Read test file" },
-			}),
-		).toBe("Read test file");
-		expect(formatToolArgs("pi_exec", { code: "const x = 1;\nconsole.log(x);" })).toBe("const x = 1;");
+		expect(formatToolArgs("codemode", { code: "const x = 1;\nconsole.log(x);" })).toBe("const x = 1;");
 
 		expect(
 			formatToolArgs("ask_user_question", {

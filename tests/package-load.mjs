@@ -202,7 +202,8 @@ try {
 		...communicationTools,
 		"search_session",
 		"revisit_note",
-		"pi_exec",
+		"temporary_peer",
+		"colleague",
 		"review_code",
 		"review_queue",
 		"read_review",
@@ -218,6 +219,8 @@ try {
 		"repo_rules",
 		"tlc_check",
 		"tla_symbolic_check",
+		"alloy_check",
+		"lean_check",
 		"task",
 		"bash",
 		"search_branches",
@@ -368,31 +371,15 @@ try {
 	])
 		assert.match(toolbox, taught);
 
-	const piExecTool = result.extensions
-		.flatMap((extension) => [...extension.tools.values()])
-		.find((tool) => tool.definition.name === "pi_exec");
-	assert(piExecTool, "missing pi_exec tool");
-	assert.match(toolbox, /reduces their output to the evidence you need; check each outcome before using it/);
-	assert.match(piExecTool.definition.parameters.properties.code.description, /top-level await/);
-	assert.match(piExecTool.definition.parameters.properties.code.description, /asyncio\.gather/);
-	assert.match(piExecTool.definition.parameters.properties.code.description, /type-checked before execution/);
-	assert.match(piExecTool.definition.parameters.properties.code.description, /async def read\(\*, path: str/);
-	assert.match(piExecTool.definition.parameters.properties.code.description, /async def git_change\(/);
-	assert.doesNotMatch(
-		piExecTool.definition.parameters.properties.code.description,
-		/async def agent_run\(\*, role: str/,
-	);
-	assert.doesNotMatch(piExecTool.definition.parameters.properties.code.description, /class Peer:/);
-	assert.equal(piExecTool.definition.parameters.properties.peers, undefined);
-	assert(piExecTool.definition.parameters.properties.reset, "pi_exec reset parameter missing");
-	assert.equal(piExecTool.definition.parameters.properties.state, undefined);
-	const limits = piExecTool.definition.parameters.properties.limits?.properties;
-	assert(limits, "pi_exec limits parameter missing");
-	assert.equal(limits.agentBudget, undefined);
-	assert.equal(limits.callBudget.maximum, 2048);
-	assert.equal(limits.concurrency.maximum, 32);
-	assert.equal(limits.timeoutSeconds.maximum, 7200);
-	assert.equal(manifest.dependencies["@pydantic/monty"], "1.0.0", "Monty must be a pinned runtime dependency");
+	assert.match(toolboxSection(["codemode"], {}, {}), /\*\*Programs\*\* \(`codemode`\)/);
+	for (const peerTool of ["temporary_peer", "colleague"])
+		assert.equal(
+			result.extensions
+				.flatMap((extension) => [...extension.tools.values()])
+				.find((tool) => tool.definition.name === peerTool)?.definition.exposure,
+			"codemode",
+			`${peerTool} is callable only from scripts`,
+		);
 	assert.equal(manifest.dependencies["pi-mcp-adapter"], undefined, "MCP belongs to Pi");
 	assert(!existsSync("extensions/mcp.ts"), "removed MCP wrapper must be absent");
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);
@@ -551,15 +538,8 @@ try {
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "ask_user_question");
 	assert(askUserTool, "missing ask_user_question tool definition");
-	const piExecCodeDescription = piExecTool.definition.parameters.properties.code.description;
-	assert.doesNotMatch(piExecTool.definition.description, /<subagent-team>/);
-	assert.doesNotMatch(piExecTool.definition.description, /<inference-profiles>/);
-	assert.doesNotMatch(piExecCodeDescription, /<subagent-team>/);
-	assert.doesNotMatch(piExecCodeDescription, /<inference-profiles>/);
-	assert.match(piExecCodeDescription, /type-checked before execution/);
 	assert(!existsSync("skills/review"), "legacy review skill directory must be absent");
-	assert(existsSync("skills/ralph/references/ralph-simple.py"), "missing general Ralph reference");
-	assert(existsSync("skills/ralph/references/ralph-ledger.py"), "missing ledger Ralph reference");
+	assert(existsSync("skills/ralph/references/ralph.js"), "missing Ralph program");
 	assert(
 		!existsSync("skills/ralph/references/ralph-ledger-review.js"),
 		"duplicated reviewed Ralph graph must be absent",
