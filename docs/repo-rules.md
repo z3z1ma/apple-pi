@@ -41,7 +41,8 @@ rule, so the agent fixes the change and retries in the same turn. Repositories w
 Code rules run on the standalone GritQL engine (`@getgrit/gritql`, the Node binding of
 [biomejs/gritql](https://github.com/biomejs/gritql)), so they work for every language GritQL parses. A rule's
 `language` line picks the parser: `js` (JavaScript and TypeScript, with JSX), `css`, `json`, `python`, `go`, `rust`,
-`java`, `kotlin`, `csharp`, `ruby`, `php`, `sql`, `yaml`, `toml`, `hcl`, `markdown`, `html`, `elixir`, `solidity`.
+`java`, `kotlin`, `csharp`, `ruby`, `php`, `sql`, `yaml`, `toml`, `hcl`, `markdown`, `elixir`, `solidity`. An unknown
+language name is reported as a rule failure.
 
 ```
 language python
