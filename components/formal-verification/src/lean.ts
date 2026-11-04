@@ -104,7 +104,8 @@ async function exists(path: string): Promise<boolean> {
 }
 
 async function launchers(home: string): Promise<boolean> {
-	for (const tool of ["elan", "lean", "lake"]) if (!(await exists(join(home, "bin", tool)))) return false;
+	for (const tool of ["elan", "lean", "lake", "leanchecker"])
+		if (!(await exists(join(home, "bin", tool)))) return false;
 	return true;
 }
 
@@ -345,6 +346,28 @@ export async function runLean(options: LeanOptions): Promise<LeanResult> {
 			};
 		const unchecked = failure("Lean", checked);
 		if (unchecked) return { ...withFound, verdict: unchecked[0], message: unchecked[1], output: checked.output };
+		const replayed = await run("leanchecker", [...pin, MODULE], { env });
+		if (replayed.timedOut)
+			return {
+				...withFound,
+				verdict: "incomplete",
+				message: "The time limit stopped the kernel replay.",
+				output: replayed.output,
+			};
+		if (replayed.exitCode !== 0)
+			return /replaying declaration|\(kernel\)/.test(replayed.output)
+				? {
+						...withFound,
+						verdict: "error",
+						message: "The kernel rejected a declaration on replay.",
+						output: replayed.output,
+					}
+				: {
+						...withFound,
+						verdict: "incomplete",
+						message: "The kernel replay (leanchecker) did not run.",
+						output: replayed.output,
+					};
 		const report = join(scratch, `audit-${randomUUID()}.json`);
 		await writeFile(join(scratch, "Audit.lean"), auditProgram(report));
 		const audited = await run("lean", [...pin, join(scratch, "Audit.lean")], { env });

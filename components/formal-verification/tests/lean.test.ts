@@ -108,7 +108,7 @@ test("a file with no theorem, or a requested name that is not a theorem, is inco
 function fakeHome(name: string, scripts: Record<string, string>): string {
 	const home = join(dir, name);
 	mkdirSync(join(home, "bin"), { recursive: true });
-	for (const tool of ["elan", "lean", "lake"]) {
+	for (const tool of ["elan", "lean", "lake", "leanchecker"]) {
 		const path = join(home, "bin", tool);
 		writeFileSync(path, scripts[tool] ?? `#!/bin/sh\nELAN_HOME="${realHome}" exec "${realHome}/bin/${tool}" "$@"\n`);
 		chmodSync(path, 0o755);
@@ -219,4 +219,19 @@ test("the time limit starts after the toolchain is ready", async () => {
 	writeFileSync(file, merge);
 	const result = await withElan(home, () => runLean({ file, source: merge, timeLimit: 6 }));
 	expect(result.verdict).toBe("pass");
+}, 300_000);
+
+test("a declaration added without kernel checking is caught by the kernel replay", async () => {
+	const result = await check(
+		"SkipKernel",
+		`import Lean
+open Lean Elab Command in
+set_option debug.skipKernelTC true in
+run_cmd liftCoreM <| addDecl (.thmDecl { name := \`bad, levelParams := [], type := mkConst \`\`False, value := mkConst \`\`True.intro })
+theorem good : True := trivial
+`,
+		["bad"],
+	);
+	expect(result.verdict).toBe("error");
+	expect(result.message).toBe("The kernel rejected a declaration on replay.");
 }, 300_000);
