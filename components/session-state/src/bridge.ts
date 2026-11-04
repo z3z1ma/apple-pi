@@ -513,7 +513,7 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		const open = data as OpenOperatorPage;
 		const target = link;
 		if (!target || open.sessionId !== target.hello.session.id) return;
-		holdPrompt(target, { kind: "sign-off", id: open.toolCallId, title: open.title, url: open.url }, open.closed);
+		holdPrompt(target, { kind: "sign-off", id: open.toolCallId, title: open.title }, open.closed);
 	});
 
 	pi.events.on(SELF_CHANNEL, (data) => {

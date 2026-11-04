@@ -119,7 +119,6 @@ export default function browserPages(pi: ExtensionAPI): void {
 				sessionId: ctx.sessionManager.getSessionId(),
 				toolCallId: run.toolCallId,
 				title: page.title,
-				url: session.url,
 				closed: new Promise<void>((resolve) => (answered = resolve)),
 			} satisfies OpenOperatorPage);
 			const result = await session.result;

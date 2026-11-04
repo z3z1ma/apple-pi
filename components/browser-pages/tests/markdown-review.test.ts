@@ -198,7 +198,6 @@ describe("sign_off_document tool", () => {
 			expect(result.content[0].text).toContain("The reviewer approved the document (docs/plan.md).");
 			expect(opened).toHaveLength(1);
 			expect(opened[0]).toMatchObject({ sessionId: "test-session", toolCallId: "call" });
-			expect(opened[0]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\//);
 			await opened[0]?.closed;
 			const html = readFileSync(result.details.saved, "utf8");
 			expect(html).toContain('"kind":"markdown-review"');

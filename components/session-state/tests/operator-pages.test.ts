@@ -28,7 +28,6 @@ test("a session waiting on a sign-off page is asking the operator until the verd
 					sessionId: ctx.sessionManager.getSessionId(),
 					toolCallId,
 					title: "Plan for the cache",
-					url: "http://127.0.0.1:4100/?t=token",
 					closed: verdict,
 				} satisfies OpenOperatorPage);
 				await verdict;
@@ -54,11 +53,7 @@ test("a session waiting on a sign-off page is asking the operator until the verd
 			},
 			{ timeout: 15000 },
 		);
-		expect(open).toMatchObject({
-			kind: "sign-off",
-			title: "Plan for the cache",
-			url: "http://127.0.0.1:4100/?t=token",
-		});
+		expect(open).toMatchObject({ kind: "sign-off", title: "Plan for the cache" });
 		submit();
 		await turn;
 		await vi.waitFor(() => expect(prompt(id)).toBeNull(), { timeout: 15000 });
