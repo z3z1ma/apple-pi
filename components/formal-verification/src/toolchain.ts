@@ -164,6 +164,8 @@ export interface ProcessResult {
 	timedOut: boolean;
 }
 
+const STOP_GRACE_MS = 5000;
+
 export function runJava(options: ProcessOptions): Promise<ProcessResult> {
 	return runProcess("java", options, "This tool needs Java on PATH (Java 17 or newer).");
 }
@@ -173,6 +175,7 @@ export async function runProcess(command: string, options: ProcessOptions, missi
 		cwd: options.cwd,
 		env: options.env ?? process.env,
 		stdio: ["pipe", "pipe", "pipe"],
+		detached: true,
 	});
 	child.stdin.on("error", () => undefined);
 	child.stdin.end(options.input ?? "");
@@ -192,7 +195,18 @@ export async function runProcess(command: string, options: ProcessOptions, missi
 		take(chunk);
 	});
 	child.stderr.on("data", take);
-	const stop = () => child.kill("SIGTERM");
+	const signalGroup = (signal: NodeJS.Signals) => {
+		try {
+			if (child.pid) process.kill(-child.pid, signal);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+		}
+	};
+	let escalation: NodeJS.Timeout | undefined;
+	const stop = () => {
+		signalGroup("SIGTERM");
+		escalation ??= setTimeout(() => signalGroup("SIGKILL"), STOP_GRACE_MS);
+	};
 	options.signal?.addEventListener("abort", stop, { once: true });
 	if (options.signal?.aborted) stop();
 	const timer =
@@ -213,6 +227,7 @@ export async function runProcess(command: string, options: ProcessOptions, missi
 		return { output, stdout, exitCode, timedOut };
 	} finally {
 		clearTimeout(timer);
+		clearTimeout(escalation);
 		options.signal?.removeEventListener("abort", stop);
 	}
 }

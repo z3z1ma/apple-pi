@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { resolveToolPath } from "../../shared/src/tool-path.js";
-import { type AlloyResult, runAlloy } from "./alloy.js";
+import { ALLOY_SOLVERS, type AlloyResult, runAlloy } from "./alloy.js";
 import { runApalache } from "./apalache.js";
 import { type LeanResult, runLean } from "./lean.js";
 import { runTlc } from "./tlc.js";
@@ -162,11 +162,6 @@ function alloyReport(result: AlloyResult, spec: string): string {
 		const expected = command.expected ? ` (expected ${command.expected === "instance" ? "one" : "none"})` : "";
 		lines.push(`${command.index}. ${command.source}: ${command.outcome}${expected}`);
 	}
-	const empty = result.commands.filter((command) => command.outcome === "no instance" && !command.expected);
-	if (empty.length)
-		lines.push(
-			`No instance for ${empty.map((command) => command.name).join(", ")}: the facts may rule out everything it asks for, so checks over the same model can pass vacuously.`,
-		);
 	for (const command of result.commands)
 		if (command.instance)
 			lines.push(
@@ -198,14 +193,17 @@ export function createAlloyTool() {
 		name: ALLOY_TOOL_NAME,
 		label: "Alloy check",
 		description:
-			"Run the check and run commands of an Alloy 6 model and get a structured verdict: pass (every check found no counterexample and every command met its `expect`, within its scope), violation (a counterexample, or a result its `expect` did not predict), incomplete (the time limit stopped it) or error. A counterexample or instance comes back as its atoms, relations and skolems, state by state for temporal models. A run with no instance is flagged: the facts may make checks pass vacuously. Downloads a pinned, checksummed Alloy on first use; needs Java 17.",
+			"Run the check and run commands of an Alloy 6 model and get a structured verdict, each within its command's scope. pass: every property check found no counterexample, every `expect` held, and some run found an instance, which shows the facts are satisfiable. violation: a counterexample, or a result its `expect` did not predict. incomplete: no run found an instance, a run without `expect` found none, no property was checked, or the time limit stopped it. A check with `expect 1` is a control that must find its counterexample; it never counts as a property. Counterexamples and instances come back as atoms, relations and skolems, state by state for temporal models. Downloads a pinned, checksummed Alloy on first use; needs Java 17.",
 		parameters: Type.Object({
 			spec: Type.String({ description: "Path to the .als file" }),
 			commands: Type.Optional(
 				Type.Array(Type.String(), { description: "Command names or indices to run; defaults to every command" }),
 			),
 			solver: Type.Optional(
-				Type.String({ description: "SAT solver: sat4j (default), minisat, glucose or minisat.prover" }),
+				Type.Union(
+					ALLOY_SOLVERS.map((solver) => Type.Literal(solver)),
+					{ description: "SAT solver; sat4j by default" },
+				),
 			),
 			timeLimit: Type.Optional(Type.Integer({ minimum: 1, description: "Seconds before the remaining commands stop" })),
 		}),
@@ -222,12 +220,12 @@ export function createLeanTool() {
 		name: LEAN_TOOL_NAME,
 		label: "Lean check",
 		description:
-			"Check a Lean 4 file and audit its theorems. pass: the file has no errors, nothing uses sorry, and every audited theorem depends only on the standard axioms (propext, Classical.choice, Quot.sound). incomplete: sorry, another axiom (including native_decide's trust in the compiler), no theorem to audit, or the time limit. error: Lean's diagnostics, such as a proof that does not go through. Inside a Lake project the project's toolchain and dependencies are used; a lone file uses a pinned Lean. Installs elan (pinned, checksummed) on first use when none is present; toolchains download through it.",
+			"Check a Lean 4 file and audit what it declares, from Lean's own environment. pass: the file has no errors, no declaration depends on sorry, and every audited theorem depends only on the standard axioms (propext, Classical.choice, Quot.sound). incomplete: sorry, another axiom (including native_decide's trust in the compiler), no theorem, a requested name that is not a theorem of the file, or the time limit. error: Lean's diagnostics, such as a proof that does not go through, or a failed process. Inside a Lake project the project's toolchain and dependencies are used; a lone file uses a pinned Lean. Installs elan (pinned, checksummed) on first use when none is present; toolchains download through it.",
 		parameters: Type.Object({
 			file: Type.String({ description: "Path to the .lean file" }),
 			theorems: Type.Optional(
 				Type.Array(Type.String(), {
-					description: "Full names of the theorems to audit; defaults to every theorem and lemma the file declares",
+					description: "Full names of the theorems to audit; defaults to every theorem the file declares",
 				}),
 			),
 			build: Type.Optional(

@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
@@ -40,30 +41,55 @@ test("removing the fact yields a counterexample with the cycle", async () => {
 	expect(check?.instance).not.toMatch(/^univ=|^Int=/m);
 }, 120_000);
 
-test("expect turns a known counterexample into a passing negative control", async () => {
-	const result = await runAlloy({
-		spec: model(
-			"expected",
-			"sig Task { dependsOn: set Task }\nassert Acyclic { no t: Task | t in t.^dependsOn }\ncheck Acyclic for 3 expect 1\nrun {} for 2 expect 1\n",
-		),
+test("a control check with expect 1 must find its counterexample and is not counted as a property", async () => {
+	const control =
+		"sig Task { dependsOn: set Task }\nassert Acyclic { no t: Task | t in t.^dependsOn }\ncheck Acyclic for 3 expect 1\nrun {} for 2\n";
+	const alone = await runAlloy({ spec: model("control", control) });
+	expect(alone.commands[0]).toMatchObject({ outcome: "counterexample", expected: "instance" });
+	expect(alone.verdict).toBe("incomplete");
+	expect(alone.message).toContain("no property check ran");
+	const withProperty = await runAlloy({
+		spec: model("property", `${control}assert Finite { #Task <= 3 }\ncheck Finite for 3\n`),
 	});
-	expect(result.verdict).toBe("pass");
-	expect(result.commands[0]).toMatchObject({ outcome: "counterexample", expected: "instance" });
+	expect(withProperty.verdict).toBe("pass");
+	expect(withProperty.message).toContain("1 control check found the expected counterexample");
 }, 120_000);
 
-test("a run with no instance is reported and an unmet expect is a violation", async () => {
-	const result = await runAlloy({
-		spec: model("empty", "sig A {}\nfact { no A }\nrun { some A } for 3\nrun { some A } for 3 expect 1\n"),
+test("contradictory facts never pass: checks hold vacuously when no run finds an instance", async () => {
+	const contradiction = "sig A {}\nfact { some A and no A }\nassert Valid { no A }\ncheck Valid for 3\n";
+	const checkOnly = await runAlloy({ spec: model("vacuous", contradiction) });
+	expect(checkOnly.verdict).toBe("incomplete");
+	expect(checkOnly.message).toContain("no run found an instance");
+	const withRun = await runAlloy({ spec: model("vacuous-run", `${contradiction}run {} for 3\n`) });
+	expect(withRun.commands.map((command) => command.outcome)).toEqual(["no counterexample", "no instance"]);
+	expect(withRun.verdict).toBe("incomplete");
+	expect(withRun.message).toContain("run$2 found no instance");
+}, 120_000);
+
+test("every expect is enforced, including expect 0 on a satisfiable run", async () => {
+	const zero = await runAlloy({ spec: model("expect-zero", "sig A {}\nrun { some A } for 3 expect 0\n") });
+	expect(zero.commands[0]).toMatchObject({ outcome: "instance", expected: "none" });
+	expect(zero.verdict).toBe("violation");
+	const one = await runAlloy({
+		spec: model("expect-one", "sig A {}\nfact { no A }\nrun { some A } for 3 expect 1\n"),
 	});
-	expect(result.commands.map((command) => command.outcome)).toEqual(["no instance", "no instance"]);
-	expect(result.verdict).toBe("violation");
+	expect(one.verdict).toBe("violation");
+	expect(one.message).toContain("found none, against its expect");
+}, 120_000);
+
+test("every requested command must exist, and only solving backends are accepted", async () => {
+	const spec = model("select", "sig A {}\nassert P { no A }\ncheck P for 3\nrun {} for 2\n");
+	const partial = await runAlloy({ spec, commands: ["P", "DoesNotExist"] });
+	expect(partial.verdict).toBe("error");
+	expect(partial.message).toMatch(/^No command matches DoesNotExist;/);
+	await expect(runAlloy({ spec, solver: "CNF" as never })).rejects.toThrow(/solver must be one of/);
 	const tool = createAlloyTool();
-	const only = await tool.execute("call", { spec: join(dir, "empty.als"), commands: ["0"] }, undefined, undefined, {
+	const result = await tool.execute("call", { spec: "select.als", commands: ["0"] }, undefined, undefined, {
 		cwd: dir,
 	} as never);
-	const text = (only.content[0] as { text: string }).text;
-	expect(text).toMatch(/^Alloy 6\.2\.0 on .*empty\.als: PASS\./);
-	expect(text).toContain("No instance for run$1: the facts may rule out everything it asks for");
+	const text = (result.content[0] as { text: string }).text;
+	expect(text).toMatch(/^Alloy 6\.2\.0 on select\.als: VIOLATION\. P has a counterexample within its scope\./);
+	expect(text).toMatch(/^Counterexample for P:\nA=\{A\$0\}/m);
 }, 120_000);
 
 test("a temporal counterexample comes back state by state", async () => {
@@ -101,3 +127,50 @@ test("the skill's example finds the cycle its self-dependency rule misses", asyn
 		["Chain", "instance"],
 	]);
 }, 120_000);
+
+function fakeJava(name: string, exec: string): string {
+	const bin = join(dir, name);
+	mkdirSync(bin, { recursive: true });
+	const real = execFileSync("sh", ["-c", "command -v java"], { encoding: "utf8" }).trim();
+	writeFileSync(
+		join(bin, "java"),
+		`#!/bin/sh\ncase " $* " in *" exec "*) ;; *) exec "${real}" "$@" ;; esac\nwhile [ $# -gt 0 ]; do [ "$1" = -o ] && out="$2"; shift; done\nmkdir -p "$out"\n${exec}\n`,
+	);
+	chmodSync(join(bin, "java"), 0o755);
+	return bin;
+}
+
+async function withPath<T>(bin: string, run: () => Promise<T>): Promise<T> {
+	const path = process.env.PATH;
+	process.env.PATH = `${bin}:${path}`;
+	try {
+		return await run();
+	} finally {
+		process.env.PATH = path;
+	}
+}
+
+test("a receipt that is not this command's solver result, or a failed exit, is an error", async () => {
+	const spec = model("receipt", "sig A {}\nassert P { some A or no A }\ncheck P for 3\nrun {} for 2\n");
+	const empty = fakeJava("empty-receipt", `echo '{"commands":{}}' > "$out/receipt.json"`);
+	const wrong = await withPath(empty, () => runAlloy({ spec }));
+	expect(wrong.verdict).toBe("error");
+	expect(wrong.message).toBe("Alloy's result for P is not a solver result for that command.");
+	const failing = fakeJava(
+		"failing",
+		`echo '{"commands":{"P":{"type":"check"}}}' > "$out/receipt.json"\necho fatal >&2\nexit 2`,
+	);
+	const failed = await withPath(failing, () => runAlloy({ spec }));
+	expect(failed.verdict).toBe("error");
+	expect(failed.message).toMatch(/^Alloy exited with status 2 on P:\nfatal/);
+}, 120_000);
+
+test("the time limit stops the whole process tree, even a child that ignores SIGTERM", async () => {
+	const spec = model("stubborn", "sig A {}\nassert P { some A or no A }\ncheck P for 3\n");
+	const stubborn = fakeJava("stubborn", `sh -c 'trap "" TERM; sleep 60' &\ntrap "" TERM\nwait`);
+	const started = Date.now();
+	const result = await withPath(stubborn, () => runAlloy({ spec, timeLimit: 1 }));
+	expect(result.verdict).toBe("incomplete");
+	expect(result.message).toContain("the time limit stopped P");
+	expect(Date.now() - started).toBeLessThan(20_000);
+}, 60_000);

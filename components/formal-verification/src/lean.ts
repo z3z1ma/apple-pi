@@ -1,7 +1,7 @@
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { cacheDir, download, pinned, runProcess } from "./toolchain.js";
+import { cacheDir, download, type ProcessResult, pinned, runProcess } from "./toolchain.js";
 
 export const ELAN_VERSION = "4.2.4";
 export const LEAN_TOOLCHAIN = "leanprover/lean4:v4.35.0";
@@ -24,6 +24,25 @@ const ELAN_BUILDS: Record<string, { target: string; checksum: string }> = {
 	},
 };
 const STANDARD_AXIOMS = new Set(["propext", "Classical.choice", "Quot.sound"]);
+const MODULE = "ApplePiChecked";
+const MARK = "apple-pi-audit ";
+const AUDIT = `import Lean
+import ${MODULE}
+open Lean Meta in
+#eval show CoreM Unit from do
+  let env ← getEnv
+  let some idx := env.getModuleIdx? \`${MODULE} | throwError "the checked module did not load"
+  for name in env.header.moduleData[idx.toNat]!.constNames do
+    let some info := env.find? name | continue
+    let kind := match info with
+      | .thmInfo _ => "theorem"
+      | .axiomInfo _ => "axiom"
+      | _ => "other"
+    let axioms ← collectAxioms name
+    let shown := (privateToUserName? name).getD name
+    let written := (← findDeclarationRanges? name).isSome
+    IO.println ("${MARK}" ++ (Json.compress (Json.mkObj [("name", toJson shown.toString), ("internal", toJson shown.isInternal), ("written", toJson written), ("kind", toJson kind), ("axioms", toJson (axioms.map (·.toString)))])))
+`;
 
 export type LeanVerdict = "pass" | "incomplete" | "error";
 
@@ -60,6 +79,14 @@ export interface LeanOptions {
 	onLine?: (line: string) => void;
 }
 
+interface Declaration {
+	name: string;
+	internal: boolean;
+	written: boolean;
+	kind: "theorem" | "axiom" | "other";
+	axioms: string[];
+}
+
 async function exists(path: string): Promise<boolean> {
 	try {
 		await access(path);
@@ -69,11 +96,15 @@ async function exists(path: string): Promise<boolean> {
 	}
 }
 
+async function launchers(home: string): Promise<boolean> {
+	for (const tool of ["elan", "lean", "lake"]) if (!(await exists(join(home, "bin", tool)))) return false;
+	return true;
+}
+
 export async function elanHome(signal?: AbortSignal, onLine?: (line: string) => void): Promise<string> {
-	for (const home of [process.env.ELAN_HOME, join(homedir(), ".elan")])
-		if (home && (await exists(join(home, "bin", "elan")))) return home;
+	for (const home of [process.env.ELAN_HOME, join(homedir(), ".elan"), cacheDir("elan", ELAN_VERSION)])
+		if (home && (await launchers(home))) return home;
 	const home = cacheDir("elan", ELAN_VERSION);
-	if (await exists(join(home, "bin", "elan"))) return home;
 	const build = ELAN_BUILDS[`${process.platform}-${process.arch}`];
 	if (!build)
 		throw new Error(`lean_check runs on macOS and Linux (x64 or arm64), not ${process.platform}-${process.arch}.`);
@@ -86,6 +117,7 @@ export async function elanHome(signal?: AbortSignal, onLine?: (line: string) => 
 		),
 	);
 	const scratch = await mkdtemp(join(tmpdir(), "elan-"));
+	const staging = `${home}.${process.pid}.tmp`;
 	try {
 		const missing = "Installing elan needs tar on PATH.";
 		await runProcess("tar", { args: ["-xzf", archive, "-C", scratch], cwd: scratch, signal }, missing);
@@ -94,15 +126,18 @@ export async function elanHome(signal?: AbortSignal, onLine?: (line: string) => 
 			{
 				args: ["-y", "--no-modify-path", "--default-toolchain", "none"],
 				cwd: scratch,
-				env: { ...process.env, ELAN_HOME: home },
+				env: { ...process.env, ELAN_HOME: staging },
 				signal,
 				onLine,
 			},
 			"elan-init is missing from the elan archive.",
 		);
-		if (install.exitCode !== 0) throw new Error(`elan-init failed:\n${install.output}`);
+		if (install.exitCode !== 0 || !(await launchers(staging)))
+			throw new Error(`elan-init did not complete:\n${install.output}`);
+		if (!(await launchers(home))) await rename(staging, home);
 	} finally {
 		await rm(scratch, { recursive: true, force: true });
+		await rm(staging, { recursive: true, force: true });
 	}
 	return home;
 }
@@ -116,174 +151,170 @@ export async function leanProject(file: string): Promise<{ root: string; lake: b
 	}
 }
 
-function withoutComments(source: string): string {
-	let result = "";
-	let depth = 0;
-	for (let i = 0; i < source.length; i++) {
-		if (source.startsWith("/-", i)) {
-			depth++;
-			i++;
-		} else if (depth && source.startsWith("-/", i)) {
-			depth--;
-			i++;
-		} else if (depth) {
-			if (source[i] === "\n") result += "\n";
-		} else if (source.startsWith("--", i)) {
-			while (i < source.length && source[i] !== "\n") i++;
-			result += "\n";
-		} else result += source[i];
+export function diagnostics(stdout: string): LeanDiagnostic[] | undefined {
+	const found: LeanDiagnostic[] = [];
+	for (const line of stdout.split("\n")) {
+		if (!line.trim()) continue;
+		try {
+			const message = JSON.parse(line) as {
+				pos: { line: number; column: number };
+				severity: LeanDiagnostic["severity"];
+				data: string;
+			};
+			found.push({
+				line: message.pos.line,
+				column: message.pos.column,
+				severity: message.severity,
+				text: message.data,
+			});
+		} catch {
+			return undefined;
+		}
 	}
-	return result;
+	return found;
 }
 
-export function declaredTheorems(source: string): string[] {
-	const scopes: { namespace: string[] }[] = [];
-	const names: string[] = [];
-	for (const line of withoutComments(source).split("\n")) {
-		const opened = /^\s*namespace\s+([^\s]+)/.exec(line);
-		if (opened) {
-			scopes.push({ namespace: opened[1].split(".") });
-			continue;
-		}
-		if (/^\s*(?:noncomputable\s+)?section\b/.test(line)) {
-			scopes.push({ namespace: [] });
-			continue;
-		}
-		if (/^\s*end\b/.test(line)) {
-			scopes.pop();
-			continue;
-		}
-		const theorem =
-			/^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|nonrec|unsafe|partial)\s+)*(?:theorem|lemma)\s+([^\s:({[⦃]+)/.exec(
-				line,
-			);
-		if (!theorem) continue;
-		const name = theorem[1];
-		names.push(
-			name.startsWith("_root_.")
-				? name.slice("_root_.".length)
-				: [...scopes.flatMap((scope) => scope.namespace), name].join("."),
-		);
-	}
-	return names;
-}
-
-interface LeanMessage {
-	pos: { line: number; column: number };
-	severity: LeanDiagnostic["severity"];
-	data: string;
-	kind?: string;
-}
-
-function messages(stdout: string): LeanMessage[] {
+export function declarations(stdout: string): Declaration[] {
 	return stdout
 		.split("\n")
-		.filter((line) => line.startsWith("{"))
-		.flatMap((line) => {
-			try {
-				return [JSON.parse(line) as LeanMessage];
-			} catch {
-				return [];
-			}
-		});
+		.filter((line) => line.startsWith(MARK))
+		.map((line) => JSON.parse(line.slice(MARK.length)) as Declaration);
 }
 
-export function audit(names: string[], audited: LeanMessage[]): LeanTheorem[] {
-	return names.map((name, index) => {
-		const found = audited.filter((message) => message.pos.line === index + 1);
-		const error = found.find((message) => message.severity === "error");
-		if (error) return { name, problem: error.data };
-		const text = found.map((message) => message.data).join("\n");
-		if (/does not depend on any axioms/.test(text)) return { name, axioms: [] };
-		const listed = /depends on axioms: \[([^\]]*)\]/.exec(text);
-		if (!listed) return { name, problem: text || "Lean printed no axioms for it" };
-		return {
-			name,
-			axioms: listed[1]
-				.split(",")
-				.map((axiom) => axiom.trim())
-				.filter(Boolean),
-		};
+export function audit(declared: Declaration[], wanted: string[] | undefined): LeanTheorem[] {
+	const theorems = declared.filter(
+		(declaration) => declaration.kind === "theorem" && declaration.written && !declaration.internal,
+	);
+	if (!wanted?.length) return theorems.map(({ name, axioms }) => ({ name, axioms }));
+	return wanted.map((name) => {
+		const found = declared.find((declaration) => declaration.name === name);
+		if (!found) return { name, problem: "the file declares no theorem by this name" };
+		if (found.kind !== "theorem")
+			return { name, problem: `it is ${found.kind === "axiom" ? "an axiom" : "not a theorem"}` };
+		return { name, axioms: found.axioms };
 	});
 }
 
-function summary(theorems: LeanTheorem[], diagnostics: LeanDiagnostic[], timedOut: boolean): [LeanVerdict, string] {
-	const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error");
-	if (errors.length) return ["error", `Lean reported ${errors.length} error${errors.length === 1 ? "" : "s"}.`];
-	if (timedOut) return ["incomplete", "The time limit stopped Lean before it finished the file."];
-	const sorry = diagnostics.some((diagnostic) => /declaration uses [`']sorry/.test(diagnostic.text));
+function failure(phase: string, run: ProcessResult): [LeanVerdict, string] | undefined {
+	if (run.timedOut) return ["incomplete", `The time limit stopped ${phase}.`];
+	if (run.exitCode !== 0)
+		return [
+			"error",
+			`${phase} ${run.exitCode === null ? "was stopped by a signal" : `exited with status ${run.exitCode}`}.`,
+		];
+	return undefined;
+}
+
+function summary(theorems: LeanTheorem[], declared: Declaration[], found: LeanDiagnostic[]): [LeanVerdict, string] {
+	const sorry = [
+		...new Set([
+			...declared
+				.filter((declaration) => declaration.axioms.includes("sorryAx"))
+				.map((declaration) => declaration.name),
+			...(found.some((diagnostic) => /declaration uses [`']sorry/.test(diagnostic.text)) ? ["a declaration"] : []),
+		]),
+	];
 	const unaudited = theorems.filter((theorem) => theorem.problem);
-	const trusting = theorems.filter((theorem) => theorem.axioms?.some((axiom) => !STANDARD_AXIOMS.has(axiom)));
-	if (sorry || trusting.length || unaudited.length) {
-		const reasons = [
-			sorry ? "a declaration uses sorry" : "",
-			trusting.length
-				? `${trusting.map((theorem) => theorem.name).join(", ")} rely on axioms beyond the standard three`
-				: "",
-			unaudited.length ? `${unaudited.map((theorem) => theorem.name).join(", ")} could not be audited` : "",
-		].filter(Boolean);
-		return ["incomplete", `Not proved: ${reasons.join("; ")}.`];
-	}
-	if (!theorems.length)
-		return ["incomplete", "The file elaborates, but it declares no theorem to audit; name them with `theorems`."];
+	const generated = declared.filter((declaration) => declaration.kind === "theorem" && !declaration.written);
+	const trusting = [...theorems, ...generated].filter((theorem) =>
+		theorem.axioms?.some((axiom) => !STANDARD_AXIOMS.has(axiom)),
+	);
+	const reasons = [
+		sorry.length ? `${sorry.join(", ")} ${sorry.length === 1 ? "uses" : "use"} sorry` : "",
+		trusting.length
+			? `${trusting.map((theorem) => theorem.name).join(", ")} rely on axioms beyond the standard three${trusting.some((theorem) => theorem.axioms?.some((axiom) => /native_decide|ofReduceBool/.test(axiom))) ? " (native_decide trusts the compiler)" : ""}`
+			: "",
+		unaudited.length ? `${unaudited.map((theorem) => `${theorem.name}: ${theorem.problem}`).join("; ")}` : "",
+	].filter(Boolean);
+	if (reasons.length) return ["incomplete", `Not proved: ${reasons.join("; ")}.`];
+	if (!theorems.length) return ["incomplete", "The file elaborates, but it declares no theorem."];
 	return [
 		"pass",
-		`Every audited theorem is proved and depends only on standard axioms (propext, Classical.choice, Quot.sound).`,
+		"No declaration uses sorry, and every audited theorem depends only on the standard axioms (propext, Classical.choice, Quot.sound).",
 	];
 }
 
 export async function runLean(options: LeanOptions): Promise<LeanResult> {
 	const home = await elanHome(options.signal, options.onLine);
-	const bin = (tool: string) => join(home, "bin", tool);
-	const env = { ...process.env, ELAN_HOME: home };
 	const file = resolve(options.file);
 	const project = await leanProject(file);
 	const cwd = project?.root ?? dirname(file);
 	const pin = project ? [] : [`+${LEAN_TOOLCHAIN}`];
 	const missing = `elan's ${home}/bin is incomplete; remove it and retry.`;
-	const run = (tool: string, args: string[], extra: { input?: string; timeLimit?: number } = {}) =>
-		runProcess(bin(tool), { args, cwd, env, signal: options.signal, onLine: options.onLine, ...extra }, missing);
-	const prepared = await run("lean", [...pin, "--version"]);
+	const deadline = options.timeLimit === undefined ? undefined : Date.now() + options.timeLimit * 1000;
+	const run = (tool: string, args: string[], extra: { env?: NodeJS.ProcessEnv; untimed?: boolean } = {}) => {
+		const timeLimit =
+			extra.untimed || deadline === undefined ? undefined : Math.max(0.001, (deadline - Date.now()) / 1000);
+		return runProcess(
+			join(home, "bin", tool),
+			{
+				args,
+				cwd,
+				env: { ...process.env, ...extra.env, ELAN_HOME: home },
+				signal: options.signal,
+				onLine: options.onLine,
+				timeLimit,
+			},
+			missing,
+		);
+	};
+	const prepared = await run("lean", [...pin, "--version"], { untimed: true });
 	const version = /version ([^,\s]+)/.exec(prepared.stdout)?.[1];
-	const toolchain = version ? `Lean ${version}` : project ? "the project's toolchain" : LEAN_TOOLCHAIN;
 	const base = {
-		toolchain,
+		toolchain: version ? `Lean ${version}` : project ? "the project's toolchain" : LEAN_TOOLCHAIN,
 		project: project?.root,
 		theorems: [] as LeanTheorem[],
 		diagnostics: [] as LeanDiagnostic[],
 	};
-	if (prepared.exitCode !== 0)
-		return { ...base, verdict: "error", message: "The Lean toolchain did not start.", output: prepared.output };
+	const stopped = (phase: string, step: ProcessResult) => {
+		const problem = failure(phase, step);
+		return problem && { ...base, verdict: problem[0], message: problem[1], output: step.output };
+	};
+	const unprepared = stopped("Starting the Lean toolchain", prepared);
+	if (unprepared) return unprepared;
 	if (options.build && project?.lake) {
-		const built = await run("lake", ["build"], { timeLimit: options.timeLimit });
-		if (built.exitCode !== 0)
-			return { ...base, verdict: "error", message: "`lake build` failed.", output: built.output };
+		const unbuilt = stopped("`lake build`", await run("lake", ["build"]));
+		if (unbuilt) return unbuilt;
 	}
-	const names = options.theorems?.length ? options.theorems : declaredTheorems(options.source);
-	const length = options.source.split("\n").length;
-	const input = `${options.source}\n${names.map((name) => `#print axioms ${name}`).join("\n")}\n`;
-	const command = project?.lake ? ["env", "lean", "--json", "--stdin"] : [...pin, "--json", "--stdin"];
-	const checked = await run(project?.lake ? "lake" : "lean", command, {
-		input,
-		timeLimit: options.timeLimit,
-	});
-	const all = messages(checked.stdout);
-	const diagnostics = all
-		.filter((message) => message.pos.line <= length)
-		.map((message) => ({
-			line: message.pos.line,
-			column: message.pos.column,
-			severity: message.severity,
-			text: message.data,
-		}));
-	const theorems = audit(
-		names,
-		all
-			.filter((message) => message.pos.line > length)
-			.map((message) => ({ ...message, pos: { ...message.pos, line: message.pos.line - length } })),
-	);
-	if (checked.exitCode !== 0 && !all.length && !checked.timedOut)
-		return { ...base, verdict: "error", message: "Lean failed before checking the file.", output: checked.output };
-	const [verdict, message] = summary(theorems, diagnostics, checked.timedOut);
-	return { ...base, theorems, diagnostics, verdict, message, output: checked.output };
+	const scratch = await mkdtemp(join(tmpdir(), "lean-check-"));
+	try {
+		let searchPath = scratch;
+		if (project?.lake) {
+			const paths = await run("lake", ["env", "printenv", "LEAN_PATH"]);
+			const unresolved = stopped("`lake env`", paths);
+			if (unresolved) return unresolved;
+			searchPath = [scratch, paths.stdout.trim()].filter(Boolean).join(":");
+		}
+		const env = { LEAN_PATH: searchPath };
+		await writeFile(join(scratch, `${MODULE}.lean`), options.source);
+		const checked = await run(
+			"lean",
+			[...pin, "--json", `--root=${scratch}`, "-o", join(scratch, `${MODULE}.olean`), join(scratch, `${MODULE}.lean`)],
+			{ env },
+		);
+		const found = diagnostics(checked.stdout);
+		if (!found)
+			return { ...base, verdict: "error", message: "Lean printed output that is not JSON.", output: checked.output };
+		const withFound = { ...base, diagnostics: found };
+		const errors = found.filter((diagnostic) => diagnostic.severity === "error");
+		if (errors.length)
+			return {
+				...withFound,
+				verdict: "error",
+				message: `Lean reported ${errors.length} error${errors.length === 1 ? "" : "s"}.`,
+				output: checked.output,
+			};
+		const unchecked = failure("Lean", checked);
+		if (unchecked) return { ...withFound, verdict: unchecked[0], message: unchecked[1], output: checked.output };
+		await writeFile(join(scratch, "Audit.lean"), AUDIT);
+		const audited = await run("lean", [...pin, join(scratch, "Audit.lean")], { env });
+		const unaudited = failure("The axiom audit", audited);
+		if (unaudited) return { ...withFound, verdict: unaudited[0], message: unaudited[1], output: audited.output };
+		const declared = declarations(audited.stdout);
+		const theorems = audit(declared, options.theorems);
+		const [verdict, message] = summary(theorems, declared, found);
+		return { ...withFound, theorems, verdict, message, output: checked.output + audited.output };
+	} finally {
+		await rm(scratch, { recursive: true, force: true });
+	}
 }

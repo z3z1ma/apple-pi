@@ -9,6 +9,9 @@ Constant overrides rewrite a copy of the `.cfg`: each live `Name = value` (or `<
 Cancellation checks `signal.aborted` right after attaching its abort listener.
 Why: a signal aborted while a JAR was being verified or the scratch directory staged never fires a listener added later, so Java would run the whole check after the caller had cancelled.
 
+Each process starts in its own process group (`detached`). Cancellation and the time limit send SIGTERM to the whole group, then SIGKILL after a grace period.
+Why: Lake, elan and wrapper scripts start descendants that hold stdout and stderr open; killing only the direct child left the call waiting for `close` forever when a descendant survived or a child ignored SIGTERM, and the caller's scratch cleanup never ran. The grace period is not tuned; it only needs to let a well-behaved process finish writing.
+
 `runProcess` always pipes stdin and ends it (with the caller's input or nothing). Its stdin error handler is deliberately empty: a child that exits before reading its input raises EPIPE there, and the child's own `error` and `close` events already report the failure.
 
 Coupled: components/formal-verification/src/tlc.ts, components/formal-verification/src/apalache.ts, components/formal-verification/src/alloy.ts, components/formal-verification/src/lean.ts
