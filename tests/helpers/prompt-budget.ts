@@ -1,4 +1,4 @@
-import { getCurrentSystemPrompt, type Model } from "@earendil-works/pi-ai";
+import { getCurrentSystemMessage, getCurrentSystemPrompt, type Model } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream, fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import {
 	type AgentSession,
@@ -9,6 +9,7 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { expect } from "vitest";
+import { TOOL_GROUPS } from "../../components/system-prompt/src/toolbox.js";
 import { fauxModelBackend } from "./faux-model.js";
 
 export async function promptSession(options: {
@@ -114,6 +115,16 @@ export async function promptSession(options: {
 			return context;
 		},
 		close,
+	};
+}
+
+export function toolboxGaps(session: AgentSession) {
+	const active = session.getActiveToolNames();
+	const toolbox = getCurrentSystemMessage(session.messages)?.sections?.toolbox ?? "";
+	const grouped = TOOL_GROUPS.flatMap((group) => group.tools);
+	return {
+		untaught: active.filter((name) => !toolbox.includes(`\`${name}\``)),
+		absent: grouped.filter((name) => toolbox.includes(`\`${name}\``) && !active.includes(name)),
 	};
 }
 

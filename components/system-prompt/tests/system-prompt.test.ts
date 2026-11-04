@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { promptSession } from "../../../tests/helpers/prompt-budget.js";
+import { promptSession, toolboxGaps } from "../../../tests/helpers/prompt-budget.js";
 import { query, startRuntime, stopRuntime, tempStateDir } from "../../session-state/tests/helpers.js";
 import { composeSystemPrompt, SECTION_ORDER } from "../src/index.js";
 import { OPERATING_MODEL } from "../src/preamble.js";
@@ -28,8 +28,15 @@ afterAll(async () => {
 
 const mentioned = (text: string) => KNOWN.filter((name) => text.includes(`\`${name}\``));
 
-async function rootSession() {
-	const run = await promptSession({ cwd, agentDir: state.agentDir, extensions: EXTENSIONS, skills: SKILLS, tui: true });
+async function rootSession(flags: Record<string, string> = {}) {
+	const run = await promptSession({
+		cwd,
+		agentDir: state.agentDir,
+		extensions: EXTENSIONS,
+		skills: SKILLS,
+		tui: true,
+		flags,
+	});
 	try {
 		const id = run.session.sessionManager.getSessionId();
 		await vi.waitFor(() => expect(query(state.dbPath, "select id from sessions where id = ?", id)).toHaveLength(1), {
@@ -37,18 +44,38 @@ async function rootSession() {
 		});
 		await run.prompt();
 		return {
+			id,
 			sections: getCurrentSystemMessage(run.session.messages)?.sections ?? {},
 			active: run.session.getActiveToolNames(),
+			gaps: toolboxGaps(run.session),
 		};
 	} finally {
 		await run.close();
 	}
 }
 
+test("in every posture the toolbox teaches exactly the active tools", async () => {
+	const root = await rootSession();
+	expect(root.gaps).toEqual({ untaught: [], absent: [] });
+	expect(root.active).toEqual(expect.arrayContaining(["hire", "progress", "pi_exec"]));
+	const cases = [
+		{ role: "implementation-engineer", has: ["edit"], lacks: ["hire", "progress", "activity"] },
+		{ role: "coordinator", has: ["hire", "progress", "activity"], lacks: [] },
+		{ role: "scout", has: ["activity", "note"], lacks: ["hire", "edit"] },
+	];
+	for (const { role, has, lacks } of cases) {
+		const person = await rootSession({ role, "reports-to": root.id });
+		expect(person.gaps, role).toEqual({ untaught: [], absent: [] });
+		expect(person.active, role).toEqual(expect.arrayContaining(has));
+		for (const tool of lacks) expect(person.active, `${role} lacks ${tool}`).not.toContain(tool);
+	}
+}, 240_000);
+
 test("with the pair programmer off, its tool and its toolbox group are gone", async () => {
 	writeFileSync(join(state.agentDir, ".pair-state.json"), JSON.stringify({ enabled: false }));
 	try {
-		const { sections, active } = await rootSession();
+		const { sections, active, gaps } = await rootSession();
+		expect(gaps).toEqual({ untaught: [], absent: [] });
 		expect(active).not.toContain("acknowledge_pair_findings");
 		expect(sections.toolbox).not.toContain("The pair programmer");
 		expect(sections["pair-protocol"]).toBeUndefined();

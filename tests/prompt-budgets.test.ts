@@ -6,7 +6,7 @@ import { createBtwConversation } from "../components/btw/src/session.js";
 import { buildInternCliArgs } from "../components/interns/src/runner.js";
 import { query, startRuntime, stopRuntime, tempStateDir } from "../components/session-state/tests/helpers.js";
 import { budget } from "./helpers/build-budgets.js";
-import { promptSession, promptSize } from "./helpers/prompt-budget.js";
+import { promptSession, promptSize, toolboxGaps } from "./helpers/prompt-budget.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const state = tempStateDir();
@@ -74,6 +74,7 @@ for (const kind of ["explore", "research"] as const) {
 			const measured = promptSize(run.session);
 			expect(measured.tools).toEqual(expect.arrayContaining(["read", "bash", "context_lint"]));
 			expect(measured.tools).not.toContain("edit");
+			expect(toolboxGaps(run.session)).toEqual({ untaught: [], absent: [] });
 			expect(getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"))).toContain(
 				"<ledger-workbench>",
 			);
@@ -94,6 +95,7 @@ test("BTW's production loader stays within its prompt and schema token budget", 
 			await vi.waitFor(() => expect(conversation.status).toBe("completed"));
 			const measured = promptSize(conversation.session);
 			expect(measured.tools).toEqual(["find", "grep", "ls", "read"]);
+			expect(toolboxGaps(conversation.session)).toEqual({ untaught: [], absent: [] });
 			budget("BTW prompt estimated tokens", measured.tokens, 844, measured);
 		} finally {
 			await conversation.close();
