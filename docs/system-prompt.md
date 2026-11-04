@@ -14,6 +14,15 @@ Setting the preamble turns off Pi's own tool list, rules and docs. The composer 
 
 Sections run from most stable to most personal, so the longest prefix stays identical across sessions and turns: the operating model, `cwd` (Pi writes it), the toolbox and capability sections, skills, project context and project rules, then the person (`org`, `manager`, `role`, `specialization`, `self`). `SECTION_ORDER` in `src/index.ts` holds the order; an unknown section goes after the known ones. Two parts stay outside the composer: Pi's MCP extension adds `mcp_servers` last, and the Anthropic provider adds its identity line first.
 
+## Writing it
+
+Follow the model vendors' prompting guides ([OpenAI GPT-6](https://developers.openai.com/api/docs/guides/latest-model#gpt-6-astra-prompting-best-practices), [Claude Opus 5.5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5)) and [writing for agents](https://github.com/mattpocock/skills/blob/main/skills/productivity/writing-for-agents/SKILL.md):
+
+- State the behavior you want, positively; keep a prohibition only for a hard guardrail.
+- Put what every session needs in the prompt and what only some need in a skill, behind a pointer that names when to load it.
+- Delete a sentence that changes nothing for the current models: a default behavior, a duplicate, a workaround for an older model.
+- Newer models follow loaded instructions closely, so instructions in the prompt, `AGENTS.md` and skills must not conflict.
+
 ## Changing the prompt
 
 - **How to use a tool**: change its toolbox group. Keep exact arguments in the tool's own description.
