@@ -68,6 +68,8 @@ export async function promptSession(options: {
 	for (const [name, value] of Object.entries(options.flags ?? {}))
 		loader.getExtensions().runtime.flagValues.set(name, value);
 	expect(loader.getExtensions().errors).toEqual([]);
+	const sessionManager = SessionManager.inMemory(options.cwd);
+	sessionManager.appendSessionInfo("Budget Fixture");
 	const { session } = await createAgentSession({
 		cwd: options.cwd,
 		agentDir: options.agentDir,
@@ -75,7 +77,7 @@ export async function promptSession(options: {
 		modelRuntime: { ...modelRuntime, stream, streamSimple: stream } as never,
 		settingsManager,
 		resourceLoader: loader,
-		sessionManager: SessionManager.inMemory(options.cwd),
+		sessionManager,
 		...(options.tools ? { tools: options.tools } : {}),
 	});
 	const close = async () => {
