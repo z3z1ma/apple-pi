@@ -8,8 +8,6 @@ import { sendCommand } from "../components/session-state/src/client.js";
 import type { Command } from "../components/session-state/src/protocol.js";
 import { withWork } from "../components/session-state/src/work.js";
 import { addLedgerTask, isLiveStatus, STATUSES, transitionLedgerTask } from "../components/shared/src/ledger-files.js";
-import { LEDGER_SYSTEM_PROMPT, LEDGER_SYSTEM_PROMPT_TAG } from "../components/shared/src/ledger-system-prompt.js";
-import { setSystemPromptSection } from "../components/shared/src/system-prompt-section.js";
 
 export { addLedgerTask, transitionLedgerTask } from "../components/shared/src/ledger-files.js";
 export const LEDGER_EXTENSION_PATH = fileURLToPath(import.meta.url);
@@ -120,9 +118,6 @@ function createLedgerStatusTool() {
 }
 
 export default function installLedger(pi: ExtensionAPI): void {
-	pi.on("before_agent_start", (event) =>
-		setSystemPromptSection(event.systemPromptOptions, LEDGER_SYSTEM_PROMPT_TAG, LEDGER_SYSTEM_PROMPT),
-	);
 	pi.registerTool(createLedgerAddTool());
 	pi.registerTool(createLedgerStatusTool());
 }

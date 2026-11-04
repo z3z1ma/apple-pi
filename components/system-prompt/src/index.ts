@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import {
 	type ExtensionAPI,
 	formatSkillsForPrompt,
@@ -20,8 +22,6 @@ export const SECTION_ORDER = [
 	"project_context",
 	"project-learnings",
 	"repo-rules",
-	"ledger-workbench",
-	"wiki-workbench",
 	"org",
 	"manager",
 	"role",
@@ -66,7 +66,9 @@ export function composeSystemPrompt(options: NormalizedBuildSystemPromptOptions,
 	const owned: Record<string, string | undefined> = options.customPrompt
 		? {}
 		: {
-				toolbox: toolboxSection(declared, options.toolSnippets, options.toolGuidelines, options.promptGuidelines),
+				toolbox: toolboxSection(declared, options.toolSnippets, options.toolGuidelines, options.promptGuidelines, {
+					wiki: existsSync(join(options.cwd, ".wiki")),
+				}),
 				"goal-flow": frame.flow,
 				docs: frame.docs ? docsSection() : undefined,
 			};

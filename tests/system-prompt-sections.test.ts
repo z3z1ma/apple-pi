@@ -25,7 +25,7 @@ let loaded: Awaited<ReturnType<typeof loadExtensions>>;
 beforeAll(async () => {
 	temp = mkdtempSync(join(tmpdir(), "apple-pi-prompt-sections-"));
 	process.env.PI_CODING_AGENT_DIR = join(temp, "agent");
-	let active = ["read", "bash", "edit", "write"];
+	let active = ["read", "bash", "edit", "write", "search_session"];
 	const runtime = Object.assign(createExtensionRuntime(), {
 		getActiveTools: () => active,
 		setActiveTools: (names: string[]) => {
@@ -98,25 +98,25 @@ describe("package system prompt", () => {
 	it("adds structured sections without an opaque prompt or a subagent catalog", async () => {
 		const options = await runBeforeAgentStart(ROOT);
 		expect(options.forceSystemPrompt).toBeUndefined();
-		expect(Object.keys(options.sections)).toEqual(expect.arrayContaining(["pair-protocol", "ledger-workbench"]));
+		expect(Object.keys(options.sections)).toEqual(expect.arrayContaining(["pair-protocol", "toolbox"]));
 		expect(options.sections["subagent-team"]).toBeUndefined();
 		expect(options.sections["inference-profiles"]).toBeUndefined();
-		expect(buildSystemPrompt(options).match(/<ledger-workbench>/g)).toHaveLength(1);
+		expect(buildSystemPrompt(options).match(/<toolbox>/g)).toHaveLength(1);
 	});
 
-	it("adds the wiki workbench only to a project that has a wiki", async () => {
+	it("teaches the wiki only in a project that has one", async () => {
 		const withoutWiki = join(temp, "plain");
 		const withWiki = join(temp, "wiki");
 		mkdirSync(withoutWiki, { recursive: true });
 		mkdirSync(join(withWiki, ".wiki"), { recursive: true });
-		expect((await runBeforeAgentStart(withoutWiki)).sections["wiki-workbench"]).toBeUndefined();
-		expect((await runBeforeAgentStart(withWiki)).sections["wiki-workbench"]).toContain("wiki_lint");
+		expect((await runBeforeAgentStart(withoutWiki)).sections.toolbox).not.toContain("**The wiki**");
+		expect((await runBeforeAgentStart(withWiki)).sections.toolbox).toContain("**The wiki**");
 	});
 
-	it("does not repeat the ledger contract already supplied in a custom prompt", async () => {
+	it("does not repeat the toolbox already supplied in a custom prompt", async () => {
 		const customPrompt = buildSystemPrompt(await runBeforeAgentStart(ROOT));
 		const options = await runBeforeAgentStart(ROOT, { customPrompt });
-		expect(options.sections["ledger-workbench"]).toBeUndefined();
-		expect(buildSystemPrompt(options).match(/<ledger-workbench>/g)).toHaveLength(1);
+		expect(options.sections.toolbox).toBeUndefined();
+		expect(buildSystemPrompt(options).match(/<toolbox>/g)).toHaveLength(1);
 	});
 });

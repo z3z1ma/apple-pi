@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as graph from "../src/graph.js";
 import { installWiki } from "../src/installer.js";
-import { WIKI_SYSTEM_PROMPT_TAG } from "../src/system-prompt.js";
 
 const roots: string[] = [];
 
@@ -36,16 +35,10 @@ afterEach(() => {
 });
 
 describe("wiki extension", () => {
-	it("registers one prompt hook and exactly two read-only graph tools", () => {
+	it("registers exactly two read-only graph tools and no prompt hook", () => {
 		const { tools, handlers } = captureWikiExtension();
 		expect([...tools.keys()]).toEqual(["wiki_lint", "wiki_references"]);
-		expect([...handlers.keys()]).toEqual(["before_agent_start"]);
-
-		const root = createProject({ ".wiki/INDEX.md": "# Index\n" });
-		const systemPromptOptions = { sections: {} as Record<string, string> };
-		handlers.get("before_agent_start")?.({ systemPromptOptions }, { cwd: root });
-		expect(systemPromptOptions.sections[WIKI_SYSTEM_PROMPT_TAG]).toContain("wiki_lint");
-		expect(systemPromptOptions.sections[WIKI_SYSTEM_PROMPT_TAG]).toContain("wiki_references");
+		expect([...handlers.keys()]).toEqual([]);
 
 		const references = tools.get("wiki_references");
 		expect(references.parameters.properties.depth.minimum).toBe(1);

@@ -67,9 +67,9 @@ Both tools are read-only, stay inside the project-local non-symlink `.wiki/` bou
 
 ## Prompt and skill boundary
 
-The wiki extension adds a compact `<wiki-workbench>` section to every top-level session (including each peer) and to [interns](interns.md) when the session's working directory contains `.wiki/`. A project without a wiki keeps the two tools but not the section; the `llm-wiki` skill covers initialization. The [`/btw`](btw.md) session and the pair programmer sidecar do not receive the wiki contract or tools.
+The wiki extension registers the two tools. The [system prompt](system-prompt.md)'s record room teaches the wiki to every top-level session (including each peer) and to [interns](interns.md) when the session's working directory contains `.wiki/`. A project without a wiki keeps the two tools and their one line but not the wiki's description; the `llm-wiki` skill covers initialization. The [`/btw`](btw.md) session and the pair programmer sidecar do not receive the wiki tools.
 
-The compact prompt explains the directory, where local conventions live, link identity, and when to use the tools. The [`llm-wiki` skill](../skills/llm-wiki/) supplies the fuller on-demand procedures for:
+The record room explains the directory, where local conventions live, link identity, and when to use the tools. The [`llm-wiki` skill](../skills/llm-wiki/) supplies the fuller on-demand procedures for:
 
 - initialization;
 - source-aware ingestion;

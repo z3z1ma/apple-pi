@@ -1,7 +1,13 @@
+export interface ProjectFacts {
+	wiki: boolean;
+}
+
+type Line = string | { when: keyof ProjectFacts; text: string };
+
 export interface ToolGroup {
 	title: string;
 	tools: string[];
-	guidance: string[];
+	guidance: Line[];
 }
 
 export const TOOL_GROUPS: ToolGroup[] = [
@@ -45,12 +51,16 @@ export const TOOL_GROUPS: ToolGroup[] = [
 			"  `repo_rules` shows how often each rule fired.",
 			"- **Context files**: `.context/<path>.md` beside each source path holds what the code cannot show (invariants, hazards, why, with `Coupled:` and `Verify:` paths). A top-level read brings it along; a read inside a program does not.",
 			"  Editing the source stays blocked until the context file's current version is in front of you, and `context_lint` checks it after you change one or move its source.",
-			"- **The wiki**: `.wiki/` holds this project's lasting knowledge; start from its `README.md` and `INDEX.md`.",
-			"  `wiki_references` shows a page's neighbors, and `wiki_lint` checks the links after you change them.",
+			{
+				when: "wiki",
+				text: "- **The wiki**: `.wiki/` holds this project's lasting knowledge. Start from its `README.md` and `INDEX.md`; pages link as `[[slug]]` or `[[slug#Heading|label]]`, where a slug is a filename stem unique across the wiki. The `llm-wiki` skill holds the method for changing it.",
+			},
+			"  `wiki_references` shows a wiki page's neighbors, and `wiki_lint` checks the wiki's links after you change them.",
 			"- **Notes**: organization `notes` hold what crosses projects and threads. Read them before you explore, and write a `note` when you learn something that will matter again.",
 			"- **Tasks**: a goal you hold is a task (`take_task`, `focus`, `finish_task`) with a `task.md` goal and a thread; edit `task.md` when the goal changes.",
 			"  `link` records how things relate (what blocks what, what verified what, what found what) so the relationship outlives the conversation.",
-			"- **The ledger**: a task that must survive and be resumed lives in `.ledger/` (`promote_task`, `ledger_add`, `ledger_status`).",
+			"- **The ledger**: work that must survive, be resumed or be handed off gets a directory in `.ledger/`. `.ledger/INDEX.md` lists the live ones, and closed ones move to `.ledger/history/`. Its `task.md` holds intent, status, current state and outcome, and its `retrospective.md` what mattered; other files only when they serve the work. Small, coherent work needs none.",
+			"  Check the index for a task that already owns the work, then `ledger_add` one or `promote_task` the task you hold; `ledger_status` keeps its status current: planning until approach and acceptance are settled, then ready, in progress, done or cancelled.",
 			"- **Your notebook**: this session's learnings, each with its source (`update_notebook`, `revisit_note`). Open learnings keep a ledger task from closing: move each to its durable home (a rule, a context file, the wiki, the retrospective) and retire it.",
 			"- **Your transcript**: `search_session` finds anything said, run or written earlier in this session, even before compaction.",
 		],
@@ -180,14 +190,15 @@ export function toolboxSection(
 	snippets: Record<string, string>,
 	guidelines: Record<string, string[]>,
 	extra: string[] = [],
+	facts: ProjectFacts = { wiki: true },
 ): string {
 	const active = new Set(declared);
 	const parts: string[] = [];
 	for (const group of TOOL_GROUPS) {
 		if (!group.tools.some((name) => active.has(name))) continue;
-		const guidance = group.guidance.filter((line) =>
-			[...GROUPED].every((name) => active.has(name) || !line.includes(`\`${name}\``)),
-		);
+		const guidance = group.guidance
+			.flatMap((line) => (typeof line === "string" ? [line] : facts[line.when] ? [line.text] : []))
+			.filter((line) => [...GROUPED].every((name) => active.has(name) || !line.includes(`\`${name}\``)));
 		parts.push([`## ${group.title}`, ...guidance].join("\n"));
 	}
 	const others = declared.filter((name) => !GROUPED.has(name));

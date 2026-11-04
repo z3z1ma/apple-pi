@@ -12,6 +12,8 @@ Pi's built-in MCP extension runs after apple-pi's and adds `mcp_servers` last, s
 Intern detection is a flag the runner passes, not an inference from missing sections: an ordinary root session with the session-state bridge switched off also has no organization.
 Coupled: components/interns/src/runner.ts, tests/helpers/prompt-budget.ts
 
+The composer computes the project facts the rooms depend on (whether `.wiki/` exists in `cwd`); components contribute tools and person facts, not prose about how to use them. The ledger and the wiki are taught in the record room, not in sections of their own.
+
 Each context is a `Frame`: root sessions get the operating model and the goal flow, interns the intern preamble and no flow. `/btw` loads no package extensions, so it adds the composer itself as an extension factory, `systemPromptComposer(() => ({ preamble: PROMPT, docs: false }))`: its own preamble, the same toolbox, and no pointer to Pi's docs. Its loader keeps `systemPromptOverride` returning undefined, because a discovered `SYSTEM.md` would become `customPrompt` and switch the toolbox off.
 Coupled: components/btw/src/session.ts
 

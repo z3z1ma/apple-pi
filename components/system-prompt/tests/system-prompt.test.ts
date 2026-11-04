@@ -100,8 +100,7 @@ test("a real root session gets the operating model, a toolbox that teaches every
 		for (const [earlier, later] of [
 			["toolbox", "role-catalog"],
 			["role-catalog", "skills"],
-			["skills", "ledger-workbench"],
-			["ledger-workbench", "org"],
+			["skills", "org"],
 			["org", "self"],
 		])
 			expect(names.indexOf(earlier!), `${earlier} before ${later}`).toBeLessThan(names.indexOf(later!));
@@ -134,11 +133,11 @@ test("a prompt the user supplies stays the preamble, and the composer writes no 
 		toolGuidelines: {},
 		promptGuidelines: [],
 		appendSystemPrompt: "",
-		sections: { self: "Me.", "ledger-workbench": "Ledger." },
+		sections: { self: "Me.", "repo-rules": "Rules." },
 		contextFiles: [{ path: "/repo/AGENTS.md", content: "Keep it simple." }],
 		skills: [],
 	};
 	composeSystemPrompt(options);
 	expect(options.customPrompt).toBe("You are the house agent.");
-	expect(Object.keys(options.sections)).toEqual(["project_context", "ledger-workbench", "self"]);
+	expect(Object.keys(options.sections)).toEqual(["project_context", "repo-rules", "self"]);
 });

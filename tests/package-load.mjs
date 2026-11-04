@@ -115,17 +115,11 @@ try {
 	assert(
 		result.extensions.some(
 			(extension) =>
-				extension.path.endsWith("ledger.ts") && (extension.handlers.get("before_agent_start")?.length ?? 0) > 0,
+				extension.path.endsWith("system-prompt.ts") && (extension.handlers.get("before_agent_start")?.length ?? 0) > 0,
 		),
-		"missing ledger system-prompt injection",
+		"missing the system-prompt composer",
 	);
-	assert(
-		result.extensions.some(
-			(extension) =>
-				extension.path.endsWith("wiki.ts") && (extension.handlers.get("before_agent_start")?.length ?? 0) > 0,
-		),
-		"missing wiki workbench system-prompt injection",
-	);
+	assert.match(toolboxSection(["search_session"], {}, {}), /\*\*The ledger\*\*: .*`\.ledger\/INDEX\.md`/);
 	assert(
 		!result.extensions.some((extension) => extension.path.endsWith("workflow.ts")),
 		"default package must not load a workflow extension",

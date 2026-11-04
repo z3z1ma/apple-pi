@@ -2,8 +2,8 @@ import { getCurrentSystemPrompt } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
-import { LEDGER_SYSTEM_PROMPT_TAG } from "../components/shared/src/ledger-system-prompt.js";
-import installLedger from "../extensions/ledger.js";
+import { setSystemPromptSection } from "../components/shared/src/system-prompt-section.js";
+import installSystemPrompt from "../extensions/system-prompt.js";
 import { fauxSession } from "./helpers/faux-session.js";
 
 const sessions: Array<{ dispose(): void }> = [];
@@ -17,13 +17,14 @@ describe("runs started by a custom message", () => {
 		const starts: string[] = [];
 		const faux = await fauxSession(
 			[
-				installLedger,
 				(pi) => {
 					api = pi;
 					pi.on("before_agent_start", (event) => {
 						starts.push(event.messageType);
+						setSystemPromptSection(event.systemPromptOptions, "probe", "Probe section.");
 					});
 				},
+				installSystemPrompt,
 			],
 			[
 				fauxAssistantMessage(fauxToolCall("read", { path: "app.ts" }, { id: "read-1" }), { stopReason: "toolUse" }),
@@ -43,7 +44,7 @@ describe("runs started by a custom message", () => {
 		await faux.session.agent.waitForIdle();
 
 		expect(starts).toEqual(["custom"]);
-		const marker = `<${LEDGER_SYSTEM_PROMPT_TAG}>`;
+		const marker = "<probe>";
 		for (const request of faux.requests) expect(getCurrentSystemPrompt(request.messages as never)).toContain(marker);
 	}, 30_000);
 });

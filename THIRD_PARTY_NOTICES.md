@@ -141,7 +141,7 @@ apple-pi contains modified source imports and pinned runtime dependencies. apple
 - Source: <https://github.com/z3z1ma/10x>
 - Reviewed and adapted commit: `4616e5c07d6f9b82fb299ef18446280ab6f1e09d`
 - Author and copyright holder named by the source: Alexander M. Butler
-- Local paths: `components/shared/src/ledger-system-prompt.ts`, `docs/ledger.md`, `README.md`, `AGENTS.md`, `skills/completion-verification/`, `skills/task-closure/`, and `.ledger/history/202608202254-strengthen-ledger-workflow/research/ten-x-ledger-philosophy.md`
+- Local paths: `components/system-prompt/src/toolbox.ts` (the ledger lines of the record room), `docs/ledger.md`, `README.md`, `AGENTS.md`, `skills/completion-verification/`, `skills/task-closure/`, and `.ledger/history/202608202254-strengthen-ledger-workflow/research/ten-x-ledger-philosophy.md`
 - License: MIT
 - Original notice: `Copyright (c) 2026 Alexander M. Butler`
 - apple-pi adapts 10x's durable-judgment concepts—authority and provenance, evidence limits, adversarial review, proportional task records, retrospective compounding, and instruction evaluation—into its open-ended task bundles, verification, and closure procedures. It does not import `.10x/`, the separate record hierarchy, or the autoresearch Python runtime.

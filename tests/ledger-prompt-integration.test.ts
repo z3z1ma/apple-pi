@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildInternCliArgs } from "../components/interns/src/runner.js";
 import { loadSystemPrompt as loadPairSystemPrompt } from "../components/pair-programmer/src/config.js";
-import { LEDGER_SYSTEM_PROMPT_TAG } from "../components/shared/src/ledger-system-prompt.js";
 import { ANTHROPIC_WATCHDOG_EXTENSION_PATH } from "../extensions/anthropic-watchdog.js";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../extensions/auto-compact.js";
 import { CODE_CONTEXT_EXTENSION_PATH } from "../extensions/code-context.js";
@@ -12,7 +11,7 @@ import { SYSTEM_PROMPT_EXTENSION_PATH } from "../extensions/system-prompt.js";
 import { VROOM_EXTENSION_PATH } from "../extensions/vroom.js";
 import { WIKI_EXTENSION_PATH } from "../extensions/wiki.js";
 
-const marker = `<${LEDGER_SYSTEM_PROMPT_TAG}>`;
+const marker = "**The ledger**";
 describe("ledger system prompt distribution", () => {
 	it("loads the ledger extension on interns instead of pasting the contract", () => {
 		const args = buildInternCliArgs("explore", "Inspect the task", {
