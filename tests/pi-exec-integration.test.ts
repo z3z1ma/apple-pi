@@ -56,6 +56,11 @@ async function harness(setup?: (cwd: string) => void, extensions = ["./extension
 	runtime.appendEntry = (type, data) => {
 		manager.appendCustomEntry(type, data);
 	};
+	let active: string[] = [];
+	runtime.getActiveTools = () => active;
+	runtime.setActiveTools = (names) => {
+		active = names;
+	};
 	const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 	const paths = manifest.pi.extensions
 		.filter((path: string) => extensions.includes(path))
