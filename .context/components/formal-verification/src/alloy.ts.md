@@ -12,5 +12,7 @@ Verdict, in order: violation for a property check (no `expect`, or `expect 0`) w
 
 Instances use Alloy's text output; the builtin `univ`, `Int`, `seq/Int`, `String` and `none` lines and the `this/` prefix are dropped, and a model without `var` drops the state header (static instances are printed as one looping state); a temporal model keeps every header, so a single looping state still shows its loop.
 
-Coupled: components/formal-verification/src/index.ts, components/formal-verification/src/toolchain.ts, skills/formal-verification/SKILL.md, skills/formal-verification/examples/dependency-graph.als
-Verify: components/formal-verification/tests/alloy.test.ts
+`specs/alloy-verdict.als` transcribes `judge` and checks that pass implies every property proved, every expect met and a witness run; change it with `judge`.
+
+Coupled: components/formal-verification/src/index.ts, components/formal-verification/src/toolchain.ts, skills/formal-verification/SKILL.md, skills/formal-verification/examples/dependency-graph.als, specs/alloy-verdict.als
+Verify: components/formal-verification/tests/alloy.test.ts, tests/verification-models.test.ts

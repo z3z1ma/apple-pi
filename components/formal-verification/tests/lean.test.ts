@@ -283,22 +283,21 @@ test("a failed phase shows its own output in the report", async () => {
 	expect(text).toContain("Lean output:\nleanchecker: cannot start");
 }, 300_000);
 
-test("concurrent first installs of elan, over an incomplete home, publish one complete home", async () => {
+test("concurrent first installs of elan publish one complete home, and an incomplete home is left for the operator", async () => {
 	const cache = mkdtempSync(join(tmpdir(), "elan-cache-"));
 	const previous = { cache: process.env.XDG_CACHE_HOME, elan: process.env.ELAN_HOME };
 	process.env.XDG_CACHE_HOME = cache;
 	delete process.env.ELAN_HOME;
 	try {
 		const home = join(cache, "apple-pi", "elan", "4.2.4");
-		mkdirSync(join(home, "bin"), { recursive: true });
-		writeFileSync(join(home, "bin", "elan"), "incomplete");
 		const homes = await Promise.all([elanHome(), elanHome(), elanHome()]);
 		expect(new Set(homes)).toEqual(new Set([home]));
 		for (const tool of ["elan", "lean", "lake", "leanchecker"])
 			expect(readFileSync(join(home, "bin", tool)).length).toBeGreaterThan(1000);
-		expect(
-			readdirSync(join(cache, "apple-pi", "elan")).filter((name) => name.includes("staging") || name.endsWith(".lock")),
-		).toEqual([]);
+		expect(readdirSync(join(cache, "apple-pi", "elan")).filter((name) => name.includes("staging"))).toEqual([]);
+		rmSync(join(home, "bin", "lake"));
+		await expect(elanHome()).rejects.toThrow(`${home} is an incomplete elan install; remove it and retry.`);
+		expect(readFileSync(join(home, "bin", "lean")).length).toBeGreaterThan(1000);
 	} finally {
 		if (previous.cache === undefined) delete process.env.XDG_CACHE_HOME;
 		else process.env.XDG_CACHE_HOME = previous.cache;

@@ -131,48 +131,14 @@ async function launchers(home: string): Promise<boolean> {
 	return true;
 }
 
-function running(pid: number): boolean {
-	try {
-		return process.kill(pid, 0);
-	} catch (error) {
-		return (error as NodeJS.ErrnoException).code !== "ESRCH";
-	}
-}
-
-async function locked<T>(lock: string, work: () => Promise<T>): Promise<T> {
-	for (;;) {
-		try {
-			await writeFile(lock, String(process.pid), { flag: "wx" });
-			break;
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-			const owner = Number(await readFile(lock, "utf8").catch(() => ""));
-			if (owner && !running(owner)) await rm(lock, { force: true });
-			else await new Promise((wake) => setTimeout(wake, 100));
-		}
-	}
-	try {
-		return await work();
-	} finally {
-		await rm(lock, { force: true });
-	}
-}
-
 async function publish(staging: string, home: string): Promise<void> {
-	await locked(`${home}.lock`, async () => {
-		if (await launchers(home)) return;
-		const aside = `${staging}.incomplete`;
-		try {
-			await rename(home, aside);
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-		}
-		try {
-			await rename(staging, home);
-		} finally {
-			await rm(aside, { recursive: true, force: true });
-		}
-	});
+	try {
+		await rename(staging, home);
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code !== "ENOTEMPTY" && code !== "EEXIST") throw error;
+		if (!(await launchers(home))) throw new Error(`${home} is an incomplete elan install; remove it and retry.`);
+	}
 }
 
 export async function elanHome(signal?: AbortSignal, onLine?: (line: string) => void): Promise<string> {
