@@ -35,10 +35,9 @@ afterEach(() => {
 });
 
 describe("wiki extension", () => {
-	it("registers exactly two read-only graph tools and no prompt hook", () => {
-		const { tools, handlers } = captureWikiExtension();
+	it("registers exactly two read-only graph tools", () => {
+		const { tools } = captureWikiExtension();
 		expect([...tools.keys()]).toEqual(["wiki_lint", "wiki_references"]);
-		expect([...handlers.keys()]).toEqual([]);
 
 		const references = tools.get("wiki_references");
 		expect(references.parameters.properties.depth.minimum).toBe(1);

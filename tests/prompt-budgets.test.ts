@@ -75,9 +75,9 @@ for (const kind of ["explore", "research"] as const) {
 			expect(measured.tools).toEqual(expect.arrayContaining(["read", "bash", "context_lint"]));
 			expect(measured.tools).not.toContain("edit");
 			expect(toolboxGaps(run.session)).toEqual({ untaught: [], absent: [] });
-			expect(getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"))).toContain(
-				"**The ledger**",
-			);
+			const prompt = getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"));
+			expect(prompt).toContain("**The ledger**");
+			expect(prompt).toContain("**The wiki**");
 			budget(`${kind} intern prompt estimated tokens`, measured.tokens, kind === "explore" ? 2025 : 2037, measured);
 		} finally {
 			await run.close();
