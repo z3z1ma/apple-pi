@@ -509,8 +509,6 @@ export function installWork(pi: ExtensionAPI): void {
 			label: "progress",
 			description:
 				"See what the organization delivered and what remains: arrivals, completions, ready, held and waiting work, age, assignments and recorded outcomes. Start from the overview; give limit and offset for detail, or select a person, subtree or task, and since for a period. Assignment is responsibility, not execution, and counts are not a productivity score.",
-			promptSnippet:
-				"Start an organizational investigation with delivery, aging work, waits, outcomes and evidence coverage.",
 			parameters: Type.Object(inspectionParameters, { additionalProperties: false }),
 			execute: async (_id, args, _signal, _update, ctx) => readInspection(ctx, args, progressIn),
 		}),
@@ -521,7 +519,6 @@ export function installWork(pi: ExtensionAPI): void {
 			label: "bottlenecks",
 			description:
 				"Find candidate constraints, not diagnoses: what work explicitly waits on, the tasks each wait affects directly or transitively, cycles, age and resolved waits, beside the responsible people's commitments and pending decisions. Start from the overview, then page detail and follow the task, thread and link references before acting. A busy person alone is not a bottleneck.",
-			promptSnippet: "Investigate recorded dependency paths and decision queues, with owner context and uncertainty.",
 			parameters: Type.Object(inspectionParameters, { additionalProperties: false }),
 			execute: async (_id, args, _signal, _update, ctx) => readInspection(ctx, args, bottlenecksIn),
 		}),
@@ -532,8 +529,6 @@ export function installWork(pi: ExtensionAPI): void {
 			label: "coordination",
 			description:
 				"Inspect discussion beside the work it relates to over a stated window: who posted, who was addressed or notified, and what was read, linked through task threads to outcomes and waits. Select a thread to look at unrelated discussion. Much discussion may be useful work, and silence may hide a dependency. Bodies stay behind read_thread and search_messages.",
-			promptSnippet:
-				"Relate communication and qualified execution evidence to work without treating activity as waste or value.",
 			parameters: Type.Object(
 				{
 					...inspectionParameters,
@@ -553,7 +548,6 @@ export function installWork(pi: ExtensionAPI): void {
 			label: "experience",
 			description:
 				"Find relevant recorded experience, not a skill ranking. Give an area (path, directory, or word in paths) for people with read/edit exposure, associated assignments and reported outcomes, recency and current availability; or give a person for directories they touched. Calls count even when they failed. Historical membership applies at each touch; current availability is labeled current, and recorded outcomes are not independently verified quality. A compaction means one started, not that it succeeded or erased understanding. Combine this evidence with the person's context and capacity before assigning work.",
-			promptSnippet: "Find who has context on an area, or what a person knows.",
 			parameters: Type.Object(
 				{
 					area: Type.Optional(Type.String({ minLength: 1, description: "A path, directory, or word in paths." })),
@@ -575,8 +569,6 @@ export function installWork(pi: ExtensionAPI): void {
 			label: "economics",
 			description:
 				"Compare recorded value, delay and compute in dollars over a past window (since, until, subtree), or give scenarios alone to compare probability-weighted forecasts on equal premises. An optional instrument beside progress and bottlenecks, not an objective. Estimates and findings are evidence, not charges; subtree narrows contributions, not organization totals. Scenario times are millisecond offsets from decisionAt; decisionAt:'recording' binds to now in a preview and to link creation in a recorded prediction.",
-			promptSnippet:
-				"Use optional economic comparison with economics alongside direct organizational signals and judgment.",
 			parameters: Type.Object(
 				{
 					since: Type.Optional(
@@ -608,7 +600,6 @@ export function installWork(pi: ExtensionAPI): void {
 			label: "predictions",
 			description:
 				"Read your organization's recorded forecasts beside what was observed once each horizon passed. Record one with link from the message stating the change to organization:<root>, carrying data.scenario in the economics scenario shape. Forecast error (observed minus expected) is calibration, not causal effect; it is withheld when valuations changed or observed coverage is incomplete.",
-			promptSnippet: "Read recorded forecasts beside observed fitness for calibration, not causal attribution.",
 			parameters: Type.Object({}, { additionalProperties: false }),
 			execute: async (_id, _args, _signal, _update, ctx) => {
 				const now = Date.now();
@@ -641,7 +632,6 @@ export function installWork(pi: ExtensionAPI): void {
 			executionMode: "sequential",
 			label: "link",
 			description: `Record a relationship between two things, or resolve one by id. Name each thing as kind:id with kind one of ${ENTITY_KINDS.join(", ")} (a task by id or ledger path, a person by name or id, a commit by SHA, a PR by URL, a file by path, a check run by its command and time or CI URL, the organization by its root's id). Relations: ${vocabulary} A wait (blocks, requires_decision) on a task ends when that task closes done; resolve other links yourself. data.impact records an actual gain or loss, never an avoided one; only incurred impacts count, and hypothetical ones stay inside data.scenario.`,
-			promptSnippet: "Record or resolve a link between tasks, people, threads, and results.",
 			parameters: Type.Object(
 				{
 					id: Type.Optional(Type.String({ minLength: 1, description: "Resolve this link instead of recording one." })),
@@ -680,10 +670,6 @@ export function installWork(pi: ExtensionAPI): void {
 			label: "take_task",
 			description:
 				"Take responsibility for work: give a goal to create an ephemeral task, or take an existing unassigned task by id or ledger path. It becomes your focused task; your manager hears through its task thread. Every task has a task.md goal and a retrospective, even informal work. You can hold several tasks, with one in focus.",
-			promptSnippet: "Take a goal or existing task; it becomes your focused work.",
-			promptGuidelines: [
-				"Take new work from the operator as a task before working, unless it is already assigned to you. Edit task.md to change the goal, then focus it again to reread it. Finish the retrospective before finish_task.",
-			],
 			parameters: Type.Object(goalOrTask, { additionalProperties: false }),
 			execute: (_id, args, signal, _update, ctx) => change(ctx, { action: "take", ...args }, signal),
 		}),
@@ -734,7 +720,6 @@ export function installWork(pi: ExtensionAPI): void {
 			label: "schedule_mail",
 			description:
 				"Have the runtime mail a person (yourself by default) at a later time, once or repeatedly. Unlike remind_me, a schedule survives restarts and wakes an on-call person who is at home; each firing arrives as mail on the schedule's own thread. Give body and at to create; cancel with an id; give neither to list your schedules.",
-			promptSnippet: "Mail someone (or yourself) at a later time, once or repeatedly, durably.",
 			parameters: Type.Object(
 				{
 					body: Type.Optional(Type.String({ minLength: 1, description: "The message to send." })),
@@ -806,7 +791,6 @@ export function installWork(pi: ExtensionAPI): void {
 			label: "channel_charter",
 			description:
 				"Give a channel a listener and a standing charter: the listener is pushed every post in the channel, with the charter beside it, and applies it without being asked each time (for example: 'reproduce reported failures in a worktree and post only confirmed fixes; otherwise stay quiet'). Give neither listener nor charter to clear them. The operator, the channel's head and managers can set a charter.",
-			promptSnippet: "Make someone listen to a channel and apply a standing policy to its posts.",
 			parameters: Type.Object(
 				{
 					channel: Type.String({ minLength: 1, description: "The channel id, such as topic:... or team:..." }),

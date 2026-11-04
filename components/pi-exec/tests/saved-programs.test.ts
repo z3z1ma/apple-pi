@@ -92,15 +92,6 @@ describe("saved Python program tools", () => {
 		expect(restored.content[0].text).toBe("5");
 	});
 
-	it("advertises the Python saved-program format even before any saved tool exists", () => {
-		const session = registeredRuntime(project().cwd);
-		const guidance = session.tools.get("pi_exec")?.promptGuidelines?.join("\n");
-		expect(guidance).toContain(".pi/programs/<name>.py");
-		expect(guidance).toContain("leading Python docstring");
-		expect(guidance).toContain("@param {int} [count=2]");
-		expect(guidance).toContain("inputs");
-	});
-
 	it("discovers a leading docstring and typed parameters at session start, then runs Python with string inputs", async () => {
 		const fixture = project();
 		fixture.write(
@@ -119,6 +110,12 @@ describe("saved Python program tools", () => {
 		expect(tool).toBeDefined();
 		expect(tool?.description).toContain(".pi/programs/repeat-message.py");
 		expect(tool?.description).toContain("Repeat a caller's message.");
+		expect(tool?.promptSnippet).toBe("Repeat a caller's message.");
+		const guidance = tool?.promptGuidelines?.join("\n");
+		expect(guidance).toContain(".pi/programs/<name>.py");
+		expect(guidance).toContain("leading Python docstring");
+		expect(guidance).toContain("@param {int} [count=2]");
+		expect(guidance).toContain("inputs");
 		expect(tool?.parameters).toMatchObject({
 			type: "object",
 			properties: {

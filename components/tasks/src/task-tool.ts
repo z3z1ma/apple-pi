@@ -118,7 +118,6 @@ export function createTaskManagementTool(taskManager: TaskManager) {
 		label: "task",
 		description:
 			"Manage scheduled prompts and commands, immediate background commands, and monitors: list tasks, inspect status and output, or cancel active work. Use wait_seconds with status to wait for completion or delivery.",
-		promptSnippet: "Manage scheduled, background, or monitored tasks (list, inspect, wait, or cancel).",
 		parameters: taskParameters,
 		async execute(_toolCallId, params: TaskParameters, signal) {
 			switch (params.action) {

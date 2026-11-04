@@ -44,15 +44,6 @@ export function createTlcTool() {
 		label: "TLC model check",
 		description:
 			"Model-check a TLA+ specification with TLC and get a structured verdict: pass (every reachable state checked), violation (with the violated invariant or property), deadlock, incomplete (a time limit, simulation or depth bound stopped the search first, with the counts reached), or error. A failure returns the counterexample as numbered states, each with its action and variable values. Every run lists the actions that never took a step. The spec may extend other modules in its directory and the TLA+ Community Modules (SequencesExt, FiniteSetsExt, Functions, Folds, Relation, Graphs and more). Downloads pinned, checksummed tools on first use; needs Java.",
-		promptSnippet: "Model-check a TLA+ spec with TLC; returns the verdict and any counterexample trace",
-		promptGuidelines: [
-			"Use tlc_check to search a finite TLA+ model of a state machine for an ordering of events that breaks a named invariant. Load the formal-verification skill for how to derive the model from the code and turn a counterexample into a test against the real implementation.",
-			"Pass `spec` as the `.tla` file; `config` defaults to the `.cfg` beside it. Other modules in the spec's directory are found by their declared names, whatever their file names.",
-			'To grow a model\'s bounds without editing files, pass `constants` (for example `{"Workers": "{w1, w2, w3}", "MaxRetries": "4"}`) and raise them run by run under a `timeLimit`; most bugs show at small bounds, and each larger bound that passes adds confidence.',
-			'Use `mode: "simulate"` with `traces` or `timeLimit` for state spaces too large to exhaust, and `mode: "depth-first"` with `depth` to search every behavior up to a length. Both return `incomplete`, never `pass`.',
-			"Only `pass` means every reachable state was checked. Treat a listed action that never took a step as a modelling error: an invariant that holds because nothing happens proves nothing.",
-			"Runs use every core by default; pass `workers: 1` for the guaranteed shortest counterexample.",
-		],
 		parameters: Type.Object({
 			spec: Type.String({ description: "Path to the .tla file" }),
 			config: Type.Optional(Type.String({ description: "Path to the .cfg file; defaults to the spec's .cfg" })),
@@ -114,15 +105,6 @@ export function createSymbolicTool() {
 		label: "Apalache symbolic check",
 		description:
 			"Check a TLA+ specification symbolically with Apalache (SMT), without enumerating states: integers need no bounds, constants can range over whole sets such as Nat, and an inductive invariant proves a property for behaviors of any length. Returns the same verdicts as tlc_check: pass, violation with its counterexample trace, deadlock, incomplete, or error. Downloads a pinned, checksummed Apalache (192 MB) on first use; needs Java 17.",
-		promptSnippet:
-			"Prove or refute TLA+ invariants symbolically with Apalache, for unbounded values and any behavior length",
-		promptGuidelines: [
-			"Use tla_symbolic_check when tlc_check's finite bounds are not enough: large or unbounded integers, constants that should range over every value, or a claim that must hold for behaviors of any length. Use tlc_check first for fast exhaustive search of small instances.",
-			'Apalache needs a type annotation on every CONSTANT and VARIABLE, written as a comment just before the name, for example `\\* @type: Int;`, `\\* @type: Set(Str);`, `\\* @type: Str -> Int;` or `\\* @type: Seq(Int);`. Model values become strings such as "a" or typed constants.',
-			"Choose constants with `constInit`, an operator such as `ConstInit == N \\in Nat /\\ N > 0` that assigns each constant with `=` or `\\in`, so one check covers every value it allows; or pass fixed `constants`.",
-			'mode "bounded" (default) checks every behavior up to `length` steps (default 10). It returns `pass` only when every behavior ends within that length; otherwise `incomplete`.',
-			'mode "inductive" proves `invariants` for every reachable state and every length: pass `inductive`, an invariant that Init establishes, every Next step preserves, and that implies them. It must constrain every variable with `=` or `\\in` (start it with a type conjunct such as `x \\in Int`). A violation in the step check starts from a state that may be unreachable: strengthen `inductive` to exclude it.',
-		],
 		parameters: Type.Object({
 			spec: Type.String({ description: "Path to the .tla file" }),
 			config: Type.Optional(

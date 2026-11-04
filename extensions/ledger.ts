@@ -31,7 +31,6 @@ function createLedgerAddTool() {
 		label: "Add to ledger",
 		description:
 			"Create one new timestamped .ledger task bundle with task.md, retrospective.md, and a live index row. Add plans, specifications, notes, decisions, evidence, or assets later only when useful. Not for listing, inspecting, selecting, updating, closing, or executing existing tasks.",
-		promptSnippet: "Add a new .ledger task bundle when the user asks to create one",
 		parameters: Type.Object({
 			title: Type.String({ description: "One-line task title, 1-160 characters." }),
 			description: Type.String({
@@ -72,7 +71,6 @@ function createLedgerStatusTool() {
 		label: "Set ledger task status",
 		description:
 			"Move one live .ledger task to a new status. planning, ready, and in-progress update Status in task.md and on the live index row. done and cancelled archive the bundle into .ledger/history and move the row to the history index; call them only after edits to the bundle are committed. Not for creating, inspecting, shaping, executing, or judging completeness.",
-		promptSnippet: "Move a ledger task between planning, ready, in-progress, done, and cancelled",
 		parameters: Type.Object({
 			task: Type.String({
 				description: "Task id, .ledger/<id>, or .ledger/<id>/task.md of the live task.",

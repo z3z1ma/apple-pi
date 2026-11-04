@@ -394,10 +394,6 @@ export function registerMainNotebookTool(pi: ExtensionAPI, runtime: Runtime): vo
 			label: "Update pair programmer notebook",
 			description:
 				"Record, supersede, or retire learnings in the notebook you share with the pair programmer. A learning is something found out the hard way and what to do differently now. Each cites source entry ids, or the current user turn when sourceEntryIds is omitted. Retire a learning with retireReflectionIds once its durable owner holds it or it is not worth keeping.",
-			promptSnippet: "Record a learning from this session, or retire one that is placed or dropped.",
-			promptGuidelines: [
-				"When something surprises you, record the learning with update_notebook and what you now do differently: a tool call or pattern that failed and what worked instead, a way to reach an environment or service, a harness pitfall, or a user correction. Leave status, plans, and decisions to the ledger, docs, and git.",
-			],
 			parameters: MainUpdateNotebookSchema,
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				if (runtime.disposed) {

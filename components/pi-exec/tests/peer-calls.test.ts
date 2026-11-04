@@ -109,7 +109,6 @@ test.each([undefined, "implementation-engineer"])(
 		expect(tool.parameters.properties.limits.properties).not.toHaveProperty("agentBudget");
 		expect(tool.parameters.properties.code.description).not.toContain("async def peer(");
 		expect(tool.parameters.properties.code.description).not.toContain("async def agent_run(");
-		expect(tool.promptGuidelines.join("\n")).not.toContain("Attach awake colleagues");
 		await expect(run('await agent(role="implementation-engineer", task="not allowed")')).rejects.toThrow(
 			"managing role",
 		);

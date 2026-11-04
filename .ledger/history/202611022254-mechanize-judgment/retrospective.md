@@ -14,6 +14,8 @@ Updated: 2026-11-03
 
 - For comment-only migrations, check exact emitted-JS equality before applying deletions, then compare parsed emitted-JS syntax and literal values after formatting. TypeScript retains some original line breaks in its output: Workplace's empty catch and wrapped method chain produced byte differences after Biome without syntax changes. Inspect such exceptions and preserve directive comments separately; stripping all whitespace can hide meaningful changes.
 
+- In a shared checkout, scope validation to unchanged inputs and artifacts. Workplace's 51 Chrome cases passed while the accompanying freshness case failed only for electron/main.js after concurrent backend edits. Source, test-input and renderer hashes established which browser evidence survived. Rebuild changed artifacts and rerun freshness; report the original combined run as partially failed rather than combining later results into an all-green run.
+
 ## Improvements
 
 - Classify each new capability as harness or repo at design time, and build its native options before reporting limits.

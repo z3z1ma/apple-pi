@@ -131,7 +131,6 @@ export function installSelf(pi: ExtensionAPI, { reflects }: { reflects: boolean 
 			label: "update_self",
 			description:
 				"Rewrite your self: your story, how you work, what you hold yourself to, and how the people you work with think. Each field replaces its part whole; an omitted field stays as it is. The harness accepts it only in reflection, which it starts when you finish a task and before your context is compacted.",
-			promptSnippet: "Rewrite your self in reflection: your story, practice, commitments, and colleagues.",
 			parameters: Type.Object(fields, { additionalProperties: false, minProperties: 1 }),
 			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 				const sessionId = ctx.sessionManager.getSessionId();

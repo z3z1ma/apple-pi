@@ -154,20 +154,18 @@ test("a failed or truncated intern report is an error, not a completed finding",
 	expect(JSON.stringify(results(run))).toContain("text is partial");
 });
 
-test("both tool descriptions and guidelines teach the cheap intern's benefits and risks", () => {
+test("both tool descriptions teach the cheap intern's benefits and risks", () => {
 	const definitions: ToolDefinition[] = [];
 	installInterns({
 		on: vi.fn(),
 		registerTool: (tool: ToolDefinition) => definitions.push(tool),
 	} as unknown as ExtensionAPI);
 	for (const tool of definitions) {
-		for (const text of [tool.description, tool.promptGuidelines?.join("\n") ?? ""]) {
-			expect(text).toMatch(/cheap intern/i);
-			expect(text).toMatch(/lossy summary/);
-			expect(text).toMatch(/miss, misread, or state a belief as fact/);
-			expect(text).toMatch(/Verify findings/);
-			expect(text).toMatch(/read the source/);
-		}
+		expect(tool.description).toMatch(/cheap intern/i);
+		expect(tool.description).toMatch(/lossy summary/);
+		expect(tool.description).toMatch(/miss, misread, or state a belief as fact/);
+		expect(tool.description).toMatch(/Verify findings/);
+		expect(tool.description).toMatch(/read the source/);
 	}
 	expect(definitions.map((tool) => tool.name)).toEqual(["explore", "research"]);
 });

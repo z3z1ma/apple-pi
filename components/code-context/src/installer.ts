@@ -38,12 +38,6 @@ function createContextLintTool() {
 		label: "Lint context files",
 		description:
 			"Read-only check of every context file under the project's `.context/` directory: orphaned context files, headings other than `## file` or `## symbol:<name>`, duplicate headings, symbols absent from the source file, missing `Coupled:` and `Verify:` paths, and `[[wiki-links]]` that name no .wiki page.",
-		promptSnippet: "Check context files under `.context/` for broken structure and references",
-		promptGuidelines: [
-			"A context file is a Markdown file under the project's `.context/` directory that mirrors a source file's path (`app/main.py` has `.context/app/main.py.md`) and holds knowledge the code cannot show: invariants, hazards, rationale, cross-file couplings. Reading the source file appends its context file. When a context file exists, edit and write of it or its source file stay blocked until its current version is in your context.",
-			"Context file sections are `## file` or `## symbol:<name>` (for example `## symbol:Router.get`). A section may list `Coupled: path, path` for files whose contracts depend on it, `Verify: path` for tests that check it, and `[[wiki-page]]` links for cross-cutting explanations. Leave out what the code already shows.",
-			"Run `context_lint` after you change a context file or rename, move, or delete a file that has one.",
-		],
 		parameters: Type.Object({}),
 		async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
 			const result = await abortable(lintContext(ctx.cwd, signal), signal);

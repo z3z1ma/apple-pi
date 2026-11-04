@@ -162,7 +162,6 @@ describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
 		const properties = (tool.parameters as any).properties;
 		expect(properties.verbatim).toBeDefined();
 		expect(properties.verbatim.description).toContain("RTK");
-		expect(tool.promptGuidelines?.some((g: string) => g.includes("verbatim"))).toBe(false);
 	});
 
 	itWithRtk("createBashToolDefinition rewrites commands by default when verbatim is omitted", async () => {
@@ -211,8 +210,6 @@ describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
 		const properties = (tool.parameters as any).properties;
 		expect(properties.verbatim).toBeUndefined();
 		expect(properties.run_in_background).toBeUndefined();
-		expect(tool.promptGuidelines?.some((g: string) => g.includes("verbatim"))).toBe(false);
-		expect(tool.promptGuidelines?.some((g: string) => g.includes("run_in_background"))).toBe(false);
 	});
 
 	it("createExecBashToolDefinition never rewrites commands with RTK", async () => {

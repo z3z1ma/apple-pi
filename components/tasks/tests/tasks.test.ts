@@ -949,16 +949,10 @@ describe("tasks component", () => {
 			expect(props.verbatim).toBeUndefined();
 		});
 
-		it("does not mention backgrounding or verbatim in guidelines and description", () => {
+		it("does not advertise backgrounding in its description", () => {
 			const tool = createExecBashToolDefinition();
 			expect(tool.description).not.toContain("run_in_background");
 			expect(tool.description).not.toContain("Ctrl+B");
-			expect(tool.promptSnippet).not.toContain("background");
-			for (const guideline of tool.promptGuidelines ?? []) {
-				expect(guideline).not.toContain("run_in_background");
-				expect(guideline).not.toContain("Ctrl+B");
-				expect(guideline).not.toContain("verbatim");
-			}
 		});
 
 		it("executes commands directly without backgrounding support", async () => {

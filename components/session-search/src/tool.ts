@@ -60,10 +60,6 @@ export const sessionSearchTool = defineTool({
 		"Search text or regex, list touched files, or search only write/edit payloads. " +
 		"Recover exactly with query:'#N:path' (a written file), 'call:<id>' (an omitted tool result) or 'entry:<id>[:offset[:limit]]' (any source; zero-based lines; another person's as entry:<session>/<id>). " +
 		"scope:'all' includes other branches; tasks:[id] searches what people wrote while focused on those tasks (words, not regex).",
-	promptSnippet: "Recover earlier conversation, tool results, and file operations from this session.",
-	promptGuidelines: [
-		"Use search_session for earlier work or evidence missing from context, including after compaction. Use grep, find, or read for current repository files; use revisit_note for a known notebook id.",
-	],
 	parameters: Type.Object({
 		tasks: Type.Optional(
 			Type.Array(Type.String({ minLength: 1 }), {

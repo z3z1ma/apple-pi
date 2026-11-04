@@ -16,6 +16,7 @@ import {
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { abortable } from "../../shared/src/abortable.js";
+import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import {
 	getWikiReferences,
 	lintWiki,
@@ -23,7 +24,6 @@ import {
 	type WikiLintResult,
 	type WikiReferencesResult,
 } from "./graph.js";
-import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { WIKI_SYSTEM_PROMPT, WIKI_SYSTEM_PROMPT_TAG } from "./system-prompt.js";
 
 export const WIKI_LINT_TOOL_NAME = "wiki_lint";
@@ -109,7 +109,6 @@ function createWikiLintTool() {
 		name: WIKI_LINT_TOOL_NAME,
 		label: "Lint wiki",
 		description: `Read-only validation of the project .wiki Obsidian page graph. Reports duplicate case-insensitive filename-stem slugs, unresolved or ambiguous page links, missing headings, and unsafe symlinks with source evidence. Output is truncated to ${DEFAULT_MAX_LINES} lines or ${formatSize(DEFAULT_MAX_BYTES)}; full output is saved to a temp file when truncated.`,
-		promptSnippet: "Lint the project .wiki Obsidian page graph without changing files",
 		parameters: Type.Object({}),
 		async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
 			signal?.throwIfAborted();
@@ -148,7 +147,6 @@ function createWikiReferencesTool() {
 		name: WIKI_REFERENCES_TOOL_NAME,
 		label: "Wiki references",
 		description: `Resolve a project .wiki Markdown page by case-insensitive filename-stem slug or .wiki-relative path, then return its directed inbound, outbound, or bidirectional page-link neighborhood to depth 1 or 2. Read-only. Output is truncated to ${DEFAULT_MAX_LINES} lines or ${formatSize(DEFAULT_MAX_BYTES)}; full output is saved to a temp file when truncated.`,
-		promptSnippet: "Retrieve inbound, outbound, or nearby references for a project wiki page",
 		parameters: Type.Object({
 			target: Type.String({
 				description: "Page slug or Markdown path relative to .wiki (a .wiki/... path is also accepted).",

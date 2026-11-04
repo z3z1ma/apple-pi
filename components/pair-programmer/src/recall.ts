@@ -33,6 +33,7 @@ export function bindPairRecallTools(
 		{
 			...notebook,
 			description: `${recallObservationTool.description} ${scope}`,
+			promptSnippet: "See the original session evidence behind a notebook entry.",
 			promptGuidelines: [
 				"Use revisit_note only with a known notebook id when its exact primary-session source materially affects your judgment.",
 				"This follows one sourced notebook entry; it is neither topic search nor repository navigation.",

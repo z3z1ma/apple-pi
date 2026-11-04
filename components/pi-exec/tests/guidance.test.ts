@@ -1,20 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { sessionSearchTool } from "../../session-search/src/tool.js";
-import {
-	PI_EXEC_DESCRIPTION,
-	PI_EXEC_PEER_PROMPT_GUIDELINES,
-	PI_EXEC_PROMPT_GUIDELINES,
-	piExecGuestApiContract,
-} from "../src/guest-api.js";
+import { TOOL_GROUPS, toolboxSection } from "../../system-prompt/src/toolbox.js";
+import { PI_EXEC_DESCRIPTION, PI_EXEC_PEER_PROMPT_GUIDELINES, piExecGuestApiContract } from "../src/guest-api.js";
+
+const toolbox = toolboxSection(
+	TOOL_GROUPS.flatMap((group) => group.tools),
+	{},
+	{},
+);
 
 describe("runtime capability guidance", () => {
-	it("teaches evidence reduction, dependency ordering, and outcome checks", () => {
-		const guidance = [...PI_EXEC_PROMPT_GUIDELINES, ...PI_EXEC_PEER_PROMPT_GUIDELINES].join("\n");
-		expect(guidance).toContain("Use direct tools for a single operation");
-		expect(guidance).toContain("Keep intermediate results inside the program");
-		expect(guidance).toContain("preserves the evidence");
-		expect(guidance).toContain("Check tool outcomes");
-		expect(guidance).toContain("Surface failures and missing evidence");
+	it("teaches evidence reduction and outcome checks in the toolbox, with peer lifecycle in its role section", () => {
+		expect(toolbox).toContain("return only the smallest result that keeps the evidence");
+		expect(toolbox).toContain("Check each outcome before using it; a failed status is not an answer");
+		const guidance = PI_EXEC_PEER_PROMPT_GUIDELINES.join("\n");
 		expect(guidance).toContain("Their role owns their model and thinking");
 		expect(guidance).toContain("They stay alive after the program");
 		expect(guidance).toContain("cleans every remaining temporary peer");
@@ -41,13 +40,11 @@ describe("runtime capability guidance", () => {
 		expect(contract).toContain("fetch");
 		for (const peerApi of ["class Peer", "async def peer(", "async def agent(", "async def agent_run(", "peers:"])
 			expect(contract).not.toContain(peerApi);
-		expect(PI_EXEC_PROMPT_GUIDELINES.join("\n")).not.toContain("Attach awake colleagues");
 	});
 
 	it("distinguishes transcript recall from current files and known notebook sources", () => {
-		const guidance = sessionSearchTool.promptGuidelines?.join("\n") ?? "";
-		expect(guidance).toContain("current repository files");
-		expect(guidance).toContain("revisit_note for a known notebook id");
+		expect(sessionSearchTool.description).toContain("not git history or the repository");
+		expect(toolbox).toContain("`revisit_note` recovers the evidence behind one");
 		const queryDescription = sessionSearchTool.parameters.properties.query.description;
 		expect(queryDescription).toContain("#N:path[:offset[:limit]|:full]");
 		expect(queryDescription).toContain("call:<toolCallId>");

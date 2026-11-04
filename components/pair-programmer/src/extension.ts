@@ -1151,11 +1151,6 @@ export default function (pi: ExtensionAPI) {
 		label: "Acknowledge pair programmer findings",
 		description:
 			"Record that you considered one or more delivered pair programmer concerns or blockers. Use address when acting on a finding, decline when evidence shows it does not apply, or defer when it is valid but outside the authorized work. Give a concise reason. This records consideration only; it does not claim the work is fixed or validated.",
-		promptSnippet:
-			"Acknowledge delivered pair programmer concerns and blockers with a typed disposition and concise reason",
-		promptGuidelines: [
-			"Call acknowledge_pair_findings for each delivered concern or blocker after checking it against current code and user intent. Nits and questions need no acknowledgment.",
-		],
 		parameters: pairAcknowledgmentSchema,
 		async execute(_toolCallId, params) {
 			const findings = (params as { findings: PairFindingAcknowledgment[] }).findings.map((finding) => ({

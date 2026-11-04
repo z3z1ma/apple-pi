@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { TOOL_GROUPS, toolboxSection } from "../components/system-prompt/src/toolbox.ts";
 
 import { createEventBus } from "../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
 import {
@@ -147,6 +148,13 @@ try {
 
 	const commands = new Set(result.extensions.flatMap((extension) => [...extension.commands.keys()]));
 	const tools = new Set(result.extensions.flatMap((extension) => [...extension.tools.keys()]));
+	const grouped = new Set(TOOL_GROUPS.flatMap((group) => group.tools));
+	const toolbox = toolboxSection([...tools], {}, {});
+	for (const tool of result.extensions.flatMap((extension) => [...extension.tools.values()])) {
+		if (!grouped.has(tool.definition.name)) continue;
+		assert(!Object.hasOwn(tool.definition, "promptSnippet"), `${tool.definition.name} has a dead promptSnippet`);
+		assert(!Object.hasOwn(tool.definition, "promptGuidelines"), `${tool.definition.name} has dead promptGuidelines`);
+	}
 	for (const command of [
 		"pair",
 		"reviews",
@@ -171,15 +179,6 @@ try {
 		0,
 	);
 	assert(reviewCommandCount === 1, `expected exactly one /reviews registration, got ${reviewCommandCount}`);
-	const reviewTool = result.extensions
-		.flatMap((extension) => [...extension.tools.values()])
-		.find((tool) => tool.definition.name === "review_code")?.definition;
-	assert(
-		reviewTool?.promptGuidelines?.some(
-			(line) => line.includes("already assigned review pass") && line.includes("plan owner"),
-		),
-		"review guidance must distinguish initiating a job from fulfilling an assigned pass",
-	);
 	const communicationTools = [
 		"send_mail",
 		"reply",
@@ -271,10 +270,7 @@ try {
 	assert(monitorTool, "missing monitor tool");
 	assert.deepEqual(Object.keys(monitorTool.definition.parameters.properties), ["command", "max_events"]);
 	assert.deepEqual(monitorTool.definition.parameters.required, ["command"]);
-	assert.match(
-		monitorTool.definition.promptGuidelines.join("\n"),
-		/every newline-terminated stdout line immediately steers/,
-	);
+	assert.match(toolbox, /every stdout line steers you at once/);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -336,9 +332,7 @@ try {
 	assert(
 		fitnessTool?.definition.description.includes("optional instrument") &&
 			fitnessTool.definition.description.includes("not an objective") &&
-			["bottlenecks", "progress"].every((name) =>
-				fitnessTool.definition.description.includes(name),
-			),
+			["bottlenecks", "progress"].every((name) => fitnessTool.definition.description.includes(name)),
 		"economics must teach optional economic comparison alongside inspection",
 	);
 	assert(
@@ -373,29 +367,19 @@ try {
 	);
 	assert.deepEqual(searchBranchesTool.definition.parameters.required, ["goal", "judges"]);
 	assert.equal(searchBranchesTool.definition.executionMode, "sequential");
-	const searchGuidance = searchBranchesTool.definition.promptGuidelines.join("\n");
 	for (const taught of [
-		/several distinct approaches/,
-		/last stdout line is one number/,
-		/gate/,
-		/user suggests/,
-		/repeat for a noisy measure/,
-		/protect every file the judges and gates read/,
-		/timeoutSec on any command that could hang/,
-		/alone in its message/,
+		/several approaches are plausible/,
+		/gates \(such as the test suite\) must pass/,
+		/Protect the files the judges read/,
 	])
-		assert.match(searchGuidance, taught);
+		assert.match(toolbox, taught);
 
 	const piExecTool = result.extensions
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "pi_exec");
 	assert(piExecTool, "missing pi_exec tool");
-	const piExecGuidance = piExecTool.definition.promptGuidelines.join("\n");
-	assert.match(piExecGuidance, /Keep intermediate results inside the program/);
-	assert.match(piExecGuidance, /preserves the evidence/);
-	assert.match(piExecGuidance, /Check tool outcomes/);
-	assert.doesNotMatch(piExecGuidance, /Their role owns their model and thinking/);
-	assert.doesNotMatch(piExecGuidance, /Handles belong to one execution/);
+	assert.match(toolbox, /return only the smallest result that keeps the evidence/);
+	assert.match(toolbox, /Check each outcome before using it; a failed status is not an answer/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /top-level await/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /asyncio\.gather/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /type-checked before execution/);

@@ -11,12 +11,10 @@ import {
 	PI_EXEC_DESCRIPTION,
 	PI_EXEC_DISPLAY_PARAMETER_DESCRIPTION,
 	PI_EXEC_PEER_PROMPT_GUIDELINES,
-	PI_EXEC_PROMPT_GUIDELINES,
-	PI_EXEC_PROMPT_SNIPPET,
 	piExecGuestApiContract,
 } from "./guest-api.js";
 import { createHostCalls } from "./host-calls.js";
-import { installSavedProgramTools, SAVED_PROGRAM_PROMPT_GUIDELINE } from "./saved-programs.js";
+import { installSavedProgramTools } from "./saved-programs.js";
 import { installProgramSession } from "./session.js";
 import { type ExecActivitySnapshot, renderExecCall, renderExecResult } from "./ui.js";
 
@@ -79,8 +77,6 @@ export default function piExec(pi: ExtensionAPI): void {
 		executionMode: "sequential",
 		description: PI_EXEC_DESCRIPTION,
 		reachesTools: () => "all",
-		promptSnippet: PI_EXEC_PROMPT_SNIPPET,
-		promptGuidelines: [...PI_EXEC_PROMPT_GUIDELINES, SAVED_PROGRAM_PROMPT_GUIDELINE],
 		parameters: Type.Object({
 			code: attachLiveDescription(Type.String({ minLength: 1, maxLength: 100_000 }), () =>
 				piExecGuestApiContract(peerAccess),
@@ -313,8 +309,6 @@ export default function piExec(pi: ExtensionAPI): void {
 		pi.registerTool({
 			...piExecTool,
 			description: PI_EXEC_DESCRIPTION + (allowed ? " Managing roles can also delegate peer turns." : ""),
-			promptSnippet: PI_EXEC_PROMPT_SNIPPET + (allowed ? "; delegate peer turns when useful" : ""),
-			promptGuidelines: [...PI_EXEC_PROMPT_GUIDELINES, SAVED_PROGRAM_PROMPT_GUIDELINE],
 			parameters,
 		});
 		registeredAccess = allowed;

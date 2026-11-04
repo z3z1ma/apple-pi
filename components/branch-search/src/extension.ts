@@ -65,11 +65,6 @@ export default function registerBranchSearch(pi: ExtensionAPI): void {
 			"Gates are pass/fail commands, such as the test suite, that every winning attempt must pass. " +
 			"Before scoring, protected paths are put back to their base content in each attempt. " +
 			"Among the attempts that pass every gate, the best judge numbers (the median of each judge's runs) win; the winner is applied when the workspace is unchanged, and the report is returned.",
-		promptSnippet:
-			"Run several approaches in parallel worktrees and keep the one that scores best on judge commands you write",
-		promptGuidelines: [
-			`Use ${TOOL_NAME} when several distinct approaches are plausible and a command can measure which result is better: time, memory, size, a complexity score, or any quality number a command prints. Each judge is a shell command whose last stdout line is one number, with better "lower" or "higher"; add the test suite as a gate. When the user suggests a measure, use it as the judge. Set repeat for a noisy measure such as time. List in protect every file the judges and gates read, such as benchmarks and tests. Set timeoutSec on any command that could hang. Call it alone in its message; it applies the winner and returns the report.`,
-		],
 		parameters: Type.Object({
 			goal: Type.String({ description: "The observable result that must hold when the work is done." }),
 			judges: Type.Array(

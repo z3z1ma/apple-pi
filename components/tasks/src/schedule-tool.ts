@@ -32,11 +32,6 @@ export function createScheduleTool(taskManager: TaskManager) {
 		label: "remind_me",
 		description:
 			"Remind yourself later, after a relative delay: a note to yourself (text), or a bash command to start then. A due note steers you at once, entering an active run at its next safe boundary or starting a turn while idle; a due command starts silently and wakes you only when it finishes. Reminders live in this session and are managed with the task tool.",
-		promptSnippet: "Remind yourself later with a note, or start a bash command later.",
-		promptGuidelines: [
-			"Use remind_me with text to wake yourself with deferred guidance, and with a command to start bash later without an inference turn.",
-			"Scheduled work is cancelled on fork, tree navigation, session switch, or shutdown.",
-		],
 		parameters: scheduleParameters,
 		executionMode: "sequential",
 		async execute(_toolCallId, params: ScheduleParameters, signal, _onUpdate, ctx) {

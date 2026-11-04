@@ -113,16 +113,8 @@ function guestPromptStubs(cwd = ".", includePeers = true): string {
 	].join("\n");
 }
 
-export const PI_EXEC_PROMPT_SNIPPET = "Compose tools in Python; compute over results before returning evidence";
-
 export const PI_EXEC_DESCRIPTION =
 	"Run type-checked Python in bounded Monty to compose tools and HTTP requests, and compute over their results. Return a JSON-compatible trailing expression; printed output is also captured. See code for live signatures and runtime constraints.";
-
-export const PI_EXEC_PROMPT_GUIDELINES = [
-	"Use pi_exec to compose tool calls or compute over their results. Use direct tools for a single operation that needs neither.",
-	"Keep intermediate results inside the program. Return the smallest result that preserves the evidence needed for the next decision: aggregate counts, select relevant excerpts, or report exceptions instead of dumping raw output.",
-	"Check tool outcomes before using their results. Surface failures and missing evidence explicitly.",
-];
 
 export const PI_EXEC_PEER_PROMPT_GUIDELINES = [
 	"Check peer outcomes before using their results; a failed status record is not a successful answer.",

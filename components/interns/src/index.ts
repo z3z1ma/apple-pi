@@ -63,12 +63,6 @@ export function installInterns(pi: ExtensionAPI): void {
 				name,
 				label: `${name} intern`,
 				description: `${name === "explore" ? "Ask a cheap intern to map local code or investigate the filesystem." : "Ask a cheap intern to research external sources, documentation, APIs, or libraries; optionally supply material to read."} ${TRADEOFF} One question, one answer; the process exits afterwards.`,
-				promptSnippet: `${name === "explore" ? "Local repository reading" : "External research"} by a cheap, one-shot intern outside your context.`,
-				promptGuidelines: [
-					TRADEOFF,
-					"Give an intern one specific question and enough context to investigate independently. Read a small known path yourself; assign lasting engineering work to peers.",
-					"Independent intern questions can run in parallel. Each call returns its answer and releases its process; Esc cancels it.",
-				],
 				executionMode: "parallel",
 				parameters:
 					name === "research"

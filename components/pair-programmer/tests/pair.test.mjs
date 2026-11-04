@@ -1139,6 +1139,7 @@ test("pair-bound revisit_note resolves the primary branch without general sessio
 	const notebook = tools.find((t) => t.name === "revisit_note");
 	assert.ok(notebook);
 	assert.match(notebook.description, /your partner's session/);
+	assert.equal(notebook.promptSnippet, "See the original session evidence behind a notebook entry.");
 	assert.doesNotMatch(notebook.promptGuidelines.join("\n"), /search_session/);
 	assert.deepEqual(
 		tools.map((tool) => tool.name),

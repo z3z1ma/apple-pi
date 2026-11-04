@@ -206,7 +206,6 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			label: "Respond to finding",
 			description:
 				"Respond to a finding of a settled review, with the revision and digest from read_review. Rejection needs counterevidence; accepted risk needs evidence and a scope. A claimed fix stays unverified; fixed needs a completed question on a newer captured target. The original allegation is kept, and only the operator approves code, through sign-off.",
-			promptSnippet: "Record finding responses with evidence, scope and explicit new-target fix verification.",
 			parameters: Type.Object(
 				{
 					review,
@@ -242,13 +241,6 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			label: "Review code",
 			description:
 				"Capture an exact commit, range, branch, staged index or working tree and queue an independent review by role peers; this starts model work. Returns once captured, leaving your checkout unchanged. Give the approved intent when there is one. The owner (you by default) gets mail when the plan is ready, as each pass's findings are confirmed, and when it settles; pass wait to block until it settles instead.",
-			promptSnippet: "Capture exact code and enqueue independent review; inspect its durable result separately.",
-			promptGuidelines: [
-				"For an already assigned review pass, inspect its captured source and return the requested report. Route additional questions to the plan owner through that report; the requester initiates new reviews.",
-				"Use captured review evidence for its named artifact. Distinguish reported findings, coverage, incomplete work, current-checkout applicability and operator approval.",
-				"Choose by what you do next: keep working and fold in findings as their mail arrives when other work remains; pass wait when the review gates your next step. Rerun or resume with wait after fixing to loop until the review comes back clean or you judge the remaining findings acceptable.",
-				"Use the returned review ID for progress and the request handle for exact mutation recovery. An empty comparison/scope records no-changes without running reviewers. A failed, incomplete or no-changes review is not a clean-review claim.",
-			],
 			parameters: Type.Object(
 				{
 					target: GitTargetSchema,
@@ -298,7 +290,6 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			label: "Review queue",
 			description:
 				"Inspect your organization's review queue: state counts without limit, or a page of status, coverage, findings and captured target with one. Completion is not approval or proof of correctness.",
-			promptSnippet: "See review progress and incomplete work, with explicit detail paging.",
 			parameters: Type.Object(
 				{
 					...page,
@@ -336,7 +327,6 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			label: "Read review",
 			description:
 				"Read one captured review part by part. summary: execution, intent, coverage, findings and cost. freshness: rechecks the target and current checkout now. configuration, target: the captured instructions, source and revisions. source: the retained files on the before or after side (omit path to list; offsets are zero-based lines). plan, changes, regions, findings, coverage, attempts: counts until you give limit. pass and attempt need their id. thread: the review's mail. log: the running passes' recent transcript. No read establishes approval.",
-			promptSnippet: "Inspect review scope, evidence and retained attempts without treating partial work as clean.",
 			parameters: Type.Object(
 				{
 					review,
@@ -375,7 +365,6 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			label: "Manage review",
 			description:
 				"Manage a review: cancel unfinished work, resume interrupted, failed or incomplete work on the same artifact, change its queue priority, reassign it, rerun the original capture as a new linked review (fresh target, no inherited coverage), or extend it with one more concrete question, its reason and doneWhen evidence, bound to the current revision and digest. Resume and extend can start new model work.",
-			promptSnippet: "Manage review responsibility, recovery and fresh reruns without recapturing silently.",
 			parameters: Type.Object(
 				{
 					review,

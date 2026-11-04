@@ -304,8 +304,6 @@ export function installPeers(pi: ExtensionAPI): void {
 			name: "directory",
 			label: "directory",
 			description: directoryDescription,
-			promptSnippet:
-				"Discover your organization through compact counts, filtered people, current profiles and explicit history pages.",
 			parameters: directoryParameters,
 			async execute(_id, params, _signal, _update, ctx) {
 				return directoryView(ctx.sessionManager.getSessionId(), params);

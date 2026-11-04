@@ -1,5 +1,6 @@
 import { KeybindingsManager, TUI_KEYBINDINGS, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
+import { toolboxSection } from "../../system-prompt/src/toolbox.js";
 
 import { QuestionnaireDialog } from "../src/dialog.js";
 import {
@@ -95,7 +96,9 @@ describe("ask_user_question registration and validation", () => {
 		expect(tool.name).toBe(ASK_USER_QUESTION_TOOL_NAME);
 		expect(tool.executionMode).toBe("sequential");
 		expect(tool.parameters.properties).toHaveProperty("questions");
-		expect(tool.promptGuidelines.join("\n")).toContain("Use ask_user_question");
+		expect(toolboxSection([tool.name], {}, {})).toContain(
+			"`ask_user_question` interrupts the operator now: finish the work the answer does not affect",
+		);
 		expect(handlers.has("before_agent_start")).toBe(true);
 	});
 
