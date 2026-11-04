@@ -426,7 +426,7 @@ export async function runLean(options: LeanOptions): Promise<LeanResult> {
 				...withFound,
 				verdict: "error",
 				message: `Lean reported ${errors.length} error${errors.length === 1 ? "" : "s"}.`,
-				output: checked.output,
+				output: "",
 			};
 		const unchecked = failure("Lean", checked);
 		if (unchecked) return { ...withFound, verdict: unchecked[0], message: unchecked[1], output: checked.output };
@@ -477,7 +477,7 @@ export async function runLean(options: LeanOptions): Promise<LeanResult> {
 			options.theorems,
 			await standardAxioms(report),
 		);
-		return { ...withFound, theorems, verdict, message, output: checked.output + audited.output + replayed.output };
+		return { ...withFound, theorems, verdict, message, output: "" };
 	} finally {
 		await rm(scratch, { recursive: true, force: true });
 	}

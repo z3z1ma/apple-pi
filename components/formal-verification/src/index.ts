@@ -184,7 +184,7 @@ function leanReport(result: LeanResult, file: string): string {
 		);
 	for (const diagnostic of result.diagnostics)
 		lines.push(`${file}:${diagnostic.line}:${diagnostic.column + 1}: ${diagnostic.severity}: ${diagnostic.text}`);
-	if (result.verdict === "error" && !result.diagnostics.length) lines.push("", "Lean output:", result.output.trimEnd());
+	if (result.verdict !== "pass" && result.output.trim()) lines.push("", "Lean output:", result.output.trimEnd());
 	return lines.join("\n");
 }
 

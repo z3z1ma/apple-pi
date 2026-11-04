@@ -207,3 +207,14 @@ test("a descendant that ignores SIGTERM and detaches its output is stopped too",
 	expect(result.verdict).toBe("incomplete");
 	expect(execFileSync("sh", ["-c", `pgrep -f ${marker} || true`], { encoding: "utf8" }).trim()).toBe("");
 }, 60_000);
+
+test("a temporal trace keeps its state headers, even with one looping state", async () => {
+	const result = await runAlloy({
+		spec: model(
+			"loop",
+			"sig A {}\nvar sig On in A {}\nfact { always no On }\nassert Eventually { eventually some On }\ncheck Eventually for 3\n",
+		),
+	});
+	expect(result.verdict).toBe("violation");
+	expect(result.commands[0].instance).toMatch(/^State 0 \(loop\):$/m);
+}, 120_000);

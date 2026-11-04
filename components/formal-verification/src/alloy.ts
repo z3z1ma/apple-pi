@@ -78,13 +78,12 @@ export function listedCommands(output: string): Listed[] {
 
 const BUILTIN = /^(?:univ|Int|seq\/Int|String|none)=/;
 
-export function instanceText(text: string): string {
+export function instanceText(text: string, temporal: boolean): string {
 	const lines = text
 		.split("\n")
 		.filter((line) => line.trim() && !BUILTIN.test(line) && line !== "---Trace---")
 		.map((line) => line.replace(/^this\//, "").replace(/^-+(State \d+(?: \(loop\))?)-+$/, "$1:"));
-	const states = lines.filter((line) => /^State \d+/.test(line)).length;
-	return (states === 1 ? lines.filter((line) => !/^State \d+/.test(line)) : lines).join("\n");
+	return (temporal ? lines : lines.filter((line) => !/^State \d+/.test(line))).join("\n");
 }
 
 function select(listed: Listed[], wanted: string[] | undefined): Listed[] | string {
@@ -137,6 +136,7 @@ async function execute(
 	scratch: string,
 	options: AlloyOptions,
 	timeLimit: number | undefined,
+	temporal: boolean,
 ): Promise<Executed> {
 	const out = join(scratch, String(command.index));
 	const run = await runJava({
@@ -193,7 +193,7 @@ async function execute(
 					: found
 						? "instance"
 						: "no instance",
-			instance: found && solution ? instanceText(await readFile(join(out, solution), "utf8")) : undefined,
+			instance: found && solution ? instanceText(await readFile(join(out, solution), "utf8"), temporal) : undefined,
 		},
 		output,
 	};
@@ -242,6 +242,7 @@ export async function runAlloy(options: AlloyOptions): Promise<AlloyResult> {
 			.update(await readFile(spec))
 			.digest("hex");
 	const before = await fingerprint();
+	const temporal = /\bvar\b/.test(await readFile(spec, "utf8"));
 	const base = { version: ALLOY_VERSION, commands: [] as AlloyCommand[] };
 	const listing = await runJava({
 		args: ["-jar", jar, "commands", spec],
@@ -269,7 +270,7 @@ export async function runAlloy(options: AlloyOptions): Promise<AlloyResult> {
 				commands.push({ ...command, outcome: "not run" });
 				continue;
 			}
-			const result = await execute(jar, spec, command, scratch, options, remaining);
+			const result = await execute(jar, spec, command, scratch, options, remaining, temporal);
 			output += result.output;
 			if ("error" in result) return { ...base, commands, verdict: "error", message: result.error, output };
 			commands.push(result.command);

@@ -267,3 +267,18 @@ run_cmd liftCoreM <| addDecl (.thmDecl { name := \`Bad.bad, levelParams := [], t
 	expect(result.verdict).toBe("error");
 	expect(result.message).toBe("The kernel rejected a declaration on replay.");
 }, 600_000);
+
+test("a failed phase shows its own output in the report", async () => {
+	const home = fakeHome("failing-checker", {
+		leanchecker: "#!/bin/sh\necho 'leanchecker: cannot start' >&2\nexit 3\n",
+	});
+	const file = join(dir, "Merge.lean");
+	writeFileSync(file, `${merge}#check Nat\n`);
+	const tool = createLeanTool();
+	const result = await withElan(home, () =>
+		tool.execute("call", { file: "Merge.lean" }, undefined, undefined, { cwd: dir } as never),
+	);
+	const text = (result.content[0] as { text: string }).text;
+	expect(text).toMatch(/: INCOMPLETE\. The kernel replay \(leanchecker\) did not run\./);
+	expect(text).toContain("Lean output:\nleanchecker: cannot start");
+}, 300_000);
