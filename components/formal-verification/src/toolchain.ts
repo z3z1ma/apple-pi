@@ -202,6 +202,22 @@ export async function runProcess(command: string, options: ProcessOptions, missi
 			if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
 		}
 	};
+	const alive = () => {
+		try {
+			return Boolean(child.pid) && process.kill(-(child.pid as number), 0);
+		} catch (error) {
+			return (error as NodeJS.ErrnoException).code !== "ESRCH";
+		}
+	};
+	const stopGroup = async () => {
+		if (!alive()) return;
+		signalGroup("SIGTERM");
+		const killAt = Date.now() + STOP_GRACE_MS;
+		while (alive() && Date.now() < killAt + STOP_GRACE_MS) {
+			if (Date.now() >= killAt) signalGroup("SIGKILL");
+			await new Promise((wake) => setTimeout(wake, 50));
+		}
+	};
 	let escalation: NodeJS.Timeout | undefined;
 	const stop = () => {
 		signalGroup("SIGTERM");
@@ -223,6 +239,7 @@ export async function runProcess(command: string, options: ProcessOptions, missi
 			);
 			child.once("close", (code) => resolve(code));
 		});
+		await stopGroup();
 		options.signal?.throwIfAborted();
 		return { output, stdout, exitCode, timedOut };
 	} finally {

@@ -96,6 +96,37 @@ function select(listed: Listed[], wanted: string[] | undefined): Listed[] | stri
 	return listed.filter((command) => wanted.some((item) => item === command.name || item === String(command.index)));
 }
 
+function expectationReport(command: Listed, output: string): boolean | undefined {
+	if (!command.expected) return undefined;
+	const label = `${command.kind === "check" ? "Check" : "Run"} ${command.name}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const report = new RegExp(`^\\s*\\d+\\. '${label}\\b[^']*' was (not )?satisfied against expectation$`, "m").exec(
+		output,
+	);
+	return report ? !report[1] : undefined;
+}
+
+function solverResult(receipt: unknown, command: Listed, solver: string): boolean | undefined {
+	const root = receipt as { solver?: unknown; commands?: unknown };
+	if (typeof root !== "object" || root === null || root.solver !== solver) return undefined;
+	if (typeof root.commands !== "object" || root.commands === null) return undefined;
+	const entries = Object.entries(root.commands);
+	if (entries.length !== 1 || entries[0][0] !== command.name) return undefined;
+	const entry = entries[0][1] as { name?: unknown; type?: unknown; transformPath?: unknown; solution?: unknown };
+	if (typeof entry !== "object" || entry === null || entry.name !== command.name || entry.type !== command.kind)
+		return undefined;
+	if (entry.transformPath !== undefined) return undefined;
+	if (entry.solution === undefined) return false;
+	if (!Array.isArray(entry.solution) || !entry.solution.length) return undefined;
+	const valid = entry.solution.every(
+		(solution) =>
+			typeof solution === "object" &&
+			solution !== null &&
+			Array.isArray((solution as { instances?: unknown }).instances) &&
+			(solution as { instances: unknown[] }).instances.length > 0,
+	);
+	return valid ? true : undefined;
+}
+
 type Executed = { command: AlloyCommand; output: string } | { error: string; output: string };
 
 async function execute(
@@ -131,24 +162,23 @@ async function execute(
 	});
 	const output = run.output;
 	if (run.timedOut) return { command: { ...command, outcome: "not run" }, output };
-	const missedExpect = run.exitCode === 1 && /against expectation/.test(output);
-	if (run.exitCode !== 0 && !missedExpect)
+	const missed = expectationReport(command, output);
+	if (run.exitCode !== 0 && !(run.exitCode === 1 && missed !== undefined))
 		return {
 			error: `Alloy ${run.exitCode === null ? "was stopped by a signal" : `exited with status ${run.exitCode}`} on ${command.name}:\n${alloyError(output)}`,
 			output,
 		};
-	let entries: [string, { solution?: unknown[]; transformPath?: string }][];
+	let receipt: unknown;
 	try {
-		entries = Object.entries(JSON.parse(await readFile(join(out, "receipt.json"), "utf8")).commands ?? {});
+		receipt = JSON.parse(await readFile(join(out, "receipt.json"), "utf8"));
 	} catch (error) {
 		return { error: `Alloy left no readable result for ${command.name}: ${(error as Error).message}`, output };
 	}
-	const entry = entries.length === 1 && entries[0][0] === command.name ? entries[0][1] : undefined;
-	if (!entry || entry.transformPath)
+	const found = solverResult(receipt, command, options.solver ?? "sat4j");
+	if (found === undefined)
 		return { error: `Alloy's result for ${command.name} is not a solver result for that command.`, output };
-	const found = Boolean(entry.solution?.length);
-	if (missedExpect && found === (command.expected === "instance"))
-		return { error: `Alloy reported a missed expect for ${command.name}, but its result met it.`, output };
+	if (missed !== undefined && (run.exitCode !== 1 || missed !== found || found === (command.expected === "instance")))
+		return { error: `Alloy's report of a missed expect for ${command.name} does not match its result.`, output };
 	const solution = (await readdir(out)).find((file) => file.endsWith(".txt"));
 	if (found && !solution) return { error: `Alloy found an instance for ${command.name} but wrote none.`, output };
 	return {

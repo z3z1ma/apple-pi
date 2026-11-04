@@ -174,3 +174,36 @@ test("the time limit stops the whole process tree, even a child that ignores SIG
 	expect(result.message).toContain("the time limit stopped P");
 	expect(Date.now() - started).toBeLessThan(20_000);
 }, 60_000);
+
+test("a malformed receipt or an unexplained exit 1 is an error, never a pass", async () => {
+	const spec = model("malformed", "sig A {}\nassert P { some A or no A }\ncheck P for 3\nrun {} for 2\n");
+	for (const receipt of [
+		'{"solver":"sat4j","commands":{"P":{"type":"check"}}}',
+		'{"solver":"sat4j","commands":{"P":true}}',
+		'{"solver":"sat4j","commands":{"P":{"name":"P","type":"check","solution":{}}}}',
+		'{"solver":"minisat","commands":{"P":{"name":"P","type":"check"}}}',
+	]) {
+		const bin = fakeJava(`receipt-${receipt.length}`, `echo '${receipt}' > "$out/receipt.json"`);
+		const result = await withPath(bin, () => runAlloy({ spec, commands: ["P"] }));
+		expect(result.verdict, receipt).toBe("error");
+	}
+	const exitOne = fakeJava(
+		"exit-one",
+		`echo '{"solver":"sat4j","commands":{"P":{"name":"P","type":"check"}}}' > "$out/receipt.json"\necho "  0. 'Check P for 3' was not satisfied against expectation"\nexit 1`,
+	);
+	const result = await withPath(exitOne, () => runAlloy({ spec, commands: ["P"] }));
+	expect(result.verdict).toBe("error");
+	expect(result.message).toMatch(/^Alloy exited with status 1 on P/);
+}, 120_000);
+
+test("a descendant that ignores SIGTERM and detaches its output is stopped too", async () => {
+	const spec = model("detached", "sig A {}\nassert P { some A or no A }\ncheck P for 3\n");
+	const marker = `alloy-detached-${process.pid}`;
+	const bin = fakeJava(
+		"detached",
+		`sh -c 'trap "" TERM; exec -a ${marker} sleep 60' </dev/null >/dev/null 2>&1 &\nsleep 60`,
+	);
+	const result = await withPath(bin, () => runAlloy({ spec, timeLimit: 1 }));
+	expect(result.verdict).toBe("incomplete");
+	expect(execFileSync("sh", ["-c", `pgrep -f ${marker} || true`], { encoding: "utf8" }).trim()).toBe("");
+}, 60_000);

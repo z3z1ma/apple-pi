@@ -2,7 +2,7 @@
 
 Each selected command runs in its own `exec -c <index>` with its own output directory. Alloy's receipt and solution files are keyed by command name, so two commands with the same name would overwrite each other in one run; a JVM start costs about half a second per command.
 
-A command's result is trusted only when the receipt holds exactly one entry, named as the listing names the command, with no `transformPath`, and the process exited 0, or exited 1 reporting a missed `expect` that the receipt confirms. Anything else is an error. A missing `solution` means no instance only under those conditions: export backends (CNF, KK) write receipts without one, which is why the solver is restricted to solving backends.
+A command's result is trusted only when the receipt names the requested solver and holds exactly one entry, keyed and named as the listing names the command, of the command's type, with no `transformPath`, and either no `solution` (no instance) or a nonempty array of solutions with instances; and the process exited 0, or exited 1 with Alloy's line `N. '<Kind> <name> ...' was (not) satisfied against expectation` for a command that declares `expect`, consistent with the receipt. Anything else is an error. A missing `solution` means no instance only under those conditions: export backends (CNF, KK) write receipts without one, which is why the solver is restricted to solving backends.
 
 Expectations come from the `commands` listing (`... expect N`), not the receipt: the pinned receipt writer omits zero-valued fields, so `expect 0` has no `expects` field at all.
 

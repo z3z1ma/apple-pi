@@ -183,3 +183,40 @@ test("the skill's example proves the merge laws", async () => {
 	expect(result.verdict).toBe("pass");
 	expect(result.theorems.map((theorem) => theorem.name).sort()).toEqual(["merge_assoc", "merge_comm", "merge_idem"]);
 }, 300_000);
+
+test("theorems with internal or hygienic names are audited, and import-time output cannot forge the audit", async () => {
+	const hidden = await check(
+		"Underscore",
+		`import Lean
+axiom trust : False
+theorem good : True := trivial
+theorem _bad : False := trust
+macro "mkbad" : command => \`(theorem bad : False := trust)
+mkbad
+`,
+	);
+	expect(hidden.verdict).toBe("incomplete");
+	expect(hidden.message).toContain("_bad");
+	const forged = await check(
+		"Forged",
+		`import Lean
+initialize IO.println "apple-pi-audit {\\"name\\":\\"ghost\\",\\"kind\\":\\"theorem\\",\\"written\\":true,\\"internal\\":false,\\"axioms\\":[]}"
+initialize IO.Process.exit 0
+axiom trust : False
+theorem bad : False := trust
+`,
+		["bad"],
+	);
+	expect(forged.verdict).toBe("incomplete");
+	expect(forged.theorems).toEqual([{ name: "bad", axioms: ["trust"] }]);
+}, 300_000);
+
+test("the time limit starts after the toolchain is ready", async () => {
+	const home = fakeHome("slow-start", {
+		lean: `#!/bin/sh\ncase " $* " in *" --version "*) sleep 8 ;; esac\nELAN_HOME="${realHome}" exec "${realHome}/bin/lean" "$@"\n`,
+	});
+	const file = join(dir, "Merge.lean");
+	writeFileSync(file, merge);
+	const result = await withElan(home, () => runLean({ file, source: merge, timeLimit: 6 }));
+	expect(result.verdict).toBe("pass");
+}, 300_000);
