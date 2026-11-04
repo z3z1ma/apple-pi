@@ -9,6 +9,7 @@ import { CODE_CONTEXT_EXTENSION_PATH, CONTEXT_LINT_TOOL_NAME } from "../../../ex
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
 import { LEDGER_EXTENSION_PATH } from "../../../extensions/ledger.js";
 import { SESSION_SEARCH_EXTENSION_PATH } from "../../../extensions/session-search.js";
+import { SYSTEM_PROMPT_EXTENSION_PATH } from "../../../extensions/system-prompt.js";
 import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
 import { WIKI_EXTENSION_PATH, WIKI_TOOL_NAMES } from "../../../extensions/wiki.js";
 import { resolveModelProfile } from "../../shared/src/model-profiles.js";
@@ -59,6 +60,8 @@ export function buildInternCliArgs(
 		CODE_CONTEXT_EXTENSION_PATH,
 		"--extension",
 		SESSION_SEARCH_EXTENSION_PATH,
+		"--extension",
+		SYSTEM_PROMPT_EXTENSION_PATH,
 	];
 	if (options.materialPath) args.push(`@${options.materialPath}`);
 	args.push("--", question);

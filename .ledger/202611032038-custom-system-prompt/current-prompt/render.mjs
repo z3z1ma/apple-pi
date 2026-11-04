@@ -12,24 +12,24 @@ const SOURCES = {
 		"Prepended as its own system block on Anthropic requests (`pi-ai/dist/api/anthropic-messages.js`). Not sent to OpenAI.",
 	],
 	preamble: [
-		"Pi base",
+		"apple-pi: system-prompt (Pi's text)",
 		"Pi's fixed opening line (`pi-coding-agent/dist/core/system-prompt.js`). `--system-prompt` replaces it, and then Pi also drops `tools`, `rules` and `docs`.",
 	],
 	tools: [
-		"Pi base, from every tool",
+		"apple-pi: system-prompt, from every tool (Pi's format)",
 		"One line per active tool: its name and its `promptSnippet`. Tools without a snippet are callable but not listed here.",
 	],
 	rules: [
-		"Pi base, from every tool",
-		"Pi's `buildRules`: a shell rule, then each active tool's `promptGuidelines` in tool order, then `promptGuidelines` passed in directly, then Pi's two fixed lines (concise; show file paths). Duplicates are dropped.",
+		"apple-pi: system-prompt, from every tool (Pi's format)",
+		"Same as Pi's `buildRules`: a shell rule, then each active tool's `promptGuidelines` in tool order, then `promptGuidelines` passed in directly, then Pi's two fixed lines (concise; show file paths). Duplicates are dropped.",
 	],
-	docs: ["Pi base", "Where Pi's own documentation lives. Fixed text with install paths filled in."],
+	docs: ["apple-pi: system-prompt (Pi's text)", "Where Pi's own documentation lives. Fixed text with install paths filled in."],
 	project_context: [
-		"Pi base, from context files",
+		"apple-pi: system-prompt, from Pi's context files",
 		"Every `AGENTS.md` Pi finds: the global `~/.pi/agent/AGENTS.md`, then the repository's `AGENTS.md`.",
 	],
 	skills: [
-		"Pi base, from skill discovery",
+		"apple-pi: system-prompt, from Pi's skill discovery",
 		"Name, description and path of every skill Pi discovered: `~/.pi/agent/skills`, `~/.agents/skills`, and the skills apple-pi ships.",
 	],
 	cwd: ["Pi base", "The working directory."],

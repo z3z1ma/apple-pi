@@ -10,9 +10,9 @@ What the model receives today in a root session of this repository, captured fro
 
 | | Characters | About |
 |---|---:|---:|
-| System prompt | 137,694 | 34,424 tokens |
+| System prompt | 113,784 | 28,446 tokens |
 | Tool definitions (87 tools) | 117,230 | 29,308 tokens |
-| Together | 254,924 | 63,731 tokens |
+| Together | 231,014 | 57,754 tokens |
 
 Token counts are characters ÷ 4, an estimate.
 
@@ -33,21 +33,21 @@ flowchart LR
 | # | Section | Written by | Characters | Tokens |
 |---:|---|---|---:|---:|
 | 1 | [`identity`](system-prompt.md#identity) | pi-ai, Anthropic provider | 57 | ~14 |
-| 2 | [`preamble`](system-prompt.md#preamble) | Pi base | 169 | ~42 |
-| 3 | [`tools`](system-prompt.md#tools) | Pi base, from every tool | 6,629 | ~1,657 |
-| 4 | [`rules`](system-prompt.md#rules) | Pi base, from every tool | 15,517 | ~3,879 |
-| 5 | [`docs`](system-prompt.md#docs) | Pi base | 1,379 | ~345 |
-| 6 | [`project_context`](system-prompt.md#project_context) | Pi base, from context files | 50,422 | ~12,606 |
-| 7 | [`skills`](system-prompt.md#skills) | Pi base, from skill discovery | 14,542 | ~3,636 |
-| 8 | [`cwd`](system-prompt.md#cwd) | Pi base | 51 | ~13 |
-| 9 | [`project-learnings`](system-prompt.md#project-learnings) | apple-pi: notebook | 29,617 | ~7,404 |
-| 10 | [`repo-rules`](system-prompt.md#repo-rules) | apple-pi: repo rules | 1,557 | ~389 |
-| 11 | [`pi-exec-peers`](system-prompt.md#pi-exec-peers) | apple-pi: pi_exec | 601 | ~150 |
-| 12 | [`ledger-workbench`](system-prompt.md#ledger-workbench) | apple-pi: ledger | 983 | ~246 |
-| 13 | [`wiki-workbench`](system-prompt.md#wiki-workbench) | apple-pi: wiki | 682 | ~171 |
-| 14 | [`self`](system-prompt.md#self) | apple-pi: organization | 140 | ~35 |
-| 15 | [`org`](system-prompt.md#org) | apple-pi: organization | 8,760 | ~2,190 |
-| 16 | [`role-catalog`](system-prompt.md#role-catalog) | apple-pi: organization | 5,474 | ~1,369 |
+| 2 | [`preamble`](system-prompt.md#preamble) | apple-pi: system-prompt (Pi's text) | 169 | ~42 |
+| 3 | [`cwd`](system-prompt.md#cwd) | Pi base | 51 | ~13 |
+| 4 | [`tools`](system-prompt.md#tools) | apple-pi: system-prompt, from every tool (Pi's format) | 6,629 | ~1,657 |
+| 5 | [`rules`](system-prompt.md#rules) | apple-pi: system-prompt, from every tool (Pi's format) | 15,517 | ~3,879 |
+| 6 | [`docs`](system-prompt.md#docs) | apple-pi: system-prompt (Pi's text) | 1,379 | ~345 |
+| 7 | [`pi-exec-peers`](system-prompt.md#pi-exec-peers) | apple-pi: pi_exec | 601 | ~150 |
+| 8 | [`role-catalog`](system-prompt.md#role-catalog) | apple-pi: organization | 5,474 | ~1,369 |
+| 9 | [`skills`](system-prompt.md#skills) | apple-pi: system-prompt, from Pi's skill discovery | 14,542 | ~3,636 |
+| 10 | [`project_context`](system-prompt.md#project_context) | apple-pi: system-prompt, from Pi's context files | 52,501 | ~13,125 |
+| 11 | [`project-learnings`](system-prompt.md#project-learnings) | apple-pi: notebook | 3,630 | ~908 |
+| 12 | [`repo-rules`](system-prompt.md#repo-rules) | apple-pi: repo rules | 1,557 | ~389 |
+| 13 | [`ledger-workbench`](system-prompt.md#ledger-workbench) | apple-pi: ledger | 983 | ~246 |
+| 14 | [`wiki-workbench`](system-prompt.md#wiki-workbench) | apple-pi: wiki | 682 | ~171 |
+| 15 | [`org`](system-prompt.md#org) | apple-pi: organization | 8,758 | ~2,190 |
+| 16 | [`self`](system-prompt.md#self) | apple-pi: organization | 140 | ~35 |
 | 17 | [`mcp_servers`](system-prompt.md#mcp_servers) | Pi base, native MCP | 701 | ~175 |
 
 Pi offers three ways to own the prompt:
@@ -79,7 +79,7 @@ A fresh unroled root session does not get these; other sessions do.
 
 ## Provider differences
 
-The same session on `openai/gpt-6.1-sol` gets the same sections (137,636 characters), with these differences:
+The same session on `openai/gpt-6.1-sol` gets the same sections (113,727 characters), with these differences:
 
 - no Anthropic identity line;
 - the core tools keep their lower-case names (`read`, `bash`, `edit`, `write`, `task`);
