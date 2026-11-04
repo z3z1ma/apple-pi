@@ -215,3 +215,17 @@ test("cancelling stops the run", async () => {
 	controller.abort();
 	await expect(running).rejects.toThrow();
 }, 120_000);
+
+test("concurrent first downloads of one file in one process both succeed", async () => {
+	const { createHash } = await import("node:crypto");
+	const { mkdtempSync } = await import("node:fs");
+	const { tmpdir } = await import("node:os");
+	const { join } = await import("node:path");
+	const { pinned } = await import("../src/toolchain.js");
+	const bytes = Buffer.from("pinned bytes");
+	const checksum = createHash("sha256").update(bytes).digest("hex");
+	const file = join(mkdtempSync(join(tmpdir(), "pinned-")), "tool.bin");
+	const slow = () => new Promise<Buffer>((done) => setTimeout(() => done(bytes), 50));
+	const results = await Promise.all([pinned(file, checksum, slow), pinned(file, checksum, slow)]);
+	expect(results.map((result) => result.toString())).toEqual(["pinned bytes", "pinned bytes"]);
+});

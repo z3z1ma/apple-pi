@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -236,6 +237,11 @@ export async function runAlloy(options: AlloyOptions): Promise<AlloyResult> {
 		throw new Error(`solver must be one of ${ALLOY_SOLVERS.join(", ")}`);
 	const jar = await alloyJar(options.signal);
 	const spec = resolve(options.spec);
+	const fingerprint = async () =>
+		createHash("sha256")
+			.update(await readFile(spec))
+			.digest("hex");
+	const before = await fingerprint();
 	const base = { version: ALLOY_VERSION, commands: [] as AlloyCommand[] };
 	const listing = await runJava({
 		args: ["-jar", jar, "commands", spec],
@@ -271,6 +277,8 @@ export async function runAlloy(options: AlloyOptions): Promise<AlloyResult> {
 	} finally {
 		await rm(scratch, { recursive: true, force: true });
 	}
+	if ((await fingerprint()) !== before)
+		return { ...base, commands, verdict: "error", message: "The model changed while it was being checked.", output };
 	const [verdict, message] = judge(commands);
 	return { ...base, commands, verdict, message, output };
 }

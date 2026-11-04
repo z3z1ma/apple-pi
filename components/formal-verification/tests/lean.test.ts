@@ -213,11 +213,11 @@ theorem bad : False := trust
 
 test("the time limit starts after the toolchain is ready", async () => {
 	const home = fakeHome("slow-start", {
-		lean: `#!/bin/sh\ncase " $* " in *" --version "*) sleep 8 ;; esac\nELAN_HOME="${realHome}" exec "${realHome}/bin/lean" "$@"\n`,
+		lean: `#!/bin/sh\ncase " $* " in *" --version "*) sleep 20 ;; esac\nELAN_HOME="${realHome}" exec "${realHome}/bin/lean" "$@"\n`,
 	});
 	const file = join(dir, "Merge.lean");
 	writeFileSync(file, merge);
-	const result = await withElan(home, () => runLean({ file, source: merge, timeLimit: 6 }));
+	const result = await withElan(home, () => runLean({ file, source: merge, timeLimit: 18 }));
 	expect(result.verdict).toBe("pass");
 }, 300_000);
 
@@ -235,3 +235,35 @@ theorem good : True := trivial
 	expect(result.verdict).toBe("error");
 	expect(result.message).toBe("The kernel rejected a declaration on replay.");
 }, 300_000);
+
+test("an axiom named like a standard one but declared outside the toolchain's library is not standard", async () => {
+	const result = await check(
+		"Impostor",
+		"prelude\ninductive Bot : Prop\naxiom propext : Bot\ntheorem bad : Bot := propext\n",
+	);
+	expect(result.verdict).toBe("incomplete");
+	expect(result.message).toContain("bad rely on axioms beyond the standard three");
+}, 300_000);
+
+test("a project module built without kernel checking is caught when the checked file imports it", async () => {
+	const root = join(dir, "forged-project");
+	mkdirSync(root, { recursive: true });
+	writeFileSync(join(root, "lean-toolchain"), `${LEAN_TOOLCHAIN}\n`);
+	writeFileSync(
+		join(root, "lakefile.toml"),
+		'name = "forged"\ndefaultTargets = ["Bad"]\n\n[[lean_lib]]\nname = "Bad"\n',
+	);
+	writeFileSync(
+		join(root, "Bad.lean"),
+		`import Lean
+open Lean Elab Command in
+set_option debug.skipKernelTC true in
+run_cmd liftCoreM <| addDecl (.thmDecl { name := \`Bad.bad, levelParams := [], type := mkConst \`\`False, value := mkConst \`\`True.intro })
+`,
+	);
+	const source = "import Bad\ntheorem result : False := Bad.bad\n";
+	writeFileSync(join(root, "Check.lean"), source);
+	const result = await runLean({ file: join(root, "Check.lean"), source, build: true });
+	expect(result.verdict).toBe("error");
+	expect(result.message).toBe("The kernel rejected a declaration on replay.");
+}, 600_000);

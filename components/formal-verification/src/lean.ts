@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { access, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { cacheDir, download, type ProcessResult, pinned, runProcess } from "./toolchain.js";
@@ -29,6 +29,11 @@ const MODULE = "ApplePiChecked";
 const auditProgram = (report: string) => `import Lean
 open Lean
 
+def moduleOf (env : Environment) (name : Name) : String :=
+  match env.getModuleIdxFor? name with
+  | some idx => env.header.moduleNames[idx.toNat]!.toString
+  | none => ""
+
 def audit : CoreM Json := do
   let env ← getEnv
   let some idx := env.getModuleIdx? \`${MODULE} | throwError "the checked module did not load"
@@ -39,15 +44,20 @@ def audit : CoreM Json := do
       | .thmInfo _ => "theorem"
       | .axiomInfo _ => "axiom"
       | _ => "other"
-    let axioms ← collectAxioms name
+    let axioms := (← collectAxioms name).map fun ax =>
+      Json.mkObj [("name", toJson ax.toString), ("module", toJson (moduleOf env ax))]
     let written := (← findDeclarationRanges? name).isSome
     let shown := (privateToUserName? name).getD name
-    rows := rows.push (Json.mkObj [("name", toJson shown.toString), ("internal", toJson shown.isInternal), ("written", toJson written), ("kind", toJson kind), ("axioms", toJson (axioms.map (·.toString)))])
-  return Json.mkObj [("module", toJson "${MODULE}"), ("declarations", Json.arr rows)]
+    rows := rows.push (Json.mkObj [("name", toJson shown.toString), ("internal", toJson shown.isInternal), ("written", toJson written), ("kind", toJson kind), ("axioms", Json.arr axioms)])
+  return Json.arr rows
 
 #eval show IO Unit from do
   let env ← importModules #[{ module := \`${MODULE} }] {} (trustLevel := 1024)
-  let (report, _) ← audit.toIO { fileName := "audit", fileMap := default } { env }
+  let mut modules : Array Json := #[]
+  for name in env.header.moduleNames do
+    modules := modules.push (Json.mkObj [("name", toJson name.toString), ("olean", toJson (← findOLean name).toString)])
+  let (declarations, _) ← audit.toIO { fileName := "audit", fileMap := default } { env }
+  let report := Json.mkObj [("module", toJson "${MODULE}"), ("sysroot", toJson (← findSysroot).toString), ("modules", Json.arr modules), ("declarations", declarations)]
   IO.FS.writeFile ${JSON.stringify(report)} report.compress
 `;
 
@@ -86,12 +96,24 @@ export interface LeanOptions {
 	onLine?: (line: string) => void;
 }
 
+interface Axiom {
+	name: string;
+	module: string;
+}
+
 interface Declaration {
 	name: string;
 	internal: boolean;
 	written: boolean;
 	kind: "theorem" | "axiom" | "other";
-	axioms: string[];
+	axioms: Axiom[];
+}
+
+export interface AuditReport {
+	module: string;
+	sysroot: string;
+	modules: { name: string; olean: string }[];
+	declarations: Declaration[];
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -110,12 +132,30 @@ async function launchers(home: string): Promise<boolean> {
 }
 
 async function publish(staging: string, home: string): Promise<void> {
-	await rm(home, { recursive: true, force: true });
+	const settled = async (error: unknown) => {
+		const code = (error as NodeJS.ErrnoException).code;
+		if ((code !== "ENOTEMPTY" && code !== "EEXIST") || !(await launchers(home))) throw error;
+	};
+	try {
+		await rename(staging, home);
+		return;
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code !== "ENOTEMPTY" && code !== "EEXIST") throw error;
+		if (await launchers(home)) return;
+	}
+	const aside = `${staging}.incomplete`;
+	try {
+		await rename(home, aside);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+	}
 	try {
 		await rename(staging, home);
 	} catch (error) {
-		const code = (error as NodeJS.ErrnoException).code;
-		if ((code !== "ENOTEMPTY" && code !== "EEXIST") || !(await launchers(home))) throw error;
+		await settled(error);
+	} finally {
+		await rm(aside, { recursive: true, force: true });
 	}
 }
 
@@ -192,6 +232,13 @@ export function diagnostics(stdout: string): LeanDiagnostic[] | undefined {
 	return found;
 }
 
+function isAxiom(value: unknown): value is Axiom {
+	const axiom = value as Axiom;
+	return (
+		typeof axiom === "object" && axiom !== null && typeof axiom.name === "string" && typeof axiom.module === "string"
+	);
+}
+
 function isDeclaration(value: unknown): value is Declaration {
 	const row = value as Declaration;
 	return (
@@ -202,24 +249,55 @@ function isDeclaration(value: unknown): value is Declaration {
 		typeof row.written === "boolean" &&
 		["theorem", "axiom", "other"].includes(row.kind) &&
 		Array.isArray(row.axioms) &&
-		row.axioms.every((axiom) => typeof axiom === "string")
+		row.axioms.every(isAxiom)
 	);
 }
 
-export function declarations(text: string): Declaration[] | undefined {
+export function auditReport(text: string): AuditReport | undefined {
 	try {
-		const report = JSON.parse(text) as { module?: unknown; declarations?: unknown };
-		if (report.module !== MODULE || !Array.isArray(report.declarations)) return undefined;
-		if (!report.declarations.every(isDeclaration)) return undefined;
-		return report.declarations;
+		const report = JSON.parse(text) as Partial<AuditReport>;
+		if (report.module !== MODULE || typeof report.sysroot !== "string") return undefined;
+		if (!Array.isArray(report.modules) || !Array.isArray(report.declarations)) return undefined;
+		const modulesValid = report.modules.every(
+			(module) => typeof module?.name === "string" && typeof module?.olean === "string",
+		);
+		if (!modulesValid || !report.declarations.every(isDeclaration)) return undefined;
+		return report as AuditReport;
 	} catch {
 		return undefined;
 	}
 }
 
+async function canonical(path: string): Promise<string> {
+	return realpath(path).catch(() => resolve(path));
+}
+
+async function standardAxioms(report: AuditReport): Promise<(axiom: Axiom) => boolean> {
+	const library = `${await canonical(join(report.sysroot, "lib", "lean"))}/`;
+	const toolchain = new Set<string>();
+	for (const module of report.modules)
+		if ((await canonical(module.olean)).startsWith(library)) toolchain.add(module.name);
+	return (axiom) => STANDARD_AXIOMS.has(axiom.name) && toolchain.has(axiom.module);
+}
+
+export async function projectModules(report: AuditReport, root: string): Promise<string[]> {
+	const inside = `${await canonical(root)}/`;
+	const names: string[] = [];
+	for (const module of report.modules) {
+		if (module.name === MODULE) continue;
+		const olean = await canonical(module.olean);
+		if (olean.startsWith(inside) && !olean.includes("/.lake/packages/")) names.push(module.name);
+	}
+	return names;
+}
+
 export function audit(declared: Declaration[], wanted: string[] | undefined): LeanTheorem[] {
-	const theorems = declared.filter((declaration) => declaration.kind === "theorem" && declaration.written);
-	if (!wanted?.length) return theorems.map(({ name, axioms }) => ({ name, axioms }));
+	const named = (declaration: Declaration) => ({
+		name: declaration.name,
+		axioms: declaration.axioms.map((axiom) => axiom.name),
+	});
+	if (!wanted?.length)
+		return declared.filter((declaration) => declaration.kind === "theorem" && declaration.written).map(named);
 	return wanted.map((name) => {
 		const matches = declared.filter((declaration) => declaration.name === name);
 		if (matches.length > 1) return { name, problem: "the name is ambiguous" };
@@ -227,7 +305,7 @@ export function audit(declared: Declaration[], wanted: string[] | undefined): Le
 		if (!found) return { name, problem: "the file declares no theorem by this name" };
 		if (found.kind !== "theorem")
 			return { name, problem: `it is ${found.kind === "axiom" ? "an axiom" : "not a theorem"}` };
-		return { name, axioms: found.axioms };
+		return named(found);
 	});
 }
 
@@ -246,22 +324,28 @@ function summary(
 	declared: Declaration[],
 	found: LeanDiagnostic[],
 	wanted: string[] | undefined,
+	standard: (axiom: Axiom) => boolean,
 ): [LeanVerdict, string] {
 	const sorry = [
 		...new Set([
 			...declared
-				.filter((declaration) => declaration.axioms.includes("sorryAx"))
+				.filter((declaration) => declaration.axioms.some((axiom) => axiom.name === "sorryAx"))
 				.map((declaration) => declaration.name),
 			...(found.some((diagnostic) => /declaration uses [`']sorry/.test(diagnostic.text)) ? ["a declaration"] : []),
 		]),
 	];
 	const unaudited = theorems.filter((theorem) => theorem.problem);
-	const covered = wanted?.length ? theorems : declared.filter((declaration) => declaration.kind === "theorem");
-	const trusting = covered.filter((theorem) => theorem.axioms?.some((axiom) => !STANDARD_AXIOMS.has(axiom)));
+	const covered = wanted?.length
+		? declared.filter((declaration) => theorems.some((theorem) => theorem.axioms && theorem.name === declaration.name))
+		: declared.filter((declaration) => declaration.kind === "theorem");
+	const trusting = covered.filter((declaration) => declaration.axioms.some((axiom) => !standard(axiom)));
+	const compiler = trusting.some((declaration) =>
+		declaration.axioms.some((axiom) => /native_decide|ofReduceBool/.test(axiom.name)),
+	);
 	const reasons = [
 		sorry.length ? `${sorry.join(", ")} ${sorry.length === 1 ? "uses" : "use"} sorry` : "",
 		trusting.length
-			? `${trusting.map((theorem) => theorem.name).join(", ")} rely on axioms beyond the standard three${trusting.some((theorem) => theorem.axioms?.some((axiom) => /native_decide|ofReduceBool/.test(axiom))) ? " (native_decide trusts the compiler)" : ""}`
+			? `${trusting.map((declaration) => declaration.name).join(", ")} rely on axioms beyond the standard three${compiler ? " (native_decide trusts the compiler)" : ""}`
 			: "",
 		unaudited.length ? `${unaudited.map((theorem) => `${theorem.name}: ${theorem.problem}`).join("; ")}` : "",
 	].filter(Boolean);
@@ -269,7 +353,7 @@ function summary(
 	if (!theorems.length) return ["incomplete", "The file elaborates, but it declares no theorem."];
 	return [
 		"pass",
-		"No declaration uses sorry, and every audited theorem depends only on the standard axioms (propext, Classical.choice, Quot.sound).",
+		"The kernel accepted every declaration, none uses sorry, and every audited theorem depends only on the standard axioms (propext, Classical.choice, Quot.sound) from the toolchain's library.",
 	];
 }
 
@@ -346,7 +430,24 @@ export async function runLean(options: LeanOptions): Promise<LeanResult> {
 			};
 		const unchecked = failure("Lean", checked);
 		if (unchecked) return { ...withFound, verdict: unchecked[0], message: unchecked[1], output: checked.output };
-		const replayed = await run("leanchecker", [...pin, MODULE], { env });
+		const reportPath = join(scratch, `audit-${randomUUID()}.json`);
+		await writeFile(join(scratch, "Audit.lean"), auditProgram(reportPath));
+		const audited = await run("lean", [...pin, join(scratch, "Audit.lean")], { env });
+		const unaudited = failure("The axiom audit", audited);
+		if (unaudited) return { ...withFound, verdict: unaudited[0], message: unaudited[1], output: audited.output };
+		const report = auditReport(await readFile(reportPath, "utf8").catch(() => ""));
+		if (!report)
+			return {
+				...withFound,
+				verdict: "error",
+				message: "The axiom audit wrote no valid report.",
+				output: audited.output,
+			};
+		const replayed = await run(
+			"leanchecker",
+			[...pin, MODULE, ...(project ? await projectModules(report, project.root) : [])],
+			{ env },
+		);
 		if (replayed.timedOut)
 			return {
 				...withFound,
@@ -368,22 +469,15 @@ export async function runLean(options: LeanOptions): Promise<LeanResult> {
 						message: "The kernel replay (leanchecker) did not run.",
 						output: replayed.output,
 					};
-		const report = join(scratch, `audit-${randomUUID()}.json`);
-		await writeFile(join(scratch, "Audit.lean"), auditProgram(report));
-		const audited = await run("lean", [...pin, join(scratch, "Audit.lean")], { env });
-		const unaudited = failure("The axiom audit", audited);
-		if (unaudited) return { ...withFound, verdict: unaudited[0], message: unaudited[1], output: audited.output };
-		const declared = declarations(await readFile(report, "utf8").catch(() => ""));
-		if (!declared)
-			return {
-				...withFound,
-				verdict: "error",
-				message: "The axiom audit wrote no valid report.",
-				output: audited.output,
-			};
-		const theorems = audit(declared, options.theorems);
-		const [verdict, message] = summary(theorems, declared, found, options.theorems);
-		return { ...withFound, theorems, verdict, message, output: checked.output + audited.output };
+		const theorems = audit(report.declarations, options.theorems);
+		const [verdict, message] = summary(
+			theorems,
+			report.declarations,
+			found,
+			options.theorems,
+			await standardAxioms(report),
+		);
+		return { ...withFound, theorems, verdict, message, output: checked.output + audited.output + replayed.output };
 	} finally {
 		await rm(scratch, { recursive: true, force: true });
 	}

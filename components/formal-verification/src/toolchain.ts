@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -56,7 +56,7 @@ export async function pinned(file: string, checksum: string, produce: () => Prom
 	}
 	const bytes = verify(await produce());
 	await mkdir(dirname(file), { recursive: true });
-	const pending = `${file}.${process.pid}.tmp`;
+	const pending = `${file}.${randomUUID()}.tmp`;
 	try {
 		await writeFile(pending, bytes);
 		await rename(pending, file);

@@ -1,6 +1,6 @@
 ## file
 
-Pinned checksums were calculated from the official release assets fetched over HTTPS. They detect changed downloads and cache corruption; they are not independently signed upstream attestations. Keep each version, URL and checksum aligned when updating a tool. A first use writes through a per-process temporary file, so a concurrent reader never sees a partly downloaded file.
+Pinned checksums were calculated from the official release assets fetched over HTTPS. They detect changed downloads and cache corruption; they are not independently signed upstream attestations. Keep each version, URL and checksum aligned when updating a tool. A first use writes through a uniquely named temporary file, so a concurrent reader never sees a partly downloaded file and two first uses in one process do not share one.
 
 TLA+ module identifiers cannot contain hyphens, so the spec and every other `.tla` file in its directory are staged in a scratch directory under their declared module names. The tools' own state files stay there and are removed afterwards.
 
