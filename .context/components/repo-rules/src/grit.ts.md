@@ -1,13 +1,13 @@
 ## file
 
-Rules run on a temporary copy of the proposed content at `src/<basename>`, so a `.grit` rule cannot see the file's real path; path scoping comes only from the rule's `includes` in `.pi/rules/policy.json`.
-Why: the check must run on content that is not yet on disk, without touching the repository. `biome lint --stdin-file-path` does not help: it printed only the formatter's output and no plugin diagnostics. The copy sits beside a temporary `biome.json` that lists the absolute `.grit` paths, and `biome lint src/<name> --reporter=json` runs with that directory as cwd.
+Code rules run on the standalone GritQL engine, the `@getgrit/gritql` Node binding (a runtime `dependency`, since Pi installs git packages without dev dependencies). The binding runs in a child process (`grit-runner.mjs`) that takes every job for one check on stdin, prints the matches and exits.
+Why: a `filter` callback keeps a native reference that never releases, so the process would never exit and each check would leak; a callback that throws aborts the whole process. Neither may happen inside a Pi session.
 
-A rule that fails to compile prints no JSON, and a rule with a bad regex reports only an info diagnostic `X errored` when the regex matches a node; otherwise a broken rule silently never fires. Both count as rule failures, and `checks.ts` requires a `fires` sample for every rule.
-Coupled: components/repo-rules/src/checks.ts
+The query's `language` line alone selects the parser; the job's path and its extension do not matter, so samples need no file name. Matches are de-duplicated by start position, since one node can match more than once.
 
-`@biomejs/biome` and `typescript` are runtime `dependencies`, not dev dependencies.
-Why: Pi installs git packages without dev dependencies, and this check runs inside every session.
+A query that does not compile either throws (reported as a rule failure) or silently matches nothing. The second case is caught only by the rule's `fires` sample, which `checks.ts` requires for every rule.
+Coupled: components/repo-rules/src/checks.ts, components/repo-rules/src/grit-runner.mjs
 
-In apple-pi the same rules also run in `npm run lint` through `biome.json` overrides, whose `includes` must match `policy.json`.
-Coupled: package.json, biome.json, .pi/rules/policy.json
+`grit.ts` and `policy.ts` import only Node built-ins, so `lint/repo-rules.mjs` can import them with Node's own type stripping.
+Coupled: lint/repo-rules.mjs, package.json, .pi/rules/policy.json
+Verify: components/repo-rules/tests/repo-rules.test.ts

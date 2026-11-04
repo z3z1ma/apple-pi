@@ -1,35 +1,32 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { runRule, sampleName } from "./grit.js";
-import { type ActionRule, type CodeRule, loadRepoRules, pluginPath, RULES_DIR, type RulePolicy } from "./policy.js";
+import { runRules } from "./grit.js";
+import { type ActionRule, type CodeRule, gritPath, loadRepoRules, RULES_DIR, type RulePolicy } from "./policy.js";
 
 async function codeRuleProblems(root: string, rule: CodeRule, proposedGrit?: string): Promise<string[]> {
-	const name = `rule ${rule.plugin}`;
-	const onDisk = pluginPath(root, rule);
-	if (proposedGrit === undefined && !existsSync(onDisk)) return [`${name}: ${RULES_DIR}/${rule.plugin} does not exist`];
+	const name = `rule ${rule.grit}`;
+	if (typeof rule.grit !== "string" || !rule.grit.endsWith(".grit"))
+		return [`${name}: "grit" names the rule's .grit file in ${RULES_DIR}`];
+	const onDisk = gritPath(root, rule);
+	if (proposedGrit === undefined && !existsSync(onDisk)) return [`${name}: ${RULES_DIR}/${rule.grit} does not exist`];
+	if (typeof rule.message !== "string" || !rule.message.trim())
+		return [`${name}: give it a "message" that tells the agent what to do instead`];
 	if (typeof rule.fires !== "string" || typeof rule.passes !== "string")
 		return [`${name}: give it a "fires" sample it must flag and a "passes" sample it must allow`];
-	const grit = proposedGrit ?? readFileSync(onDisk, "utf8");
-	const dir = mkdtempSync(join(tmpdir(), "repo-rules-check-"));
-	try {
-		const plugin = join(dir, basename(rule.plugin));
-		writeFileSync(plugin, grit);
-		const sample = sampleName(grit);
-		const [fires, passes] = await Promise.all([
-			runRule(plugin, sample, rule.fires),
-			runRule(plugin, sample, rule.passes),
-		]);
-		const failure = fires.failure ?? passes.failure;
-		if (failure) return [`${name} does not run: ${failure}`];
-		const problems: string[] = [];
-		if (!fires.violations.length) problems.push(`${name} does not flag its "fires" sample`);
-		if (passes.violations.length)
-			problems.push(`${name} flags its "passes" sample: ${passes.violations.map((v) => v.message).join("; ")}`);
-		return problems;
-	} finally {
-		rmSync(dir, { recursive: true, force: true });
-	}
+	const query = proposedGrit ?? readFileSync(onDisk, "utf8");
+	const [fires, passes] = await runRules([
+		{ query, path: `sample/${rule.grit}`, content: rule.fires },
+		{ query, path: `sample/${rule.grit}`, content: rule.passes },
+	]);
+	const failure = fires!.failure ?? passes!.failure;
+	if (failure) return [`${name} does not run: ${failure}`];
+	const problems: string[] = [];
+	if (!fires!.lines.length)
+		problems.push(
+			`${name} does not flag its "fires" sample. A query that does not compile also matches nothing; check its syntax and its \`language\` line.`,
+		);
+	if (passes!.lines.length) problems.push(`${name} flags its "passes" sample at line ${passes!.lines.join(", ")}`);
+	return problems;
 }
 
 function actionProblems(action: ActionRule): string[] {
@@ -49,7 +46,7 @@ function actionProblems(action: ActionRule): string[] {
 }
 
 async function policyProblems(root: string, policy: RulePolicy, changedPlugin?: string, grit?: string) {
-	const rules = (policy.rules ?? []).filter((rule) => !changedPlugin || rule.plugin === changedPlugin);
+	const rules = (policy.rules ?? []).filter((rule) => !changedPlugin || rule.grit === changedPlugin);
 	const problems = (await Promise.all(rules.map((rule) => codeRuleProblems(root, rule, grit)))).flat();
 	if (!changedPlugin) problems.push(...(policy.actions ?? []).flatMap(actionProblems));
 	return problems;

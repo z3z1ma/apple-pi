@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test } from "vitest";
+import { runRules } from "../components/repo-rules/src/grit.js";
+import { gritPath, loadRepoRules, rulesFor } from "../components/repo-rules/src/policy.js";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
 const checker = join(repository, "lint/path-contracts.mjs");
-const biome = join(repository, "node_modules/.bin/biome");
 const directories: string[] = [];
 
 afterEach(() => {
@@ -127,17 +128,17 @@ test("bounded reads, async children and erasable fields remain allowed", () => {
 	expect(result.status, result.stderr).toBe(0);
 });
 
-function lintHot(source: string, hot = true) {
-	const directory = fixture({});
-	const name = hot ? "read.hot.ts" : "setup.ts";
-	writeFileSync(join(directory, name), source);
-	writeFileSync(
-		join(directory, "biome.json"),
-		JSON.stringify({
-			overrides: [{ includes: ["**/*.hot.ts"], plugins: [resolve(repository, ".pi/rules/hot-bounded-io.grit")] }],
-		}),
+async function lintHot(source: string, hot = true) {
+	const rules = loadRepoRules(repository);
+	const path = join(repository, "components/example", hot ? "read.hot.ts" : "setup.ts");
+	const matching = rulesFor(rules, path);
+	const runs = await runRules(
+		matching.map((rule) => ({ query: readFileSync(gritPath(repository, rule), "utf8"), path, content: source })),
 	);
-	return spawnSync(biome, ["lint", name], { cwd: directory, encoding: "utf8", timeout: 10000 });
+	return runs.flatMap((run, index) => {
+		expect(run.failure).toBeUndefined();
+		return run.lines.map(() => matching[index]!.message);
+	});
 }
 
 test.each([
@@ -146,13 +147,11 @@ test.each([
 	"import { execSync } from 'node:child_process'; execSync('git');",
 	"import { execFileSync } from 'node:child_process'; execFileSync('git');",
 	"import { spawnSync } from 'node:child_process'; spawnSync('git');",
-])("the path-scoped GritQL rule rejects blocking hot APIs: %s", (source) => {
-	const result = lintHot(source);
-	expect(result.status, result.stdout + result.stderr).toBe(1);
-	expect(result.stdout + result.stderr).toContain("Hot paths use bounded file reads");
+])("the path-scoped GritQL rule rejects blocking hot APIs: %s", async (source) => {
+	expect(await lintHot(source)).toContainEqual(expect.stringContaining("Hot paths use bounded file reads"));
 });
 
-test("the hot rule allows bounded operations and does not restrict a cold file", () => {
-	expect(lintHot("import { open } from 'node:fs/promises'; await open('file');").status).toBe(0);
-	expect(lintHot("import { readFileSync } from 'node:fs'; readFileSync('file');", false).status).toBe(0);
+test("the hot rule allows bounded operations and does not restrict a cold file", async () => {
+	expect(await lintHot("import { open } from 'node:fs/promises'; await open('file');")).toEqual([]);
+	expect(await lintHot("import { readFileSync } from 'node:fs'; readFileSync('file');", false)).toEqual([]);
 });

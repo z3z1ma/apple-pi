@@ -12,7 +12,8 @@ export interface ActionRule {
 }
 
 export interface CodeRule {
-	plugin: string;
+	grit: string;
+	message: string;
 	includes?: string[];
 	fires?: string;
 	passes?: string;
@@ -40,8 +41,8 @@ export function policyPath(root: string): string {
 	return join(root, RULES_DIR, "policy.json");
 }
 
-export function pluginPath(root: string, rule: CodeRule): string {
-	return join(root, RULES_DIR, rule.plugin);
+export function gritPath(root: string, rule: CodeRule): string {
+	return join(root, RULES_DIR, rule.grit);
 }
 
 export function loadRepoRules(root: string): RepoRules {

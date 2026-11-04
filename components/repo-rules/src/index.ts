@@ -7,15 +7,16 @@ import { resolveToolPath } from "../../shared/src/tool-path.js";
 import { ruleFileRefusal } from "./checks.js";
 import { addedComments } from "./comments.js";
 import { firingsIn, recordFirings } from "./firings.js";
-import { runRule } from "./grit.js";
-import { loadRepoRules, pluginPath, RULES_DIR, rulesFor, rulesRootOf } from "./policy.js";
+import { runRules } from "./grit.js";
+import { gritPath, loadRepoRules, RULES_DIR, rulesFor, rulesRootOf } from "./policy.js";
 
 export const REPO_RULES_PROMPT_TAG = "repo-rules";
 export const REPO_RULES_TOOL_NAME = "repo_rules";
 const COMMENT_RULE = "comments";
 
 const OPTED_IN = `This repository keeps its rules in \`.pi/rules/\`, and the harness checks every edit and write against them before the change lands; a refusal names the rule, so fix the change and retry.
-- \`policy.json\` lists the GritQL rules (\`*.grit\`, Biome plugin syntax) with the paths they apply to, the action rules for shell commands, and whether source comments are forbidden.
+- \`policy.json\` lists the code rules with the paths they apply to and the message shown when one fires, the action rules for shell commands, and whether source comments are forbidden.
+- A code rule is a GritQL query in a \`*.grit\` file. It works for any language GritQL supports: start it with a \`language\` line (\`js\` for JavaScript and TypeScript, \`css\`, \`json\`, \`python\`, \`go\`, \`rust\`, \`java\`, \`kotlin\`, \`csharp\`, \`ruby\`, \`php\`, \`sql\`, \`yaml\`, \`toml\`, \`hcl\`, \`markdown\`, \`html\`, \`elixir\`, \`solidity\`). Every match is a violation; the message lives in \`policy.json\`.
 - When comments are forbidden, put what a comment would say elsewhere: rationale, invariants and hazards in \`.context/<path>.md\`, intent in a better name, behavior in a test.
 - Add rules liberally: whenever you meet a mistake a machine can detect (in review, while fixing a bug, from a lesson or a user correction), write a rule instead of prose. Write the \`.grit\` file, then list it in \`policy.json\` with its paths, a \`fires\` sample it must flag and a \`passes\` sample it must allow; the harness refuses a rule that does not load or does not behave on its samples. A shell-command pattern becomes an \`actions\` entry with \`fires\` and \`passes\` commands. Then fix what the new rule flags.
 - \`repo_rules\` lists each rule with how often it fired; narrow a rule that blocks good code and question one that never fires.`;
@@ -71,13 +72,15 @@ export async function editRefusal(
 			);
 		}
 	}
-	const runs = await Promise.all(
-		rulesFor(rules, path).map(async (rule) => ({ rule, run: await runRule(pluginPath(root, rule), path, after) })),
+	const matching = rulesFor(rules, path);
+	const runs = await runRules(
+		matching.map((rule) => ({ query: readFileSync(gritPath(root, rule), "utf8"), path, content: after })),
 	);
-	for (const { rule, run } of runs) {
-		if (run.failure) problems.push(`rule ${rule.plugin} could not run: ${run.failure}`);
-		if (run.violations.length) fired.push(rule.plugin);
-		for (const violation of run.violations) problems.push(`line ${violation.line}: ${violation.message}`);
+	for (const [index, run] of runs.entries()) {
+		const rule = matching[index]!;
+		if (run.failure) problems.push(`rule ${rule.grit} could not run: ${run.failure}`);
+		if (run.lines.length) fired.push(rule.grit);
+		for (const line of run.lines) problems.push(`line ${line}: ${rule.message}`);
 	}
 	const ruleFile = await ruleFileRefusal(root, path, after);
 	recordFirings(root, fired);
@@ -106,7 +109,7 @@ export function rulesReport(cwd: string): string {
 	return [
 		`Rules in ${root}/${RULES_DIR}:`,
 		...(policy.comments === "forbid" ? [line("policy", COMMENT_RULE)] : []),
-		...(policy.rules ?? []).map((rule) => line("code", rule.plugin)),
+		...(policy.rules ?? []).map((rule) => line("code", rule.grit)),
 		...(policy.actions ?? []).map((action) => line("action", action.id)),
 	].join("\n");
 }

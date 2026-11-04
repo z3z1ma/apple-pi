@@ -4,13 +4,21 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { commandRefusal, editRefusal, installRepoRules, rulesReport } from "../src/index.js";
 
-const NO_SELECT =
-	'language js\n\n`<select $attrs>$children</select>` as $element where {\n  register_diagnostic(span=$element, message="Use the shared Select.")\n}\n';
+const NO_SELECT = "language js\n\n`<select $attrs>$children</select>`\n";
 const SELECT_RULE = {
-	plugin: "no-select.grit",
+	grit: "no-select.grit",
+	message: "Use the shared Select.",
 	includes: ["web/**"],
 	fires: "export const V = () => <select><option>x</option></select>;\n",
 	passes: "export const V = () => <Select />;\n",
+};
+const NO_PRINT = "language python\n\n`print($message)`\n";
+const PRINT_RULE = {
+	grit: "no-print.grit",
+	message: "Log through the logger, not print.",
+	includes: ["**/*.py"],
+	fires: "def run():\n    print('started')\n",
+	passes: "def run():\n    log.info('started')\n",
 };
 const GIT_RM = {
 	id: "no-git-rm",
@@ -33,7 +41,8 @@ afterAll(() => {
 mkdirSync(rulesDir, { recursive: true });
 mkdirSync(join(repo, "web"));
 writeFileSync(join(rulesDir, "no-select.grit"), NO_SELECT);
-writeFileSync(policyFile, JSON.stringify({ comments: "forbid", rules: [SELECT_RULE], actions: [GIT_RM] }));
+writeFileSync(join(rulesDir, "no-print.grit"), NO_PRINT);
+writeFileSync(policyFile, JSON.stringify({ comments: "forbid", rules: [SELECT_RULE, PRINT_RULE], actions: [GIT_RM] }));
 const file = join(repo, "web/view.tsx");
 writeFileSync(file, "// biome-ignore lint: kept\nexport const a = 1;\n// an old comment stays\nexport const b = 2;\n");
 
@@ -72,21 +81,36 @@ test("a repository's GritQL rule refuses the change on the paths it lists, and i
 	expect(rulesReport(repo)).toMatch(/policy comments: fired \d+ times/);
 });
 
+test("a rule in another language refuses the change with its message and the line it matched", async () => {
+	const script = join(repo, "tools/run.py");
+	mkdirSync(join(repo, "tools"), { recursive: true });
+	const refusal = await editRefusal(script, "write", { content: "def run():\n    x = 1\n    print(x)\n" });
+	expect(refusal).toMatch(/line 3: Log through the logger, not print\./);
+	expect(await editRefusal(script, "write", { content: "def run():\n    log.info(1)\n" })).toBeUndefined();
+});
+
 test("a rule is checked when it is written: it must load, flag its fires sample and allow its passes sample", async () => {
 	expect(await editRefusal(policyFile, "write", { content: JSON.stringify({ rules: [SELECT_RULE] }) })).toBeUndefined();
 	const noSamples = await editRefusal(policyFile, "write", {
-		content: JSON.stringify({ rules: [{ plugin: "no-select.grit", includes: ["web/**"] }] }),
+		content: JSON.stringify({ rules: [{ grit: "no-select.grit", message: "x", includes: ["web/**"] }] }),
 	});
 	expect(noSamples).toMatch(/give it a "fires" sample/);
+	const noMessage = await editRefusal(policyFile, "write", {
+		content: JSON.stringify({ rules: [{ ...SELECT_RULE, message: "" }] }),
+	});
+	expect(noMessage).toMatch(/give it a "message"/);
 	const tooBroad = await editRefusal(join(rulesDir, "no-select.grit"), "write", {
-		content:
-			'language js\n\n`$x` as $element where {\n  $x <: r"^V$",\n  register_diagnostic(span=$element, message="Use the shared Select.")\n}\n',
+		content: 'language js\n\n`$x` where {\n  $x <: r"^V$"\n}\n',
 	});
-	expect(tooBroad).toMatch(/flags its "passes" sample/);
+	expect(tooBroad).toMatch(/flags its "passes" sample at line 1/);
 	const broken = await editRefusal(join(rulesDir, "no-select.grit"), "write", {
-		content: "language js\n\n`foo($x)` as $c where { $x <: not within }\n",
+		content: "language js\n\n`<select $attrs>$children</select`\n",
 	});
-	expect(broken).toMatch(/does not run/);
+	expect(broken).toMatch(/does not run: .*Could not find variable \$attrs/);
+	const silent = await editRefusal(join(rulesDir, "no-select.grit"), "write", {
+		content: "language js\n\n`foo($x`\n",
+	});
+	expect(silent).toMatch(/does not flag its "fires" sample\. A query that does not compile/);
 	const badAction = await editRefusal(policyFile, "write", {
 		content: JSON.stringify({ actions: [{ ...GIT_RM, passes: "git rm b" }] }),
 	});

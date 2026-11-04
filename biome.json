@@ -44,18 +44,6 @@
         "indentStyle": "space",
         "indentWidth": 2
       }
-    },
-    {
-      "includes": ["**/*.hot.ts"],
-      "plugins": ["./.pi/rules/hot-bounded-io.grit"]
-    },
-    {
-      "includes": ["apps/agent-workplace/web/workplace*.tsx"],
-      "plugins": ["./.pi/rules/no-native-select.grit"]
-    },
-    {
-      "includes": ["apps/agent-workplace/web/workplace*.css", "!apps/agent-workplace/web/workplace.css"],
-      "plugins": ["./.pi/rules/workplace-palette.grit"]
     }
   ]
 }
