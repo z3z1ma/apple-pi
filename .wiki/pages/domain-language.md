@@ -44,11 +44,11 @@ A top-level Pi conversation. Every person is one, including the sessions the ope
 **Assignment**:
 The record that a person holds a task, given by a manager or taken by the person. Only assignments bind work to a person.
 
-**Pi Exec**:
-The harness capability for bounded, type-checked programmatic composition of tools and model work.
+**Codemode**:
+Pi's JavaScript sandbox for composing tools. Apple Pi adds saved programs and peer tools; [programs](../../docs/programs.md) owns their contract.
 
 **Program peer**:
-A person a Pi Exec program attaches, or starts in a role, to run turns that return results to the program. A temporary program peer is discarded when its call or the program ends. It is distinct from the runtime that executes the program.
+A person a codemode script gives a turn through `colleague`, or starts in a catalog role through `temporary_peer`. Its result returns to the script. The runtime discards a temporary peer after its call; an existing colleague stays alive. It is distinct from the runtime that executes the program.
 
 **Job**:
 A session-owned command or deferred prompt with an inspectable lifecycle. A job finishing does not establish that the task it serves is complete.
@@ -111,7 +111,7 @@ Reduction of the conversation's active context while retaining a usable account 
 A structured set of related operator decisions with described choices and custom answers. It seeks a decision rather than supplying new authority on its own.
 
 **Active work**:
-The jobs, running Pi Exec programs, and intern calls presented together for operator inspection. Their shared presentation does not make them one lifecycle or one kind of work.
+The jobs and intern calls presented together for operator inspection. Their shared presentation does not make them one lifecycle or one kind of work.
 
 **Prompt stash**:
 The operator's temporary collection of unsubmitted prompts. It is distinct from conversation history and scheduled prompts.
@@ -165,4 +165,4 @@ The choice of priority service for supported model requests. It is distinct from
 A tool executed by the model provider rather than by the local harness.
 
 **MCP integration**:
-Pi's connection to external tool and resource services. It is distinct from provider-hosted tools and from the Pi Exec composition capability.
+Pi's connection to external tool and resource services. It is distinct from provider-hosted tools and from codemode tool composition.

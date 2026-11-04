@@ -22,7 +22,7 @@ An agent is a live top-level Pi session whose process runs in a pane of this tmu
 | working | a run is in progress |
 | idle | settled and seen |
 
-[Interns](interns.md) and the [`/btw`](btw.md) session are not agents here. On settle the extension rings its pane's bell (opt out with `PI_TMUX_SESSION_BELL=off`), so tmux marks the window in its status line. A temporary peer that a `pi_exec` program starts is an agent while it lives, but it does not ring the bell (its `PI_PROGRAM_ID` is set).
+[Interns](interns.md) and the [`/btw`](btw.md) session are not agents here. On settle the extension rings its pane's bell (opt out with `PI_TMUX_SESSION_BELL=off`), so tmux marks the window in its status line. A temporary peer that a program starts is an agent while it lives, but it does not ring the bell (its `PI_PROGRAM_ID` is set).
 
 ### Supervised sessions
 

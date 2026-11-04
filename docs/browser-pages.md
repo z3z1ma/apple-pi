@@ -22,7 +22,7 @@ For `sign_off_document`, a relative `path` is resolved against `cwd`; an absolut
 
 ## Selecting the change
 
-`sign_off_code`, `explain_change`, `review_code` and Pi Exec's `git_change` family take the same `target`, resolved by one shared module (`components/shared/src/git-change.ts`):
+`sign_off_code`, `explain_change` and `review_code` take the same `target`, resolved by one shared module (`components/shared/src/git-change.ts`):
 
 | `target` | Compares |
 | --- | --- |

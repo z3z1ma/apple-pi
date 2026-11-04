@@ -54,19 +54,19 @@ Source: session learning `2a6ea7faf4c1`, from a communication-verification hando
 
 ## Counting tool calls
 
-Count `"type":"toolCall","id":"...","name":"X"` matches across recent logs, for example `find ~/.pi/agent/sessions -name '*.jsonl' -mtime -14 -print0 | xargs -0 rg -o --no-filename '"type":"toolCall","id":"[^"]*","name":"[^"]*"' | sort | uniq -c` (268 files took about a minute). Calls made inside `pi_exec` programs are not counted, and renamed tools still appear under old names (`mailbox_send`, `schedule`). Low usage measures what the prompt teaches, not what a tool is worth: the operator rejected hiding rarely used tools for that reason.
+Count `"type":"toolCall","id":"...","name":"X"` matches across recent logs, for example `find ~/.pi/agent/sessions -name '*.jsonl' -mtime -14 -print0 | xargs -0 rg -o --no-filename '"type":"toolCall","id":"[^"]*","name":"[^"]*"' | sort | uniq -c` (268 files took about a minute). This pattern alone does not establish a complete count of nested script operations; inspect their recorded trace shape separately. Current codemode scripts call tools through Pi's pipeline ([programs](../../docs/programs.md)). Renamed tools still appear under old names (`mailbox_send`, `schedule`). Low usage measures what the prompt teaches, not what a tool is worth: the operator rejected hiding rarely used tools for that reason.
 
 ## Traps
 
 - **Mixed populations.** The sessions directory holds root sessions, persisted child sessions, and temporary test or review sessions under `--private-tmp-…`. Filter or report the mix.
-- **Checks hide in other tools.** Classifying verification by command regex has low precision: real checks run inside `pi_exec` code, `agent` children, `.venv` binaries, or repository scripts.
-- **Classification-free proxies still mislead.** "Did any command run after the last edit" counts `ls` and `git status` as verification and misses checks done by an `agent` child. The error runs both ways.
+- **Checks hide in other tools.** Classifying verification by command regex has low precision: real checks run inside codemode scripts, peer sessions, `.venv` binaries, or repository scripts.
+- **Classification-free proxies still mislead.** "Did any command run after the last edit" counts `ls` and `git status` as verification and misses checks done by a peer. The error runs both ways.
 - **A background launch is not a completed run.** `run_in_background` returns at launch; the outcome arrives later as a task notification, not as that tool result.
 - **Claims are text.** Regex on final assistant text for "tests pass" finds narration and plans as well as claims; sample matches by hand before trusting a rate.
 
 ## Reporting rule
 
-Label each number by what was actually counted ("runs with no successful `bash` or `pi_exec` after the last code edit"), not by the concept it stands for ("unverified runs"). Sample a handful of matches by hand and report the precision you saw.
+Label each number by what was actually counted ("runs with no successful `bash` or `codemode` after the last code edit"), not by the concept it stands for ("unverified runs"). Sample a handful of matches by hand and report the precision you saw.
 
 ## Sources
 

@@ -11,7 +11,7 @@ The setting is stored at `~/.pi/agent/vroom.json` (or the configured Pi agent di
 persists across sessions and restarts. On first load after upgrading from the earlier
 Codex-only extension, it falls back once to the legacy `codex-fast.json` so an existing
 toggle is not silently reset. Every top-level session loads the extension,
-including each peer and the temporary peers that `pi_exec` starts. [Interns](interns.md) and
+including each peer and the temporary peers that programs start. [Interns](interns.md) and
 the [`/btw`](btw.md) session load it explicitly.
 
 The command runs immediately even while an agent is streaming. The session that ran `/fast` uses

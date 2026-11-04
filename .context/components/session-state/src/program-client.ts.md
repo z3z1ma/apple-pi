@@ -4,7 +4,7 @@ The connection is the execution's ownership boundary, not one connection per mod
 
 A lost connection cannot acknowledge cleanup. The caller reconnects the runtime and waits for the persisted scope to disappear; scopes outlive their nested scopes and every owned process and bundle. Cleanup errors remain visible. Results themselves are transient receipts, with the Pi transcript as their durable owner.
 
-A runtime-owned caller supplies explicit state paths and persisted scope/command identities. Those connections use that socket and database, including cleanup observation, and never discover or start an ambient daemon. Ordinary Pi Exec calls keep their existing automatic-connect behavior. Reusing an in-flight command ID cannot replace its waiting callback.
+A runtime-owned caller supplies explicit state paths and persisted scope/command identities. Those connections use that socket and database, including cleanup observation, and never discover or start an ambient daemon. Calls from the codemode peer tools keep automatic connection and runtime startup. Reusing an in-flight command ID cannot replace its waiting callback.
 
 Observe the terminal result before rejecting a cancelled request. Its model usage and file changes still happened, and the caller needs those facts even though it cannot use the reply as a successful return value.
 

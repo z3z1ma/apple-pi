@@ -54,7 +54,7 @@ flowchart TB
     end
 
     subgraph Execution["2. Execution & Search Substrate"]
-        PIEXEC["Programmatic Sandbox<br/>(pi-exec Monty Python + Saved Programs)"]
+        PROGRAMS["Programs<br/>(Pi codemode + Saved JavaScript Programs)"]
         SUB["Interns, Peers & Swap Space<br/>(interns / organization / /btw side conversation)"]
         BSEARCH["Parallel Attempt Worktrees<br/>(branch-search + command judges)"]
         TASKS["Background Process Manager<br/>(tasks / remind_me / monitor)"]
@@ -143,55 +143,34 @@ Every directory in `components/` exists because a specific recurring dysfunction
 
 ---
 
-### 1. `pi-exec`: From Tool-Call Thrashing to an Accumulating Executable Vocabulary
+### 1. Programs: From Tool-Call Thrashing to an Accumulating Executable Vocabulary
 
 #### The Observed Dysfunction
 Standard agent tool-calling is an absurdly chatty request-response protocol. To answer a moderately complex question about a codebase, the model emits a JSON tool call (`grep`), the harness dumps 400 lines of raw text into the transcript, the model reads it, emits a `read` call, gets another 300 lines, emits another `grep`, and repeats this twenty times.
 
 You are using a frontier reasoning model as a $15-per-million-token `for`-loop. Worse, every intermediate false start is permanently etched into the conversation history, pushing the context window toward the redline before the agent has written a single line of production code.
 
-#### The Mechanical Response (`components/pi-exec`)
-Instead of forcing the model to chain individual tool calls across twenty round-trips, `pi_exec` gives the agent a bounded, type-checked Python runtime: a subset of Python executed by Monty in a worker subprocess (`program.ts`, `guest-api.ts`, `guest-functions.ts`), whose tool calls are served by the host harness (`host-calls.ts`). It has no third-party imports and no ambient Node or OS access, and every call shares explicit call, concurrency, agent, and wall-clock budgets.
+#### The Mechanical Response (`components/programs`)
+Programs run on Pi's built-in `codemode`: JavaScript in a QuickJS sandbox, calling tools as `tools.<name>(args)`. Pi owns the sandbox and execution limits. Apple Pi adds saved programs, peer turns, and plain piped shell output inside scripts. The full contract lives in [docs/programs.md](docs/programs.md).
 
-1. **Host Tools as Awaitable Python Functions (`callable-tools.ts`, `core-tools.ts`):** Inside a single `pi_exec` snippet, the model can `await` host tools (`read`, `grep`, `bash`, MCP tools, or other extension tools), run independent calls concurrently with `asyncio.gather`, filter the results in Python memory, and discard the intermediate noise. Extension, MCP, and active core tools other than `bash` run through Pi's normal tool pipeline, so their hooks and guards still apply.
-2. **Peers as Awaitable Colleagues (`peer-calls.ts`, `peer-python.ts`):** A managing role or unroled organization root can attach an awake colleague or create a temporary person in a catalog role; other roles keep ordinary tool composition without peer APIs. Each request runs in that person's session and returns prose or a validated value directly. The role owns the model and thinking level; temporary people are discarded after the call or program, while attached colleagues stay alive.
-3. **Compact Results, Evidence Helpers, and Checkpoints (`evidence.ts`, `checkpoint.ts`, `envelope.ts`):** Only the snippet's last expression, which must be JSON-compatible, and its captured `print` output enter the conversation. Optional evidence helpers (`evidence.ts`) collect scoped Git changes and relevant tests, the interpreter's state is checkpointed along Pi's session tree (`checkpoint.ts`), and `envelope.ts` defines the resource limits each call runs under.
-4. **Saved Programs (`saved-programs.ts`):** In a trusted project, a `.pi/programs/<name>.py` file with a leading docstring and `@param` tags (`python-schema.ts`) is registered as a `program_<name>` tool, turning a useful snippet into a named, reusable workspace procedure.
+1. **Compose Tools:** A script can await tools, run independent calls with `Promise.all`, and reduce their results before returning evidence. Every nested call goes through Pi's tool pipeline. The sandbox has no file system, network or timers of its own; tools provide those capabilities.
+2. **Ask Peers:** Managing roles and unroled organization roots can call `tools.temporary_peer` for one task in a catalog role, or `tools.colleague` for a turn on an awake colleague. Each returns text or a validated value. The runtime discards temporary peers after their call; colleagues stay alive.
+3. **Save Programs:** In a trusted project, `.pi/programs/<name>.js` starts with a `// @program: {json}` header declaring its description and argument schema. It becomes `program_<name>`, with arguments in `inputs`. Each saved program runs in its own sandbox.
 
 ```mermaid
 flowchart LR
-    subgraph RootContext["Primary Agent Context (Clean RAM)"]
-        Turn["1. Model writes Python snippet<br/>or invokes Saved Program"]
-        Env["4. Receives returned value<br/>+ captured print output"]
-    end
-
-    subgraph Sandbox["pi-exec Monty Python Sandbox (Single Call)"]
-        Py["Python Guest Runtime<br/>(guest-api.ts / guest-functions.ts)"]
-        Saved[("Saved Programs<br/>(.pi/programs/*.py)")]
-        Py <--> Saved
-    end
-
-    subgraph Bridge["Host Bridge (host-calls.ts)"]
-        Tools["Core & Callable Tools<br/>(read / grep / bash / MCP / fetch)"]
-        Peers["Role Peers<br/>(peer-calls.ts)"]
-        Panel["Passive Activity & Native Results<br/>(active-work.ts / ui.ts)"]
-    end
-
-    Turn --> Py
-    Py <-->|Loop, filter & branch in Python| Tools
-    Py <-->|Fan-out & join| Peers
-    Peers --> Panel
-    Tools --> Panel
-    Py -->|2. Intermediate results stay in Python| Py
-    Py -->|3. Returns its last expression| Env
+    Turn["Model writes JavaScript<br/>or invokes program_name"] --> Sandbox["Pi codemode<br/>(QuickJS sandbox)"]
+    Saved[("Saved Programs<br/>(.pi/programs/*.js)")] --> Sandbox
+    Sandbox <-->|Await, filter and branch| Tools["Pi tool pipeline<br/>(read / grep / bash / MCP)"]
+    Tools <-->|One task or turn| Peers["temporary_peer / colleague<br/>(session-state runtime)"]
+    Sandbox -->|Return selected evidence| Result["Primary agent context"]
 ```
 
 #### The Extrapolated & Emergent Implications
-When I first wired `pi-exec`, I thought of it merely as a token-saving batch runner. In sustained use, three much larger behaviors emerged:
 
-* **The Workspace Grows an Executable Vocabulary:** There is an old Lisp ideal where you grow an application by talking to it: you write a function, register it in the image, and never have to re-derive that capability again. Saved programs bring a version of that dynamic to the coding harness. When an agent writes a Python program to trace SQLMesh lineage, audit BigQuery schema drift, or verify Looker dashboard references, and it is saved to `.pi/programs/`, **ad-hoc reasoning crystallizes into a reusable tool**. Three days later, the agent doesn't "think" about how to audit the schema; it calls `program_<name>`. The repository accumulates its own library of project procedures through daily work.
-* **Data-Dependent Work Graphs:** Static multi-agent frameworks force you to define orchestration graphs *ahead of time* in YAML or TypeScript. Because `pi_exec` exposes peers inside Python, the model can synthesize **dynamic, data-dependent work graphs on the fly**, within Monty's Python subset and the call's budgets. A single 35-line snippet can parse a dependency tree, ask five peers about the leaf nodes in parallel, run a deterministic test suite as a barrier step, and conditionally bring in an Implementation Engineer only for the branch that failed—while passive activity shows call progress and native results retain the operation trace.
-* **Epistemic Compression:** Because the Python snippet acts as a loss-absorbing membrane between the messy filesystem and the primary context window, the root agent's transcript stays almost eerily quiet. A program can grep through megabytes of logs and return a few counts and excerpts; only what it returns or prints enters the context, so the program has to do the reducing.
+* **The Workspace Grows an Executable Vocabulary:** A useful JavaScript program saved under `.pi/programs/` becomes a named tool. The next session can call `program_<name>` instead of reconstructing the same procedure. The repository accumulates its own library through daily work.
+* **Data-Dependent Work Graphs:** A script can inspect a dependency tree, ask peers about independent leaves, run tests, and choose the next task from the results. The graph follows the evidence rather than a fixed workflow definition.
+* **Epistemic Compression:** A program can search megabytes of logs and return a few counts and excerpts. The script does the reduction; raw intermediate output need not fill the primary context.
 
 ---
 
@@ -312,7 +291,7 @@ stateDiagram-v2
     Reflection --> [*]
 ```
 
-* **`code-context` (`installer.ts`, `lint.ts`):** A context file at `.context/<path>.md` mirrors one source file and holds what its code cannot show: invariants, hazards, rationale, and cross-file couplings. A top-level `read` of the file appends the whole context file and a hash marker, unless that marker is already in context. A top-level `edit` or `write` of that file, or of its context file, **fails** only when the context file exists and its current marker is not in the model's context; a file with no context file is never blocked. The refusal does not contain the context file; it tells the model which file to read, and the model reads it, replans, and retries. A changed context file has a new hash, and a marker that compaction removed no longer counts. Only top-level calls are gated: nested calls from `pi_exec` and shell commands are outside it, so it is a workflow guardrail, not a sandbox. `lint.ts` implements the separate `context_lint` check for orphaned context files, unknown headings and symbols, and dead `Coupled:`, `Verify:`, and wiki links. Change reflection and `/distill` may create a missing context file for a non-obvious invariant the work revealed, and name it in their reply for review.
+* **`code-context` (`installer.ts`, `lint.ts`):** A context file at `.context/<path>.md` mirrors one source file and holds what its code cannot show: invariants, hazards, rationale, and cross-file couplings. A top-level `read` of the file appends the whole context file and a hash marker, unless that marker is already in context. A top-level `edit` or `write` of that file, or of its context file, **fails** only when the context file exists and its current marker is not in the model's context; a file with no context file is never blocked. The refusal does not contain the context file; it tells the model which file to read, and the model reads it, replans, and retries. A changed context file has a new hash, and a marker that compaction removed no longer counts. Only top-level calls are gated: nested calls from codemode scripts and shell commands are outside it, so it is a workflow guardrail, not a sandbox. `lint.ts` implements the separate `context_lint` check for orphaned context files, unknown headings and symbols, and dead `Coupled:`, `Verify:`, and wiki links. Change reflection and `/distill` may create a missing context file for a non-obvious invariant the work revealed, and name it in their reply for review.
 * **`home-search-guard` (`components/home-search-guard`):** Intercepts Pi's `grep`, `find`, and `glob` tools and recognized bash searches (`rg`, `grep`, `find`, `fd`, ...) rooted at `/`, `$HOME`, or a configured protected root, and asks for a specific repository, worktree, or subdirectory instead. Bash detection is best-effort.
 * **`repo-rules` (`components/repo-rules`):** A repository that has `.pi/rules/` gets every top-level `edit` and `write` checked before it lands. The checks are its GritQL rules and an optional comment ban; every shell command is also checked against its action rules. Agents are told to turn any mistake a machine can detect into a rule. Each rule carries `fires` and `passes` samples, and a rule that does not load or misbehaves on them is refused when written. `repo_rules` lists how often each rule fired, so rules can be narrowed or retired. See `docs/repo-rules.md`.
 
@@ -353,7 +332,7 @@ flowchart TB
     end
 
     subgraph Loops["C. Fresh-Context Loops (skills/ralph)"]
-        Ralph["ralph pi_exec program<br/>(ralph-simple.py / ralph-ledger.py)"] <-->|One increment per fresh temporary peer| LState[("Repository<br/>+ optional .ledger task")]
+        Ralph["ralph saved JavaScript program<br/>(ralph.js)"] <-->|One increment per fresh temporary peer| LState[("Repository<br/>+ optional .ledger task")]
     end
 ```
 
@@ -363,12 +342,12 @@ flowchart TB
    * For the human operator, `/btw` (`components/btw`) directly owns a private, read-only SDK side conversation seeded with recent parent text, so you can ask a tangent question without adding its turns to the main agent's context. You can inject an answer into the main conversation when you want it there.
 2. **Peers as Colleagues (`components/organization`, `components/session-state`):**
    * Lasting work goes to a person, not a disposable child: a top-level Pi session in a catalog role, with its own transcript, a written goal as an assigned task (`assign`, `take_task`, `focus`, `finish_task`), and retained conversations with explicit access. Managers handle staffing and assignments; everyone uses addressed mail, shared topic channels, selective recall and reversible conversation lifecycle. Channel attention uses explicit `notify`; escalation follows the tree to your desk. See [docs/organization.md](docs/organization.md).
-   * `pi_exec` programs call the same people: attach an awake colleague by session id under a name the program chooses, or start a temporary peer in a role that is discarded when its call or the program ends (`peer-calls.ts`).
+   * Codemode scripts call the same people through `tools.colleague` for an awake colleague or `tools.temporary_peer` for one task in a catalog role. These tools require a managing role or an unroled organization root; the runtime owns their processes and cleanup. See [programs](docs/programs.md#peer-turns).
 3. **Parallel Branch Tournaments (`components/branch-search`):**
    * Ousterhout’s *A Philosophy of Software Design* argues that you should **Design It Twice**—because your first design is rarely the cleanest. When creation is cheap, why only *design* it twice when you can *implement* it three times in parallel?
    * The `search_branches` tool (`orchestrator.ts`, `workspace.ts`) snapshots the workspace, asks a fork of the conversation for distinct approaches, and runs each one as its own conversation fork in an isolated git worktree. It then runs the agent's gate commands (such as the test suite) and numeric judge commands (time, size, any score a command can print), ranks the attempts that pass by the judges' medians, optionally lets a `judge.profile` model choose among them (`judge.ts`), applies the winner's diff, and keeps a `record.json` of every attempt (`record.ts`). It stays off until `~/.pi/agent/branch-search.json` exists (copy `branch-search.example.json`).
 4. **Ledger-Backed Ralph Loops (`skills/ralph`):**
-   * A raw `while true; do agent; done` loop ("Ralph loop") works great until context resets cause the agent to thrash on the same half-finished item. The `ralph` skill guides the agent to write a `pi_exec` program that runs bounded, sequential, fresh Implementation Engineer peers, one increment each, each discarded before the next starts. `skills/ralph/references/ralph-simple.py` works over any caller-owned goal with no ledger, and `ralph-ledger.py` (`ledger-increment.md`) works over a prepared `.ledger` task as its durable memory, stopping when that task is `done` or `blocked`. Every peer boots with a fresh context; the repository and ledger carry the state, and the caller keeps review and integration authority.
+   * A raw `while true; do agent; done` loop ("Ralph loop") works great until context resets cause the agent to thrash on the same half-finished item. The `ralph` skill supplies `skills/ralph/references/ralph.js`, a saved program that runs sequential, fresh Implementation Engineer peers, one increment each, each discarded before the next starts. It works over a caller-owned goal, optionally using a prepared `.ledger` task as durable memory. Every peer boots with a fresh context; the repository and ledger carry the state, and the caller keeps review and integration authority.
 #### The Extrapolated & Emergent Implications
 * **Stochastic Search with Deterministic Selection:** When you combine `branch-search` with Ralph, you stop treating the LLM as a deterministic compiler that must get the answer right on the first try. Instead, you use `branch-search` to sample the solution space across multiple isolated git worktrees, let your gates and judge commands select the survivor, and then let a Ralph loop grind out the remaining increments of a ledger task with clean-context peers.
 
@@ -377,7 +356,7 @@ flowchart TB
 ### 6. The Operator Cockpit: Multiplexing Attention Across Panes
 
 #### The Observed Dysfunction
-Once your harness is reliable enough to run 15-minute `pi-exec` work graphs, `ralph` loops, and `branch-search` tournaments, the bottleneck moves out of the terminal pane and into your own skull. Babysitting a streaming terminal spinner is a terrible use of human attention; conversely, alt-tabbing away to another `tmux` window usually means an agent sits idle for twenty minutes waiting on a permission prompt or clarification.
+Once your harness is reliable enough to run 15-minute codemode work graphs, `ralph` loops, and `branch-search` tournaments, the bottleneck moves out of the terminal pane and into your own skull. Babysitting a streaming terminal spinner is a terrible use of human attention; conversely, alt-tabbing away to another `tmux` window usually means an agent sits idle for twenty minutes waiting on a permission prompt or clarification.
 
 #### The Mechanical Response (`tmux-sessions`, `notify`, `terse-tools`, `input-editor`, `prompt-stash`, `wiki`)
 
@@ -389,10 +368,10 @@ An illustrative layout; passive activity accompanies the turn stream, while `/re
 ├──────────────────────────────────────┬───────────────────────────────────────┤
 │ Primary Turn Stream (terse-tools)    │ Live Inspection & Sidecars            │
 │                                      │                                       │
-│ ▸ read components/notebook/fold.ts   │ ┌─ Active Work: Pi Exec ────────────┐ │
-│ ▸ pi-exec: audit_ledger_tokens.py    │ │ ● reviewer (peer)        [12.4s]  │ │
-│   └─ ✓ 14 files checked, 0 leaks     │ │ ● test-runner (peer)     [ 8.1s]  │ │
-│ ● CONCERN token cap edge case is     │ │ ○ read (core tool)       [queued] │ │
+│ ▸ read components/notebook/fold.ts   │ ┌─ Active Work: Tasks & Interns ────┐ │
+│ ▸ program_audit_ledger_tokens       │ │ ● test command           [12.4s] │ │
+│   └─ ✓ 14 files checked, 0 leaks     │ │ ● research intern         [8.1s] │ │
+│ ● CONCERN token cap edge case is     │ │ ○ reminder                 [due] │ │
 │   untested                           │ └───────────────────────────────────┘ │
 │ ▸ edit src/model-budget.ts (+18/-4)  │ ┌─ /btw Side Conversation ──────────┐ │
 │ ▸ bash (rtk): vitest run             │ │ Q: Does fold.ts preserve source   │ │
@@ -420,7 +399,7 @@ The codebase enforces a strict separation between **implementation machinery** (
 
 | Component (`components/`) | Extension (`extensions/`) | Primary Mechanism & Boundary |
 | :--- | :--- | :--- |
-| `pi-exec` | `pi-exec.ts` | Bounded Monty Python guest runtime (`program.ts`, `guest-api.ts`), host call bridge (`host-calls.ts`), role-peer calls (`peer-calls.ts`, `peer-python.ts`), resource limits (`envelope.ts`), evidence helpers (`evidence.ts`), session checkpoints (`checkpoint.ts`), and saved programs (`saved-programs.ts`). |
+| `programs` | `programs.ts` | Activates Pi's native `codemode`, registers trusted `.pi/programs/<name>.js` files as tools, and supplies codemode-only peer turns through `temporary_peer` and `colleague`. See [programs](docs/programs.md). |
 | `notebook` | *(installed by `pi-pair.ts`)* | Session learnings folded from sourced observations and reflections (`session-ledger/fold.ts`, `progress.ts`), learning reflection (`learning-cycle.ts`), distillation into project files (`distillation.ts`), `.pi/LEARNINGS.md` loading (`project-learnings.ts`), and the post-compaction learnings packet (`compaction-packet.ts`). |
 | *(none)* | `auto-compact.ts` → `compaction-safety.ts` | Fail-closed automatic compaction: a failed or cancelled automatic compaction aborts the run before the next provider request. |
 | *(none)* | `ledger.ts` | `ledger_add` and `ledger_status` tools and the `.ledger` workbench prompt contract. |
@@ -473,7 +452,7 @@ flowchart LR
 | Skill | Scripts & Reference Machinery | What It Does |
 | :--- | :--- | :--- |
 | `code-review` | `SKILL.md` | A review board judges a change on two separate axes, repository standards and originating intent: reviewers report first findings alone, a skeptic and the author challenge them in one thread, and a chair who is never the author rules on each. The board reports; it does not fix. |
-| `ralph` | `ralph-ledger.py`, `ralph-simple.py`, `ledger-increment.md`, `simple-increment.md` | Adaptable `pi_exec` programs that run bounded, sequential increments, each by a fresh temporary peer: the ledger variant over a prepared `.ledger` task, the simple variant over any goal without a ledger. |
+| `ralph` | `ralph.js`, `ledger-increment.md`, `simple-increment.md` | A saved JavaScript program that runs sequential increments, each by a fresh temporary peer, over a caller-owned goal with an optional prepared `.ledger` task. |
 | `codebase-design` & `improve-codebase-architecture` | `deepening.md`, `design-it-twice.md` | Teaches Ousterhout's deep-module vocabulary (radically simple interfaces hiding deep implementation), with optional Design It Twice exploration of alternative interfaces; an architecture board surveys for deepening opportunities and reports them for the operator's choice, without production changes. |
 | `interrogate-to-design` & `to-spec` | `SKILL.md` | Stops the contractor anti-pattern ("build whatever satisfies the literal prompt"). `interrogate-to-design` interviews you to resolve open decisions and unstated assumptions; `to-spec` synthesizes already-settled decisions into a task-local specification without an interview. |
 | `to-tickets` | `SKILL.md` | Breaks a plan or specification into approved tracer-bullet tickets with explicit blocking edges. |
@@ -515,7 +494,7 @@ These model-selectable skills coordinate people within an already authorized goa
 A system's character is defined by what it refuses to include.
 
 * **No theatrical agent swarms.** There is no "CEO Agent" delegating to a "Product Manager Agent" for show, and no fleet of disposable children running in the background. One-shot reading goes to interns that answer once and exit; lasting work goes to people with a role, an assigned task, their own transcript, and threads anyone can read.
-* **No vector-database RAG over source code.** Chunking source files into 512-token embeddings destroys call graphs, type definitions, and lexical precision. Between live file and search tools, `code-context` context files, `session-search`, the `wiki` page graph, and `pi-exec` programs that compose those tools, exact structural and lexical lookup is what I reach for.
+* **No vector-database RAG over source code.** Chunking source files into 512-token embeddings destroys call graphs, type definitions, and lexical precision. Between live file and search tools, `code-context` context files, `session-search`, the `wiki` page graph, and codemode programs that compose those tools, exact structural and lexical lookup is what I reach for.
 * **No silent auto-remediation magic.** When a guard triggers (`home-search-guard`, `code-context`), it fails loudly and tells the model *why* so the model updates its plan in-context. Invisible retry middleware just burns tokens in the dark while hiding architectural friction.
 * **No lowest-common-denominator OS abstractions.** The cockpit layer (`notify`, `tmux-sessions`) is built unapologetically for macOS, `tmux`, and a terminal-first workflow.
 
@@ -534,7 +513,7 @@ I want to be candid about where this architecture pinches:
 [`docs/setup.md`](docs/setup.md) takes a new macOS machine from nothing to a working environment.
 
 ### Prerequisites
-* **Runtimes:** Node.js 22.19.0 or later (the `engines` field in `package.json`) and the `pi` coding agent CLI 1.2.0 or later. TypeScript checks use `tsc` and tests use Vitest; Pi Exec runs on the bundled Monty runtime (`@pydantic/monty`), so no system Python is required.
+* **Runtimes:** Node.js 22.19.0 or later (the `engines` field in `package.json`) and the `pi` coding agent CLI 1.2.0 or later. TypeScript checks use `tsc` and tests use Vitest; programs use Pi's built-in `codemode` (QuickJS). Keep the built-in enabled in Pi settings.
 * **Host CLI Tools:** `git` (`branch-search` uses worktrees), `tmux` 3.2 or later plus `uv` for the `tmux-sessions` agent sidebar, Ghostty and `terminal-notifier` for macOS notifications with click-to-focus, and `rtk` (optional; detected automatically by `components/rtk`).
 
 ### Installation & Workspace Verification
@@ -591,7 +570,7 @@ Branch search stays off until a configuration exists:
 npm run audit:cache
 ```
 
-`.pi/programs/rpc_smoke.py` is a saved `pi_exec` program, not a standalone Python script. In a Pi session in this trusted checkout, ask the agent to call `program_rpc_smoke` with a `prompt`: it sends that prompt through the real installed Pi in RPC mode in a temporary directory and reports custom messages and usage. It calls the real default model.
+`.pi/programs/rpc-smoke.js` is a saved codemode program, not a standalone Node script. In a Pi session in this trusted checkout, ask the agent to call `program_rpc_smoke` with a `prompt`: it sends that prompt through the real installed Pi in RPC mode in a temporary directory and reports custom messages and usage. It calls the real default model.
 
 ### Installing Tmux & macOS Notification Integrations
 
@@ -612,4 +591,4 @@ Then, inside Pi, run `/notify-setup` to create the optional `~/Applications/Pi N
 
 Built and maintained by **Alexander Butler** for daily production use.
 
-Behavior across `extensions/`, `components/`, and `apps/` is pinned by tests in `tests/`, `components/*/tests/`, and `apps/agent-workplace/tests/`; coverage varies by feature, and the procedural workflows in `skills/` are prose rather than tested code. If you disagree with an architectural judgment here—whether it is how `notebook` folds learnings, how `pi-exec` isolates tool loops, or how `pair-programmer` schedules reviews—you don't have to take my word for it. Read the test fixtures, inspect the state transitions, and remix whichever parts survive contact with your own work.
+Behavior across `extensions/`, `components/`, and `apps/` is pinned by tests in `tests/`, `components/*/tests/`, and `apps/agent-workplace/tests/`; coverage varies by feature, and the procedural workflows in `skills/` are prose rather than tested code. If you disagree with an architectural judgment here—whether it is how `notebook` folds learnings, how programs compose tools through `codemode`, or how `pair-programmer` schedules reviews—you don't have to take my word for it. Read the test fixtures, inspect the state transitions, and remix whichever parts survive contact with your own work.
