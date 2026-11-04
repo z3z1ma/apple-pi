@@ -218,3 +218,22 @@ test("a temporal trace keeps its state headers, even with one looping state", as
 	expect(result.verdict).toBe("violation");
 	expect(result.commands[0].instance).toMatch(/^State 0 \(loop\):$/m);
 }, 120_000);
+
+test("a model or an opened module edited during the check is an error", async () => {
+	const folder = join(dir, "opened");
+	mkdirSync(folder, { recursive: true });
+	writeFileSync(join(folder, "lib.als"), "module lib\nsig A {}\n");
+	const spec = join(folder, "main.als");
+	writeFileSync(spec, "open lib\nassert P { some A or no A }\ncheck P for 3\nrun {} for 2\n");
+	const real = execFileSync("sh", ["-c", "command -v java"], { encoding: "utf8" }).trim();
+	const bin = join(dir, "editing");
+	mkdirSync(bin, { recursive: true });
+	writeFileSync(
+		join(bin, "java"),
+		`#!/bin/sh\ncase " $* " in *" exec "*) echo "-- touched" >> "${join(folder, "lib.als")}" ;; esac\nexec "${real}" "$@"\n`,
+	);
+	chmodSync(join(bin, "java"), 0o755);
+	const result = await withPath(bin, () => runAlloy({ spec }));
+	expect(result.verdict).toBe("error");
+	expect(result.message).toBe("The model changed while it was being checked.");
+}, 120_000);

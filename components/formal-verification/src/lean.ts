@@ -131,32 +131,48 @@ async function launchers(home: string): Promise<boolean> {
 	return true;
 }
 
-async function publish(staging: string, home: string): Promise<void> {
-	const settled = async (error: unknown) => {
-		const code = (error as NodeJS.ErrnoException).code;
-		if ((code !== "ENOTEMPTY" && code !== "EEXIST") || !(await launchers(home))) throw error;
-	};
+function running(pid: number): boolean {
 	try {
-		await rename(staging, home);
-		return;
+		return process.kill(pid, 0);
 	} catch (error) {
-		const code = (error as NodeJS.ErrnoException).code;
-		if (code !== "ENOTEMPTY" && code !== "EEXIST") throw error;
-		if (await launchers(home)) return;
+		return (error as NodeJS.ErrnoException).code !== "ESRCH";
 	}
-	const aside = `${staging}.incomplete`;
-	try {
-		await rename(home, aside);
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+}
+
+async function locked<T>(lock: string, work: () => Promise<T>): Promise<T> {
+	for (;;) {
+		try {
+			await writeFile(lock, String(process.pid), { flag: "wx" });
+			break;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+			const owner = Number(await readFile(lock, "utf8").catch(() => ""));
+			if (owner && !running(owner)) await rm(lock, { force: true });
+			else await new Promise((wake) => setTimeout(wake, 100));
+		}
 	}
 	try {
-		await rename(staging, home);
-	} catch (error) {
-		await settled(error);
+		return await work();
 	} finally {
-		await rm(aside, { recursive: true, force: true });
+		await rm(lock, { force: true });
 	}
+}
+
+async function publish(staging: string, home: string): Promise<void> {
+	await locked(`${home}.lock`, async () => {
+		if (await launchers(home)) return;
+		const aside = `${staging}.incomplete`;
+		try {
+			await rename(home, aside);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		}
+		try {
+			await rename(staging, home);
+		} finally {
+			await rm(aside, { recursive: true, force: true });
+		}
+	});
 }
 
 export async function elanHome(signal?: AbortSignal, onLine?: (line: string) => void): Promise<string> {

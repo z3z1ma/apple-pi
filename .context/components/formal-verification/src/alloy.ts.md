@@ -4,7 +4,7 @@ Each selected command runs in its own `exec -c <index>` with its own output dire
 
 A command's result is trusted only when the receipt names the requested solver and holds exactly one entry, keyed and named as the listing names the command, of the command's type, with no `transformPath`, and either no `solution` (no instance) or a nonempty array of solutions with instances; and the process exited 0, or exited 1 with Alloy's line `N. '<Kind> <name> ...' was (not) satisfied against expectation` for a command that declares `expect`, consistent with the receipt. Anything else is an error. A missing `solution` means no instance only under those conditions: export backends (CNF, KK) write receipts without one, which is why the solver is restricted to solving backends.
 
-Each command re-reads the spec in its own JVM, so the spec's SHA-256 before the listing must match after the last command; a model edited mid-check is an error. Opened modules are not fingerprinted.
+Each command re-reads the spec and its opened modules in its own JVM, so a fingerprint of every `.als` file under the spec's directory (paths and contents) taken before the listing must match after the last command; a model edited mid-check is an error. Modules opened from outside that directory are not covered.
 
 Expectations come from the `commands` listing (`... expect N`), not the receipt: the pinned receipt writer omits zero-valued fields, so `expect 0` has no `expects` field at all.
 

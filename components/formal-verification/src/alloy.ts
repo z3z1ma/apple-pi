@@ -199,6 +199,21 @@ async function execute(
 	};
 }
 
+export async function modelFingerprint(spec: string): Promise<string> {
+	const root = dirname(spec);
+	const files = (await readdir(root, { recursive: true }))
+		.filter((file) => file.endsWith(".als") && !/(^|\/)(node_modules|\.git)\//.test(file))
+		.sort();
+	const hash = createHash("sha256");
+	for (const file of files)
+		hash
+			.update(file)
+			.update("\0")
+			.update(await readFile(join(root, file)))
+			.update("\0");
+	return hash.digest("hex");
+}
+
 const found = (command: AlloyCommand) => command.outcome === "counterexample" || command.outcome === "instance";
 
 export function judge(commands: AlloyCommand[]): [AlloyVerdict, string] {
@@ -237,10 +252,7 @@ export async function runAlloy(options: AlloyOptions): Promise<AlloyResult> {
 		throw new Error(`solver must be one of ${ALLOY_SOLVERS.join(", ")}`);
 	const jar = await alloyJar(options.signal);
 	const spec = resolve(options.spec);
-	const fingerprint = async () =>
-		createHash("sha256")
-			.update(await readFile(spec))
-			.digest("hex");
+	const fingerprint = () => modelFingerprint(spec);
 	const before = await fingerprint();
 	const temporal = /\bvar\b/.test(await readFile(spec, "utf8"));
 	const base = { version: ALLOY_VERSION, commands: [] as AlloyCommand[] };

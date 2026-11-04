@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -281,4 +281,28 @@ test("a failed phase shows its own output in the report", async () => {
 	const text = (result.content[0] as { text: string }).text;
 	expect(text).toMatch(/: INCOMPLETE\. The kernel replay \(leanchecker\) did not run\./);
 	expect(text).toContain("Lean output:\nleanchecker: cannot start");
+}, 300_000);
+
+test("concurrent first installs of elan, over an incomplete home, publish one complete home", async () => {
+	const cache = mkdtempSync(join(tmpdir(), "elan-cache-"));
+	const previous = { cache: process.env.XDG_CACHE_HOME, elan: process.env.ELAN_HOME };
+	process.env.XDG_CACHE_HOME = cache;
+	delete process.env.ELAN_HOME;
+	try {
+		const home = join(cache, "apple-pi", "elan", "4.2.4");
+		mkdirSync(join(home, "bin"), { recursive: true });
+		writeFileSync(join(home, "bin", "elan"), "incomplete");
+		const homes = await Promise.all([elanHome(), elanHome(), elanHome()]);
+		expect(new Set(homes)).toEqual(new Set([home]));
+		for (const tool of ["elan", "lean", "lake", "leanchecker"])
+			expect(readFileSync(join(home, "bin", tool)).length).toBeGreaterThan(1000);
+		expect(
+			readdirSync(join(cache, "apple-pi", "elan")).filter((name) => name.includes("staging") || name.endsWith(".lock")),
+		).toEqual([]);
+	} finally {
+		if (previous.cache === undefined) delete process.env.XDG_CACHE_HOME;
+		else process.env.XDG_CACHE_HOME = previous.cache;
+		if (previous.elan !== undefined) process.env.ELAN_HOME = previous.elan;
+		rmSync(cache, { recursive: true, force: true });
+	}
 }, 300_000);
