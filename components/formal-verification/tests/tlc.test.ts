@@ -1,10 +1,11 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import { createTlcTool } from "../src/index.js";
 import { parseTlcOutput, runTlc } from "../src/tlc.js";
-import { configWith, type TlaResult } from "../src/toolchain.js";
+import { configWith, pinned, type TlaResult } from "../src/toolchain.js";
 
 const dir = mkdtempSync(join(tmpdir(), "tlc-test-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -217,14 +218,9 @@ test("cancelling stops the run", async () => {
 }, 120_000);
 
 test("concurrent first downloads of one file in one process both succeed", async () => {
-	const { createHash } = await import("node:crypto");
-	const { mkdtempSync } = await import("node:fs");
-	const { tmpdir } = await import("node:os");
-	const { join } = await import("node:path");
-	const { pinned } = await import("../src/toolchain.js");
 	const bytes = Buffer.from("pinned bytes");
 	const checksum = createHash("sha256").update(bytes).digest("hex");
-	const file = join(mkdtempSync(join(tmpdir(), "pinned-")), "tool.bin");
+	const file = join(dir, "pinned", "tool.bin");
 	const slow = () => new Promise<Buffer>((done) => setTimeout(() => done(bytes), 50));
 	const results = await Promise.all([pinned(file, checksum, slow), pinned(file, checksum, slow)]);
 	expect(results.map((result) => result.toString())).toEqual(["pinned bytes", "pinned bytes"]);
