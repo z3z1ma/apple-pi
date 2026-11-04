@@ -38,7 +38,7 @@ export default defineConfig({
 			"components/terse-tools/tests/**/*.test.ts",
 			"components/rtk/tests/**/*.test.ts",
 			"components/change-reflection/tests/**/*.test.ts",
-			"components/pi-exec/tests/**/*.test.ts",
+			"components/programs/tests/**/*.test.ts",
 			"components/branch-search/tests/**/*.test.ts",
 			"components/browser-pages/tests/**/*.test.ts",
 			"apps/agent-workplace/tests/**/*.test.ts",

@@ -3234,7 +3234,7 @@ async function groupGone(pid) {
 }
 //#endregion
 //#region components/shared/src/git-change.ts
-var GIT_TARGET_HELP = "The change: {\"kind\":\"working-tree\",\"base\":\"HEAD\"} for tracked, staged and untracked edits against an exact base; {\"kind\":\"staged\"} for the index against HEAD; {\"kind\":\"commit\",\"commit\":\"X\"} for one commit against its parent (merges need \"parent\"); {\"kind\":\"range\",\"base\":\"A\",\"head\":\"B\"} for exact endpoints; {\"kind\":\"branch\",\"base\":\"main\",\"head\":\"feature\"} for feature since its merge base with main, as a pull request shows it.";
+var GIT_TARGET_HELP = "The change, by kind: working-tree is tracked, staged and untracked edits against base; staged is the index against HEAD; commit is one commit against its parent (merges need parent); range is exact endpoints; branch is head since its merge base with base, as a pull request shows it.";
 var ref = Type.String({
 	minLength: 1,
 	pattern: "\\S"
