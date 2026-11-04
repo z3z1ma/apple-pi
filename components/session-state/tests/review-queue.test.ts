@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { type ExtensionCommandContext, SessionManager } from "@earendil-works/pi-coding-agent";
+import { Value } from "typebox/value";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import codeReview from "../../../extensions/code-review.js";
 import { createEventBus } from "../../../node_modules/@earendil-works/pi-coding-agent/dist/core/event-bus.js";
@@ -162,9 +163,17 @@ test("an ordinary reviewer runs in captured source and its result survives guard
 		},
 		{ timeout: 10000 },
 	);
-	const attempts = query<{ person: string; model: string; thinking: string; output: string; state: string }>(
+	const attempts = query<{
+		person: string;
+		model: string;
+		thinking: string;
+		output: string;
+		state: string;
+		kind: string;
+		input: string;
+	}>(
 		state.dbPath,
-		"select person, model, thinking, output, state from review_attempts where review_id = ?",
+		"select person, model, thinking, output, state, kind, input from review_attempts where review_id = ?",
 		job.id,
 	);
 	expect(attempts.length).toBeGreaterThan(0);
@@ -175,6 +184,14 @@ test("an ordinary reviewer runs in captured source and its result survives guard
 			readFileSync(join(state.agentDir, "peer-records", `${attempt.person}.jsonl`), "utf8").split("\n")[0]!,
 		);
 		expect(header.cwd).toBe(JSON.parse(job.artifact).source);
+		if (attempt.kind === "focused" || attempt.kind === "integration") {
+			const input = JSON.parse(attempt.input);
+			const { pass } = JSON.parse(readFileSync(input.contextFile, "utf8"));
+			const output = JSON.parse(attempt.output);
+			expect(Value.Check(input.outputSchema, output)).toBe(true);
+			output.coverage[0].question = pass.questions[0].question;
+			expect(Value.Check(input.outputSchema, output)).toBe(false);
+		}
 	}
 	expect(query(state.dbPath, "select * from program_scopes")).toEqual([]);
 	expect(query(state.dbPath, "select * from program_peers")).toEqual([]);

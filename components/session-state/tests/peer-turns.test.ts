@@ -5,6 +5,8 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
+import { type PlannedPass, reviewReportSchema } from "../../code-review/src/contracts.js";
+import { normalizeOutputSchema } from "../../shared/src/structured-output.js";
 import { sendCommand } from "../src/client.js";
 import bridge from "../src/index.js";
 import { close, query, runtimePid, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
@@ -113,6 +115,51 @@ test("post-hook typed results are validated, with the return tool hidden between
 			);
 			expect(run.session.getActiveToolNames()).not.toContain("pi_exec_return");
 		}
+	} finally {
+		await close(run);
+	}
+}, 20000);
+
+test("a reviewer can correct question prose to its assigned ID within the same turn", async () => {
+	const pass: PlannedPass = {
+		id: "inspection",
+		role: "code-review-specialist",
+		depth: "standard",
+		lenses: ["correctness"],
+		questions: [{ id: "cleanup", question: "Are resources released?", verification: "Trace release." }],
+		chunk: null,
+		regions: [],
+		kind: "focused",
+	};
+	const report = {
+		artifact: "captured-target",
+		pass: pass.id,
+		summary: "The resource is released.",
+		coverage: [{ question: "cleanup", state: "completed", evidence: ["caller releases the resource"], reason: "" }],
+		findings: [],
+		limitations: [],
+		extraPasses: [],
+	};
+	const malformed = structuredClone(report);
+	malformed.coverage[0]!.question = pass.questions[0]!.question;
+	const run = await fauxSession(
+		[bridge],
+		[
+			fauxAssistantMessage([fauxToolCall("pi_exec_return", malformed)], { stopReason: "toolUse" }),
+			fauxAssistantMessage([fauxToolCall("pi_exec_return", report)], { stopReason: "toolUse" }),
+		],
+		[],
+	);
+	try {
+		const id = run.session.sessionManager.getSessionId();
+		await seen(id);
+		expect(
+			await sendCommand(id, {
+				kind: "run_turn",
+				task: "Inspect cleanup",
+				outputSchema: normalizeOutputSchema(reviewReportSchema(pass)),
+			}),
+		).toMatchObject({ stage: "applied", result: { status: "completed", value: report } });
 	} finally {
 		await close(run);
 	}

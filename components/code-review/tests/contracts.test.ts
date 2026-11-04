@@ -1,8 +1,10 @@
+import { Value } from "typebox/value";
 import { expect, test } from "vitest";
 import {
 	planPasses,
 	type ReviewPlan,
 	type ReviewReport,
+	reviewReportSchema,
 	unscopedRegions,
 	validateFindings,
 	validatePlan,
@@ -141,6 +143,36 @@ test("a report accounts for every question and cannot claim completed coverage w
 	unsupported.coverage[0]!.reason = "The required host check was unavailable.";
 	expect(validateReport(unsupported, "captured-target", pass, paths).coverage[0]!.state).toBe("incomplete");
 	expect(() => validateReport(report(), "new-target", pass, paths)).toThrow("different artifact");
+});
+
+test("inspection output schemas accept assigned question IDs, not prose or another pass's IDs", () => {
+	const passes = planPasses(plan(), regions);
+	const schemas = passes.map((pass) => reviewReportSchema(pass));
+	for (const [index, pass] of passes.entries()) {
+		const value = report();
+		value.pass = pass.id;
+		value.coverage[0]!.question = pass.questions[0]!.id;
+		expect(Value.Check(schemas[index]!, value)).toBe(true);
+		value.coverage[0]!.question = pass.questions[0]!.question;
+		expect(Value.Check(schemas[index]!, value)).toBe(false);
+		value.coverage[0]!.question = passes[(index + 1) % passes.length]!.questions[0]!.id;
+		expect(Value.Check(schemas[index]!, value)).toBe(false);
+	}
+});
+
+test("multiple assigned questions still require exact coverage and evidence", () => {
+	const pass = planPasses(plan(), regions)[0]!;
+	pass.questions.push({ id: "cleanup", question: "Are resources released?", verification: "Trace release." });
+	const schema = reviewReportSchema(pass);
+	const value = report();
+	value.coverage.push({ question: "cleanup", state: "incomplete", evidence: [], reason: "Host unavailable." });
+	expect(Value.Check(schema, value)).toBe(true);
+	expect(validateReport(value, "captured-target", pass, new Set(["api.ts"]))).toEqual(value);
+	value.coverage[1]!.question = "consent";
+	expect(() => validateReport(value, "captured-target", pass, new Set(["api.ts"]))).toThrow("Duplicate coverage");
+	value.coverage[1]!.question = "cleanup";
+	value.coverage[1]!.reason = "";
+	expect(() => validateReport(value, "captured-target", pass, new Set(["api.ts"]))).toThrow("needs a reason");
 });
 
 test("validation coverage gaps name actual inspected questions", () => {

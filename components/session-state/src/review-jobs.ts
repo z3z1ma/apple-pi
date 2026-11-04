@@ -15,7 +15,7 @@ import {
 	type ReviewPlan,
 	ReviewPlanSchema,
 	type ReviewReport,
-	ReviewReportSchema,
+	reviewReportSchema,
 	unscopedRegions,
 	validatePlan,
 	validateReport,
@@ -488,7 +488,7 @@ export class ReviewJobs {
 							],
 							kind: pass.kind,
 							goal: `${artifact.configuration?.instructions.inspection ?? INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
-							schema: ReviewReportSchema,
+							schema: reviewReportSchema(pass),
 							context: {
 								phase: "inspection",
 								artifact: source,

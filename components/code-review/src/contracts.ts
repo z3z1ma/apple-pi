@@ -122,6 +122,28 @@ export const ReviewReportSchema = Type.Object(
 );
 export type ReviewReport = Static<typeof ReviewReportSchema>;
 
+export function reviewReportSchema(pass: PlannedPass) {
+	const coverage = ReviewReportSchema.properties.coverage.items;
+	return Type.Object(
+		{
+			...ReviewReportSchema.properties,
+			coverage: Type.Array(
+				Type.Object(
+					{
+						...coverage.properties,
+						question: Type.String({
+							enum: pass.questions.map((entry) => entry.id),
+							description: "The assigned question ID from pass.questions[].id, not the question text.",
+						}),
+					},
+					object,
+				),
+			),
+		},
+		object,
+	);
+}
+
 export const FindingValidationSchema = Type.Object(
 	{
 		artifact: text,
