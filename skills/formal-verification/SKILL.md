@@ -17,7 +17,19 @@ Find a failing ordering, configuration or input before it reaches production. De
 
 The engines overlap (Alloy 6 has mutable state, TLA+ can state relational invariants, Apalache proves inductive invariants), so choose by which one states the claim most plainly. A natural split: Alloy checks that the object model's rules admit no malformed configuration, TLA+ checks that every operation preserves those rules over time, and Lean proves the laws of the pure functions inside.
 
-State the claim once, in observable terms, before any model or proof, so a reviewer can judge it apart from the work that checks it. Never treat agreement between engines as proof: models written by one author share that author's assumptions. Each verdict covers its own model, scope or theorem.
+Never treat agreement between engines as proof: models written by one author share that author's assumptions. Each verdict covers its own model, scope or theorem.
+
+## State the property, then choose when to model
+
+Write the property first, in observable terms: what must never happen, what must eventually happen, what law must hold for every input. Take it from intent (the requirement, the design, the user's words, a reported failure), not from reading the code. A property read off the code restates what the code does, so the check proves the code's bugs along with its behavior. The property is the contract a reviewer judges apart from the model or proof that checks it, and it stays fixed while models and code change.
+
+Then choose the moment:
+
+- **Before code**, when a design is still open: a new protocol (locking, publication, replay, retries, cancellation), a new data model or migration, or a pure function whose law you can state. A counterexample now costs an edit to a model; after the code lands it costs a defect in production. Model the design at the level of its decisions, check it, and revise until it passes. Then implement against the model, keeping a map from each modeled action or relation to the code that will own it. For a law, state the Lean theorem first, write the reference definition and prove it, then write the implementation with tests that tie it to the definition.
+- **From existing code**, when the behavior already exists: auditing a lifecycle, investigating a reported failure, or checking a fix. Derive the model from the implementation as it is (next section), keep the property from intent, and treat each counterexample as a candidate defect until a test against the real code confirms it.
+- **Both**, for protocols whose failure is costly: model the design first; after implementing, derive the model again from the code and check the same property. The second model catches drift between what was designed and what was built. When the two disagree, decide deliberately whether the code or the design is wrong.
+
+A model written before code describes the design; a model derived from code describes the build. Say which one a model is in its companion document, so a reader knows whether a `pass` covers the design or the implementation. Choose formal checking where an ordering, a structure or a law is easy to get wrong and expensive to get wrong; ordinary tests cover the rest.
 
 ## Choose the boundary
 
@@ -27,7 +39,7 @@ State the claim in observable terms. Separate safety (something bad never happen
 
 ## Derive the model from the implementation
 
-Read the code, its `.context` invariants where present, the governing intent and the relevant tests. Identify the actual writers, durable stores, transaction boundaries, queues and observers. Trace startup and error paths as well as the success path. Map every modeled action to its implementation owner in the model's companion document.
+When modeling code that exists, read the code, its `.context` invariants where present, the governing intent and the relevant tests. Identify the actual writers, durable stores, transaction boundaries, queues and observers. Trace startup and error paths as well as the success path. Map every modeled action to its implementation owner in the model's companion document.
 
 Represent durable state separately from volatile state. Make a transaction one durable transition, with volatile intermediate phases where a crash can occur. Preserve separate stores as separate transitions: a database commit and a transcript or filesystem write are different events. Model acknowledgments and retries independently from effects. Keep the identity and deduplication rule the implementation actually uses.
 
@@ -84,4 +96,4 @@ State what the test exercised: a seeded snapshot proves recovery from that snaps
 
 ## Done
 
-The claim, source mapping and assumptions are reviewable, the checker covers the declared instance, scope or theorem, the failure control is detected, and any confirmed implementation counterexample has been reported. Report the exact checked bounds, scopes or theorems, and the unmodeled behavior. A passing abstract model is evidence about those transitions or configurations, and a Lean proof about its reference definition; neither proves the whole implementation.
+The property (from intent), the source mapping or design map, and the assumptions are reviewable, the checker covers the declared instance, scope or theorem, the failure control is detected, and any confirmed implementation counterexample has been reported. Report the exact checked bounds, scopes or theorems, and the unmodeled behavior. A passing abstract model is evidence about those transitions or configurations, and a Lean proof about its reference definition; neither proves the whole implementation.
