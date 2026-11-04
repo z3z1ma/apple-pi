@@ -232,18 +232,29 @@ export async function runProcess(command: string, options: ProcessOptions, missi
 					timedOut = true;
 					stop();
 				}, options.timeLimit * 1000);
+	const closed = new Promise<"closed">((done) => child.once("close", () => done("closed")));
+	let pipeGrace: NodeJS.Timeout | undefined;
 	try {
 		const exitCode = await new Promise<number | null>((resolve, reject) => {
 			child.once("error", (error) =>
 				reject((error as NodeJS.ErrnoException).code === "ENOENT" ? new Error(missing) : error),
 			);
-			child.once("close", (code) => resolve(code));
+			child.once("exit", (code) => resolve(code));
 		});
+		clearTimeout(timer);
+		const graceOver = new Promise<"grace">((done) => {
+			pipeGrace = setTimeout(() => done("grace"), STOP_GRACE_MS);
+		});
+		if ((await Promise.race([closed, graceOver])) === "grace") {
+			child.stdout.destroy();
+			child.stderr.destroy();
+		}
 		await stopGroup();
 		options.signal?.throwIfAborted();
 		return { output, stdout, exitCode, timedOut };
 	} finally {
 		clearTimeout(timer);
+		clearTimeout(pipeGrace);
 		clearTimeout(escalation);
 		options.signal?.removeEventListener("abort", stop);
 	}

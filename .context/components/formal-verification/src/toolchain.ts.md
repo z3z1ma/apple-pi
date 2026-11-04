@@ -9,10 +9,12 @@ Constant overrides rewrite a copy of the `.cfg`: each live `Name = value` (or `<
 Cancellation checks `signal.aborted` right after attaching its abort listener.
 Why: a signal aborted while a JAR was being verified or the scratch directory staged never fires a listener added later, so Java would run the whole check after the caller had cancelled.
 
-Each process starts in its own process group (`detached`). Cancellation and the time limit send SIGTERM to the whole group, then SIGKILL after a grace period. After the direct child closes, for any reason, the call waits until the group is gone (SIGTERM, then SIGKILL after the grace period, then gives up after one more), because a descendant that detached its output does not delay `close`.
+Each process starts in its own process group (`detached`). Cancellation and the time limit send SIGTERM to the whole group, then SIGKILL after a grace period. The call waits for the child's `exit`, clears the time limit at once (so `timedOut` means the limit stopped unfinished work, not a descendant outliving the child), then waits for `close` for one grace period and destroys its ends of the pipes if they are still held: a descendant that left the group (`setsid`) or cannot be killed can hold them forever. After that, for any reason, the call waits until the group is gone (SIGTERM, then SIGKILL after the grace period, then gives up after one more), because a descendant that detached its output does not delay `close`.
 Why: Lake, elan and wrapper scripts start descendants that hold stdout and stderr open; killing only the direct child left the call waiting for `close` forever when a descendant survived or a child ignored SIGTERM, and the caller's scratch cleanup never ran. The grace period is not tuned; it only needs to let a well-behaved process finish writing.
 
 `runProcess` always pipes stdin and ends it (with the caller's input or nothing). Its stdin error handler is deliberately empty: a child that exits before reading its input raises EPIPE there, and the child's own `error` and `close` events already report the failure.
 
-Coupled: components/formal-verification/src/tlc.ts, components/formal-verification/src/apalache.ts, components/formal-verification/src/alloy.ts, components/formal-verification/src/lean.ts
-Verify: components/formal-verification/tests/tlc.test.ts, components/formal-verification/tests/apalache.test.ts, components/formal-verification/tests/alloy.test.ts, components/formal-verification/tests/lean.test.ts
+`specs/process-group.tla` models this lifecycle; its test also requires the two earlier behaviors (timer kept until `finally`, waiting for `close` alone) to fail.
+
+Coupled: specs/process-group.tla, components/formal-verification/src/tlc.ts, components/formal-verification/src/apalache.ts, components/formal-verification/src/alloy.ts, components/formal-verification/src/lean.ts
+Verify: tests/verification-models.test.ts, components/formal-verification/tests/tlc.test.ts, components/formal-verification/tests/apalache.test.ts, components/formal-verification/tests/alloy.test.ts, components/formal-verification/tests/lean.test.ts

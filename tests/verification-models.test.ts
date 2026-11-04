@@ -24,6 +24,19 @@ test("the earlier lock-file publication moves a complete home aside after a stal
 	expect(result.trace.some((state) => state.action === "RemoveStale")).toBe(true);
 }, 120_000);
 
+test("runProcess always settles, leaves no killable process of its group, and reports a timeout only for unfinished work", async () => {
+	const spec = resolve("specs/process-group.tla");
+	const config = resolve("specs/process-group.cfg");
+	const result = await runTlc({ spec, config });
+	expect(result.verdict, result.output).toBe("pass");
+	expect(result.unused).toEqual([]);
+	const keptTimer = await runTlc({ spec, config, constants: { ClearTimerOnClose: "FALSE" } });
+	expect(keptTimer).toMatchObject({ verdict: "violation", property: "TimedOutMeansUnfinished" });
+	const waitedForClose = await runTlc({ spec, config, constants: { ReleasePipesAfterExit: "FALSE" } });
+	expect(waitedForClose.verdict).toBe("violation");
+	expect(waitedForClose.message).toMatch(/[Tt]emporal/);
+}, 300_000);
+
 test("alloy_check's verdict passes only with every property proved, every expect met and a witness", async () => {
 	const result = await runAlloy({ spec: resolve("specs/alloy-verdict.als") });
 	expect(result.verdict, result.message).toBe("pass");

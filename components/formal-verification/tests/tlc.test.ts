@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -5,7 +6,7 @@ import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import { createTlcTool } from "../src/index.js";
 import { parseTlcOutput, runTlc } from "../src/tlc.js";
-import { configWith, pinned, type TlaResult } from "../src/toolchain.js";
+import { configWith, pinned, runProcess, type TlaResult } from "../src/toolchain.js";
 
 const dir = mkdtempSync(join(tmpdir(), "tlc-test-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -225,3 +226,35 @@ test("concurrent first downloads of one file in one process both succeed", async
 	const results = await Promise.all([pinned(file, checksum, slow), pinned(file, checksum, slow)]);
 	expect(results.map((result) => result.toString())).toEqual(["pinned bytes", "pinned bytes"]);
 });
+
+test("a process that leaves a descendant outside its group holding the pipes still settles", async () => {
+	const marker = `escaped-${process.pid}`;
+	try {
+		const started = Date.now();
+		const result = await runProcess(
+			"sh",
+			{ args: ["-c", `perl -e 'use POSIX; setsid(); $0 = "${marker}"; sleep 60' & echo done`], cwd: dir },
+			"sh is missing",
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toBe("done\n");
+		expect(Date.now() - started).toBeLessThan(20_000);
+	} finally {
+		const escaped = execFileSync("sh", ["-c", `pgrep -f ${marker} || true`], { encoding: "utf8" });
+		for (const pid of escaped.split("\n").filter(Boolean)) process.kill(Number(pid), "SIGKILL");
+	}
+}, 60_000);
+
+test("timedOut means the time limit stopped the work, not a descendant outliving it", async () => {
+	const result = await runProcess(
+		"sh",
+		{
+			args: ["-c", `perl -e '$SIG{TERM}="IGNORE"; sleep 4' </dev/null >/dev/null 2>&1 & sleep 0.5; echo done`],
+			cwd: dir,
+			timeLimit: 1,
+		},
+		"sh is missing",
+	);
+	expect(result.exitCode).toBe(0);
+	expect(result.timedOut).toBe(false);
+}, 60_000);
