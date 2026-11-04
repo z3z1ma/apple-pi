@@ -24,7 +24,17 @@ const scratch = mkdtempSync(join(tmpdir(), "prompt-capture-"));
 const agent = join(scratch, "agent");
 mkdirSync(agent);
 for (const entry of readdirSync(realAgent))
-	if (entry !== "state" && entry !== "sessions") symlinkSync(join(realAgent, entry), join(agent, entry));
+	if (entry !== "state" && entry !== "sessions" && entry !== "settings.json")
+		symlinkSync(join(realAgent, entry), join(agent, entry));
+const isApplePi = (path) =>
+	path.startsWith("/") &&
+	existsSync(join(path, "package.json")) &&
+	JSON.parse(readFileSync(join(path, "package.json"), "utf8")).name === "apple-pi";
+const settings = JSON.parse(readFileSync(join(realAgent, "settings.json"), "utf8"));
+settings.packages = (settings.packages ?? []).map((entry) =>
+	typeof entry === "string" && isApplePi(entry) ? root : entry,
+);
+writeFileSync(join(agent, "settings.json"), JSON.stringify(settings, null, 2));
 const payloadFile = join(scratch, "payload.json");
 const extension = join(scratch, "capture.ts");
 writeFileSync(
