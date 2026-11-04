@@ -56,6 +56,8 @@ Source: session learning `2a6ea7faf4c1`, from a communication-verification hando
 
 Count `"type":"toolCall","id":"...","name":"X"` matches across recent logs, for example `find ~/.pi/agent/sessions -name '*.jsonl' -mtime -14 -print0 | xargs -0 rg -o --no-filename '"type":"toolCall","id":"[^"]*","name":"[^"]*"' | sort | uniq -c` (268 files took about a minute). This pattern alone does not establish a complete count of nested script operations; inspect their recorded trace shape separately. Current codemode scripts call tools through Pi's pipeline ([programs](../../docs/programs.md)). Renamed tools still appear under old names (`mailbox_send`, `schedule`). Low usage measures what the prompt teaches, not what a tool is worth: the operator rejected hiding rarely used tools for that reason.
 
+To count a tool's failures, match its results: `rg -o --no-filename '"toolName":"X"[^\n]{0,4000}?"isError":(true|false)'` over the same files, then count each value. Field order varies, so the count is approximate. Such a count showed `pi_exec` failing in every session (about 10 successes against 275 failures in 10 days), not only in one stale session, and decided its replacement. Check the logs before you assume a failure is local.
+
 ## Traps
 
 - **Mixed populations.** The sessions directory holds root sessions, persisted child sessions, and temporary test or review sessions under `--private-tmp-…`. Filter or report the mix.

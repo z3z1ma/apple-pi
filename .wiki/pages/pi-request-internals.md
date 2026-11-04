@@ -33,3 +33,13 @@ Pi does not store the system prompt or the tool definitions in the session JSONL
 - Keep the run out of the operator's organization: point `PI_CODING_AGENT_DIR` at a temporary directory that symlinks every entry of `~/.pi/agent` except `state` and `sessions`.
 - Start that directory's session-state runtime first (`spawnRuntime` from `components/session-state/src/client.ts`). Otherwise the prompt can be built before the person is registered. In the earlier capture it got non-root `org` text without the root role catalog or peer guidance; that race, not the provider, explained the diff. Peer turns now use codemode tools; see [programs](../../docs/programs.md#peer-turns). Afterwards kill the runtime by its pid file, and check again, because the bridge can respawn it while pi exits.
 - A reusable script: `.ledger/202611032038-custom-system-prompt/current-prompt/capture.mjs` (it moves under `.ledger/history/` when that task closes).
+- Pi loads apple-pi from the package path in the agent directory's `settings.json`, not from the working directory. To capture an older commit, run from a worktree with a `settings.json` copy that points the package at that worktree (`capture.mjs` does this), and check the output for a marker of the old version.
+
+## Replaying a captured request
+
+To send a captured Anthropic payload again through `runtime.completeSimple` (as `salience/eval.mjs` in the same task does):
+
+- Drop tools with `defer_loading` (the deferred placeholder). pi-ai adds its own placeholder, and a duplicate gives "400 tools: Tool names must be unique".
+- Lower-case the Claude Code core names (`Read`, `Bash`, `Edit`, `Write`, `Task`) back to Pi's names.
+- GPT can return tool names as `functions.<name>`; strip the prefix before scoring.
+- Model answers vary from run to run: compare variants over at least three samples and report the per-sample spread. One sample once showed a regression that three samples showed was noise.
