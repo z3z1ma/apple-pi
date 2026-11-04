@@ -21,10 +21,11 @@ Done when:
 
 - [current-prompt/README.md](current-prompt/README.md): sizes, who writes each section, what varies between sessions and providers, and how to capture again.
 - `system-prompt.md` and `tools.md` hold the full text; `system-prompt.txt` holds the exact bytes.
-- Roughly 34k tokens of system prompt and 29k tokens of tool definitions per request. The largest parts are `project_context` (the two `AGENTS.md` files, about 12.6k), `project-learnings` (about 7.4k), `rules` (about 3.9k) and `skills` (about 3.6k).
+- At capture, roughly 34k tokens of system prompt and 29k tokens of tool definitions per request. The largest parts were `project_context` (the two `AGENTS.md` files, about 12.6k), `project-learnings` (about 7.4k, since pruned to about 860), `rules` (about 3.9k) and `skills` (about 3.6k).
 - Pi already lets an extension replace the preamble, any single section, or the whole prompt (see the README).
-- [vision.md](vision.md): the design for owning the prompt, checked against apple-pi's and Pi's source and 14 days of tool use. It assesses the earlier twenty-loop analysis (two claims wrong, one real defect found: the pair tool ships while the pair is off), proposes one composer component with a stability-ordered document and posture-based tool exposure, a build order, and four decisions for the operator.
+- [vision.md](vision.md): the design for owning the prompt, checked against apple-pi's and Pi's source and 14 days of tool use. It assesses the earlier twenty-loop analysis (two claims wrong, one real defect found: the pair tool ships while the pair is off), proposes one composer component with a stability-ordered document and posture-based tool exposure, and gives the build order. The operator's four decisions are recorded in its section 7.
+- No code yet. Next: step 1 of the build order in vision.md section 6, the composer skeleton. Two parts stay outside it: Pi's built-in MCP extension writes `mcp_servers` after apple-pi's handlers run, and the Anthropic provider adds its identity line.
 
 ## Outcome
 
-Pending shaping.
+Pending completion.
