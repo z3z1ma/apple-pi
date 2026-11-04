@@ -4,7 +4,7 @@ apple-pi writes the whole system prompt itself. The composer in `components/syst
 
 ## What the composer writes
 
-- **The operating model** (`src/preamble.ts`) replaces Pi's preamble: who the agent is, how work gets done (yourself, an intern, a program, a colleague), where knowledge lives, and the evidence standard. Interns get a short intern preamble instead; the intern runner passes `--intern`.
+- **The operating model** (`src/preamble.ts`) replaces Pi's preamble: who the agent is, how work gets done (yourself, an intern, a program, a colleague), where knowledge lives, and the evidence standard. Interns get a short intern preamble instead; the intern runner passes `--intern`. `/btw` uses the same composer with its own side-conversation preamble and no docs pointer.
 - **The toolbox** (`src/toolbox.ts`) replaces Pi's tool list, rules and docs. It groups the active tools by job, each group with a few lines on when to use which tool. A group appears only when one of its tools is active, and a line that names an inactive tool is left out. A tool no group knows, such as an MCP tool, is listed with its own snippet and guidelines.
 - **Skills, project context and a pointer to Pi's docs**, which Pi would otherwise write in its own order.
 
