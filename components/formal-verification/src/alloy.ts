@@ -195,7 +195,13 @@ export async function runAlloy(options: AlloyOptions): Promise<AlloyResult> {
 	const verdict: AlloyVerdict = unexpected.length ? "violation" : skipped.length ? "incomplete" : "pass";
 	const message =
 		verdict === "violation"
-			? `${unexpected.map((command) => command.name).join(", ")} ${unexpected.length === 1 ? "has" : "have"} an unexpected result within the scope.`
+			? unexpected
+					.map((command) =>
+						command.expected
+							? `${command.name} found ${command.outcome.startsWith("no ") ? "none" : "one"}, against its expect.`
+							: `${command.name} has a counterexample within its scope.`,
+					)
+					.join(" ")
 			: verdict === "incomplete"
 				? `The time limit stopped the check before ${skipped.map((command) => command.name).join(", ")} finished.`
 				: "Every command gave its expected result within its scope; a larger scope may still hold a counterexample.";
