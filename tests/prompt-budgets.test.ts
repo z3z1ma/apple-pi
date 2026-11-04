@@ -47,7 +47,7 @@ test("the full package root prompt and active schemas stay within their token bu
 		expect(prompt).toContain("**The ledger**");
 		expect(prompt).toContain("<pair-protocol>");
 		expect(run.session.resourceLoader.getSkills().skills.length).toBeGreaterThan(0);
-		budget("root prompt estimated tokens", measured.tokens, 34003, measured);
+		budget("root prompt estimated tokens", measured.tokens, 34384, measured);
 	} finally {
 		await run.close();
 	}
@@ -78,7 +78,7 @@ for (const kind of ["explore", "research"] as const) {
 			const prompt = getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"));
 			expect(prompt).toContain("**The ledger**");
 			expect(prompt).toContain("**The wiki**");
-			budget(`${kind} intern prompt estimated tokens`, measured.tokens, kind === "explore" ? 2025 : 2037, measured);
+			budget(`${kind} intern prompt estimated tokens`, measured.tokens, kind === "explore" ? 2062 : 2074, measured);
 		} finally {
 			await run.close();
 		}

@@ -120,11 +120,13 @@ export async function promptSession(options: {
 
 export function toolboxGaps(session: AgentSession) {
 	const active = session.getActiveToolNames();
-	const toolbox = getCurrentSystemMessage(session.messages)?.sections?.toolbox ?? "";
+	const sections = getCurrentSystemMessage(session.messages)?.sections ?? {};
+	const toolbox = sections.toolbox ?? "";
+	const taught = `${toolbox}\n${sections["goal-flow"] ?? ""}`;
 	const grouped = TOOL_GROUPS.flatMap((group) => group.tools);
 	return {
 		untaught: active.filter((name) => !toolbox.includes(`\`${name}\``)),
-		absent: grouped.filter((name) => toolbox.includes(`\`${name}\``) && !active.includes(name)),
+		absent: grouped.filter((name) => taught.includes(`\`${name}\``) && !active.includes(name)),
 	};
 }
 
