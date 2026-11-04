@@ -147,15 +147,37 @@ export function configWith(config: string, options: ConfigOverrides): string {
 	return text;
 }
 
-export async function runJava(options: {
+export interface ProcessOptions {
 	args: string[];
 	cwd: string;
+	env?: NodeJS.ProcessEnv;
+	input?: string;
 	signal?: AbortSignal;
 	timeLimit?: number;
 	onLine?: (line: string) => void;
-}): Promise<{ output: string; exitCode: number | null; timedOut: boolean }> {
-	const child = spawn("java", options.args, { cwd: options.cwd, stdio: ["ignore", "pipe", "pipe"] });
+}
+
+export interface ProcessResult {
+	output: string;
+	stdout: string;
+	exitCode: number | null;
+	timedOut: boolean;
+}
+
+export function runJava(options: ProcessOptions): Promise<ProcessResult> {
+	return runProcess("java", options, "This tool needs Java on PATH (Java 17 or newer).");
+}
+
+export async function runProcess(command: string, options: ProcessOptions, missing: string): Promise<ProcessResult> {
+	const child = spawn(command, options.args, {
+		cwd: options.cwd,
+		env: options.env ?? process.env,
+		stdio: ["pipe", "pipe", "pipe"],
+	});
+	child.stdin.on("error", () => undefined);
+	child.stdin.end(options.input ?? "");
 	let output = "";
+	let stdout = "";
 	let partial = "";
 	let timedOut = false;
 	const take = (chunk: Buffer) => {
@@ -165,7 +187,10 @@ export async function runJava(options: {
 		partial = pieces.pop() ?? "";
 		for (const line of pieces) options.onLine?.(line);
 	};
-	child.stdout.on("data", take);
+	child.stdout.on("data", (chunk: Buffer) => {
+		stdout += chunk.toString();
+		take(chunk);
+	});
 	child.stderr.on("data", take);
 	const stop = () => child.kill("SIGTERM");
 	options.signal?.addEventListener("abort", stop, { once: true });
@@ -180,16 +205,12 @@ export async function runJava(options: {
 	try {
 		const exitCode = await new Promise<number | null>((resolve, reject) => {
 			child.once("error", (error) =>
-				reject(
-					(error as NodeJS.ErrnoException).code === "ENOENT"
-						? new Error("TLA+ tools need Java on PATH (Java 17 or newer).")
-						: error,
-				),
+				reject((error as NodeJS.ErrnoException).code === "ENOENT" ? new Error(missing) : error),
 			);
 			child.once("close", (code) => resolve(code));
 		});
 		options.signal?.throwIfAborted();
-		return { output, exitCode, timedOut };
+		return { output, stdout, exitCode, timedOut };
 	} finally {
 		clearTimeout(timer);
 		options.signal?.removeEventListener("abort", stop);

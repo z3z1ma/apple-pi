@@ -11,5 +11,5 @@ The outcome `ExecutionsTooShort` means no behavior reaches the requested length,
 Inductive mode runs three checks, all with `--no-deadlock`: Init establishes the inductive invariant (length 0); one step from any state satisfying it preserves it (init = the invariant, length 1); and it implies the targets (length 0). A step-check counterexample starts from a state that may be unreachable, so the trace labels its first state that way. A `timeLimit` is one deadline shared by the three runs, enforced by killing Java, because Apalache has no overall time limit.
 Why: an agent must not read a counterexample to induction as a reachable bug, nor a bounded `NoError` as a proof.
 
-Coupled: components/tla/src/index.ts, skills/formal-verification/SKILL.md
-Verify: components/tla/tests/apalache.test.ts
+Coupled: components/formal-verification/src/index.ts, skills/formal-verification/SKILL.md
+Verify: components/formal-verification/tests/apalache.test.ts

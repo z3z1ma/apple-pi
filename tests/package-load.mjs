@@ -219,6 +219,8 @@ try {
 		"repo_rules",
 		"tlc_check",
 		"tla_symbolic_check",
+		"alloy_check",
+		"lean_check",
 		"task",
 		"bash",
 		"search_branches",

@@ -7,5 +7,5 @@ Why: the CLI checks handwritten TLA+ input, not TypeScript, so retaining both te
 
 The historical pre-fix review model and its trace live in the task bundle as experiment evidence. This test runs only current source-derived models. The model specs under `specs/` are apple-pi repository content and do not ship in the package.
 
-Coupled: specs/review-lifecycle.tla, specs/review-lifecycle.cfg, specs/departure-lifecycle.tla, specs/departure-lifecycle.cfg, components/tla/src/tlc.ts, components/session-state/tests/review-cancel-race.test.ts
+Coupled: specs/review-lifecycle.tla, specs/review-lifecycle.cfg, specs/departure-lifecycle.tla, specs/departure-lifecycle.cfg, components/formal-verification/src/tlc.ts, components/session-state/tests/review-cancel-race.test.ts
 Verify: tests/lifecycle-models.test.ts

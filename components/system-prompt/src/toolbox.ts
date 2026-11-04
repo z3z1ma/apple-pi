@@ -70,7 +70,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
 		tools: ["explore", "research", "codemode", "search_branches", "google_search", "tool_search", "generate_image"],
 		guidance: [
 			"- **Interns** (`explore`, `research`): cheap one-shot sessions outside your context that read files, the wiki, the ledger, context files and session history. One specific question each, in parallel when independent. What they return is told, not seen: read the source yourself when the detail decides.",
-			"- **Programs** (`codemode`): JavaScript that calls any tool as `tools.<name>(args)`, in parallel when independent, and returns only the evidence you need; a failed call rejects, so check each result before using it. In a script, `tools.temporary_peer` gives one task to a temporary peer in a role and `tools.colleague` gives a turn to an awake colleague, when you staff and steer. A script saved as `.pi/programs/<name>.js`, starting with a doc comment that holds its description and `@param {type} name` tags, becomes the tool `program_<name>`; its arguments arrive as `inputs`.",
+			"- **Programs** (`codemode`): JavaScript that calls any tool as `tools.<name>(args)`, in parallel when independent, and returns only the evidence you need; a failed call rejects, so check each result before using it. In a script, `tools.temporary_peer` gives one task to a temporary peer in a role and `tools.colleague` gives a turn to an awake colleague, when you staff and steer. A script saved as `.pi/programs/<name>.js`, starting with a `// @program:` line of JSON that holds its description, parameters (JSON Schemas) and required list, becomes the tool `program_<name>`; its arguments arrive as `inputs`.",
 			"- **Parallel attempts** (`search_branches`): several approaches in their own worktrees, gated by tests and scored by judge commands you write; the best that passes is applied. Protect the files the judges read.",
 			"- **The outside world**: `google_search` for the current world; confirm a summary of something recent against an official source.",
 			"- `tool_search` loads tools not yet declared, including every MCP server's.",
@@ -147,9 +147,12 @@ export const TOOL_GROUPS: ToolGroup[] = [
 	},
 	{
 		title: "The proving ground",
-		tools: ["tlc_check", "tla_symbolic_check"],
+		tools: ["tlc_check", "tla_symbolic_check", "alloy_check", "lean_check"],
 		guidance: [
-			"When correctness depends on the order of events, model it in TLA+: `tlc_check` searches every state of a finite model, and `tla_symbolic_check` proves it with Apalache for unbounded values and any length. Only `pass` is a proof, and of the model, not the code: turn each counterexample into a test against the real implementation. An action that never took a step means the model is wrong. The `formal-verification` skill holds the method.",
+			"When correctness depends on the order of events, model it in TLA+: `tlc_check` searches every state of a finite model, and `tla_symbolic_check` proves it with Apalache for unbounded values and any length.",
+			"When it depends on how things relate (ownership, references, cycles, permissions), model the structure in Alloy: `alloy_check` searches every instance within a scope for a counterexample, and a run that finds no instance means the facts rule out too much.",
+			"When a function must obey a law for every input (idempotent, associative, conserving), state it as a Lean theorem: `lean_check` passes only a proof without `sorry` or extra axioms.",
+			"A `pass` covers only what was checked (the model, the scope, the stated theorem), never the code: turn each counterexample into a test against the real implementation, and tie a proved function to the code with tests. An action that never took a step means the model is wrong. The `formal-verification` skill holds the method.",
 		],
 	},
 	{

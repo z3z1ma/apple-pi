@@ -1,12 +1,17 @@
+import { readFile } from "node:fs/promises";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { resolveToolPath } from "../../shared/src/tool-path.js";
+import { type AlloyResult, runAlloy } from "./alloy.js";
 import { runApalache } from "./apalache.js";
+import { type LeanResult, runLean } from "./lean.js";
 import { runTlc } from "./tlc.js";
 import type { TlaResult } from "./toolchain.js";
 
 export const TLC_TOOL_NAME = "tlc_check";
 export const SYMBOLIC_TOOL_NAME = "tla_symbolic_check";
+export const ALLOY_TOOL_NAME = "alloy_check";
+export const LEAN_TOOL_NAME = "lean_check";
 
 function report(engine: string, result: TlaResult, spec: string): string {
 	const lines = [`${engine} ${result.version} on ${spec}: ${result.verdict.toUpperCase()}. ${result.message}`];
@@ -151,7 +156,106 @@ export function createSymbolicTool() {
 	});
 }
 
-export default function installTla(pi: ExtensionAPI): void {
+function alloyReport(result: AlloyResult, spec: string): string {
+	const lines = [`Alloy ${result.version} on ${spec}: ${result.verdict.toUpperCase()}. ${result.message}`];
+	for (const command of result.commands) {
+		const expected = command.expected ? ` (expected ${command.expected === "instance" ? "one" : "none"})` : "";
+		lines.push(`${command.index}. ${command.source}: ${command.outcome}${expected}`);
+	}
+	const empty = result.commands.filter((command) => command.outcome === "no instance" && !command.expected);
+	if (empty.length)
+		lines.push(
+			`No instance for ${empty.map((command) => command.name).join(", ")}: the facts may rule out everything it asks for, so checks over the same model can pass vacuously.`,
+		);
+	for (const command of result.commands)
+		if (command.instance)
+			lines.push(
+				"",
+				`${command.outcome === "counterexample" ? "Counterexample" : "Instance"} for ${command.name}:`,
+				command.instance,
+			);
+	if (result.verdict === "error" && !result.commands.length) lines.push("", "Alloy output:", result.output.trimEnd());
+	return lines.join("\n");
+}
+
+function leanReport(result: LeanResult, file: string): string {
+	const lines = [`${result.toolchain} on ${file}: ${result.verdict.toUpperCase()}. ${result.message}`];
+	if (result.project) lines.push(`Project: ${result.project}.`);
+	for (const theorem of result.theorems)
+		lines.push(
+			theorem.problem
+				? `${theorem.name}: not audited: ${theorem.problem}`
+				: `${theorem.name}: axioms ${theorem.axioms?.length ? theorem.axioms.join(", ") : "none"}`,
+		);
+	for (const diagnostic of result.diagnostics)
+		lines.push(`${file}:${diagnostic.line}:${diagnostic.column + 1}: ${diagnostic.severity}: ${diagnostic.text}`);
+	if (result.verdict === "error" && !result.diagnostics.length) lines.push("", "Lean output:", result.output.trimEnd());
+	return lines.join("\n");
+}
+
+export function createAlloyTool() {
+	return defineTool({
+		name: ALLOY_TOOL_NAME,
+		label: "Alloy check",
+		description:
+			"Run the check and run commands of an Alloy 6 model and get a structured verdict: pass (every check found no counterexample and every command met its `expect`, within its scope), violation (a counterexample, or a result its `expect` did not predict), incomplete (the time limit stopped it) or error. A counterexample or instance comes back as its atoms, relations and skolems, state by state for temporal models. A run with no instance is flagged: the facts may make checks pass vacuously. Downloads a pinned, checksummed Alloy on first use; needs Java 17.",
+		parameters: Type.Object({
+			spec: Type.String({ description: "Path to the .als file" }),
+			commands: Type.Optional(
+				Type.Array(Type.String(), { description: "Command names or indices to run; defaults to every command" }),
+			),
+			solver: Type.Optional(
+				Type.String({ description: "SAT solver: sat4j (default), minisat, glucose or minisat.prover" }),
+			),
+			timeLimit: Type.Optional(Type.Integer({ minimum: 1, description: "Seconds before the remaining commands stop" })),
+		}),
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+			const result = await runAlloy({ ...params, spec: resolveToolPath(params.spec, ctx.cwd), signal });
+			const { output: _output, ...details } = result;
+			return { content: [{ type: "text", text: alloyReport(result, params.spec) }], details };
+		},
+	});
+}
+
+export function createLeanTool() {
+	return defineTool({
+		name: LEAN_TOOL_NAME,
+		label: "Lean check",
+		description:
+			"Check a Lean 4 file and audit its theorems. pass: the file has no errors, nothing uses sorry, and every audited theorem depends only on the standard axioms (propext, Classical.choice, Quot.sound). incomplete: sorry, another axiom (including native_decide's trust in the compiler), no theorem to audit, or the time limit. error: Lean's diagnostics, such as a proof that does not go through. Inside a Lake project the project's toolchain and dependencies are used; a lone file uses a pinned Lean. Installs elan (pinned, checksummed) on first use when none is present; toolchains download through it.",
+		parameters: Type.Object({
+			file: Type.String({ description: "Path to the .lean file" }),
+			theorems: Type.Optional(
+				Type.Array(Type.String(), {
+					description: "Full names of the theorems to audit; defaults to every theorem and lemma the file declares",
+				}),
+			),
+			build: Type.Optional(
+				Type.Boolean({ description: "Run `lake build` first, for a file that imports the project's own modules" }),
+			),
+			timeLimit: Type.Optional(Type.Integer({ minimum: 1, description: "Seconds before the check stops" })),
+		}),
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			const file = resolveToolPath(params.file, ctx.cwd);
+			const result = await runLean({
+				...params,
+				file,
+				source: await readFile(file, "utf8"),
+				signal,
+				onLine: (line) => {
+					if (/^info: (downloading|installing)|^[✔✖]? ?\[\d+\/\d+\]/.test(line))
+						onUpdate?.({ content: [{ type: "text", text: line }], details: undefined });
+				},
+			});
+			const { output: _output, ...details } = result;
+			return { content: [{ type: "text", text: leanReport(result, params.file) }], details };
+		},
+	});
+}
+
+export default function installFormalVerification(pi: ExtensionAPI): void {
 	pi.registerTool(createTlcTool());
 	pi.registerTool(createSymbolicTool());
+	pi.registerTool(createAlloyTool());
+	pi.registerTool(createLeanTool());
 }

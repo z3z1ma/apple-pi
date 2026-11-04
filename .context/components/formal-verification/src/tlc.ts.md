@@ -7,5 +7,5 @@ The Community Modules are pinned to a release whose `.tla` sources are extracted
 Anything unrecognized is `error` with the first error line, so a parse failure, a missing Java or a crash is never read as success. The verdict comes from TLC's text output (TLC 2.19), not its exit codes alone. Numbers may carry thousands separators. A violation's trace is parsed from the `State n: <action>` blocks (depth-first traces omit the action); a value that wraps onto further lines is joined onto its variable.
 Why: the counterexample-to-test loop needs the trace as data, and a runner that swallowed TLC's failures would make every model look correct.
 
-Coupled: components/tla/src/index.ts, components/tla/src/toolchain.ts, skills/formal-verification/SKILL.md, tests/formal-verification.test.ts, tests/lifecycle-models.test.ts
-Verify: components/tla/tests/tlc.test.ts, tests/formal-verification.test.ts
+Coupled: components/formal-verification/src/index.ts, components/formal-verification/src/toolchain.ts, skills/formal-verification/SKILL.md, tests/formal-verification.test.ts, tests/lifecycle-models.test.ts
+Verify: components/formal-verification/tests/tlc.test.ts, tests/formal-verification.test.ts

@@ -9,5 +9,7 @@ Constant overrides rewrite a copy of the `.cfg`: each live `Name = value` (or `<
 Cancellation checks `signal.aborted` right after attaching its abort listener.
 Why: a signal aborted while a JAR was being verified or the scratch directory staged never fires a listener added later, so Java would run the whole check after the caller had cancelled.
 
-Coupled: components/tla/src/tlc.ts, components/tla/src/apalache.ts
-Verify: components/tla/tests/tlc.test.ts, components/tla/tests/apalache.test.ts
+`runProcess` always pipes stdin and ends it (with the caller's input or nothing). Its stdin error handler is deliberately empty: a child that exits before reading its input raises EPIPE there, and the child's own `error` and `close` events already report the failure.
+
+Coupled: components/formal-verification/src/tlc.ts, components/formal-verification/src/apalache.ts, components/formal-verification/src/alloy.ts, components/formal-verification/src/lean.ts
+Verify: components/formal-verification/tests/tlc.test.ts, components/formal-verification/tests/apalache.test.ts, components/formal-verification/tests/alloy.test.ts, components/formal-verification/tests/lean.test.ts
