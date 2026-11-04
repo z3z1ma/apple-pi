@@ -46,7 +46,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "hire",
 			label: "hire",
 			description:
-				"Hire a person into your organization: a new lasting colleague, a top-level Pi session in its own tmux window next to yours (headless outside tmux), which reports to you (directory shows you as its manager, and it mails you when it closes). It holds its role, mind, and posture for life, and receives a unique two-part human name unless you give one. Its role is its standing job. Give a goal and title to assign an initial task, or omit the goal to bring the person in idle for later work. Returns once the person connects.",
+				"Hire a lasting colleague who reports to you: a new session in its own tmux window, holding its role, mind and posture for life. Give a goal and title to assign a first task, or omit the goal to bring the person in idle. Returns once the person connects.",
 			parameters: Type.Object(
 				{
 					role: Type.String({ minLength: 1, description: "Role catalog name, such as staff-engineer-simplicity." }),
@@ -249,7 +249,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "let_go",
 			label: "let_go",
 			description:
-				"Request permanent departure after finishing or explicitly reassigning the person's assignments, moving its reports and settling its program delegations. Returns an accepted request ID, not completion. By default the runtime asks its own session for a final handoff and saves a private durable Markdown file. Set handoff:false to skip that model turn and file, without waking a sleeping person. Both paths commit departure and retry safe process/file/private-record cleanup. You and its manager receive progress and any handoff pointer. Caller disconnection leaves accepted work running; handoff failure preserves the person and transcript. Shared organizational evidence remains. Hire a new person for later work.",
+				"Let a person go for good, once its assignments are finished or reassigned and its reports moved. Returns an accepted request, not completion; you and its manager get mail as it progresses. By default the person first writes a handoff file; handoff:false skips that. A failed handoff keeps the person.",
 			parameters: Type.Object(
 				{
 					person: personParameter,

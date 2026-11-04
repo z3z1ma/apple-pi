@@ -508,7 +508,7 @@ export function installWork(pi: ExtensionAPI): void {
 			name: "progress",
 			label: "progress",
 			description:
-				"See what the organization delivered and what remains: arrivals, completions, cancellations, ready/held/waiting work, age, unioned waiting intervals, assignment/focus changes and attributed outcome/result/check links. Start with the aggregate overview; give limit and offset for each named detail table, or select a person, subtree or task. Current owner availability and errors have their own timestamps. Assignment is responsibility, not active execution; task counts and recorded outcomes are not a productivity score or verified value. Give since for a period; compare explicit windows rather than assuming a baseline. Execution evidence distinguishes incoming-mail-associated time, pre-mail prefixes, unknowns and gaps. Follow bottlenecks for dependency paths and coordination for related discussion.",
+				"See what the organization delivered and what remains: arrivals, completions, ready, held and waiting work, age, assignments and recorded outcomes. Start from the overview; give limit and offset for detail, or select a person, subtree or task, and since for a period. Assignment is responsibility, not execution, and counts are not a productivity score.",
 			promptSnippet:
 				"Start an organizational investigation with delivery, aging work, waits, outcomes and evidence coverage.",
 			parameters: Type.Object(inspectionParameters, { additionalProperties: false }),
@@ -520,7 +520,7 @@ export function installWork(pi: ExtensionAPI): void {
 			name: "bottlenecks",
 			label: "bottlenecks",
 			description:
-				"Find candidate constraints, not diagnoses: explicit wait targets, distinct directly/transitively affected tasks, witness links, cycle groups, age and resolved waits. Beside dependency evidence, inspect responsible people's commitments, pending decisions/escalations, focus changes and fresh availability observations. Counts overlap across targets; resolving one need may leave others. Reporting and assignment supply context, never invented wait edges. A large team or busy person alone is not a bottleneck. Omit limit for the overview; request detail pages and follow task/thread/link references before choosing an ordinary authorized management action. Give since for interval and resolved-wait evidence.",
+				"Find candidate constraints, not diagnoses: what work explicitly waits on, the tasks each wait affects directly or transitively, cycles, age and resolved waits, beside the responsible people's commitments and pending decisions. Start from the overview, then page detail and follow the task, thread and link references before acting. A busy person alone is not a bottleneck.",
 			promptSnippet: "Investigate recorded dependency paths and decision queues, with owner context and uncertainty.",
 			parameters: Type.Object(inspectionParameters, { additionalProperties: false }),
 			execute: async (_id, args, _signal, _update, ctx) => readInspection(ctx, args, bottlenecksIn),
@@ -531,7 +531,7 @@ export function installWork(pi: ExtensionAPI): void {
 			name: "coordination",
 			label: "coordination",
 			description:
-				"Inspect coordination beside associated work over a stated window. Count authored posts once and distinguish actual authors, potential audiences, quiet channel publication, explicit notification, addressed delivery, transcript receipts and catch-up watermarks. Follow task-thread or explicit-link associations to outcomes, waits and results; select a thread to investigate otherwise unassociated discussion. High discussion may be useful work, while silence may hide an unresolved dependency. Incoming-mail-associated run time is mixed provider/tool/work time, not exclusive communication effort or wasted chatting; pre-mail, unknown and unobserved time remain separate. Metadata grants no message-body access: use read_thread/search_messages under their normal authority. Overview by default; limit/offset page each named detail table.",
+				"Inspect discussion beside the work it relates to over a stated window: who posted, who was addressed or notified, and what was read, linked through task threads to outcomes and waits. Select a thread to look at unrelated discussion. Much discussion may be useful work, and silence may hide a dependency. Bodies stay behind read_thread and search_messages.",
 			promptSnippet:
 				"Relate communication and qualified execution evidence to work without treating activity as waste or value.",
 			parameters: Type.Object(

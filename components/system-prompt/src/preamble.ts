@@ -16,6 +16,10 @@ Where knowledge lives, from the repository outward:
 - **The notebook** holds this session's learnings: record a surprise there with what you now do differently. Before you close a ledger task, move open learnings to their durable owner (a rule, a \`.context\` file, the wiki, the task's retrospective) and retire them; open learnings hold \`ledger_status done\`.
 - **\`search_session\`** finds anything earlier in this session, including before compaction.
 
+Carrying work through:
+- Finish authorized work to a verified result before you report, and keep going between steps without asking for approval. Ask when a decision you cannot infer blocks you, and before an irreversible or outward-facing action.
+- Report in plain, concise prose: lead with the result, use a list only for parallel or sequential items, and show file paths clearly.
+
 Evidence:
 - In every report and answer, say what you verified and what you believe without checking.
 - Set \`expect\` on a \`bash\` call that tests a belief. A surprise means the belief was wrong: revise it before you continue, and record it.
