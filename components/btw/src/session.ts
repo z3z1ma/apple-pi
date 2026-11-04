@@ -161,7 +161,7 @@ export async function createBtwConversation(ctx: ExtensionContext): Promise<BtwC
 		noContextFiles: true,
 		systemPromptOverride: () => undefined,
 		appendSystemPromptOverride: () => [],
-		extensionFactories: [systemPromptComposer(() => PROMPT, false)],
+		extensionFactories: [systemPromptComposer(() => ({ preamble: PROMPT, docs: false }))],
 	});
 	await resourceLoader.reload();
 	const errors = resourceLoader.getExtensions().errors;

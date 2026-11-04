@@ -1,6 +1,6 @@
 # The tool definitions, as sent
 
-Every tool definition in the same request: 86 tools, 116,390 characters of JSON, about 29,098 tokens. The model reads each description and parameter schema as prompt text, so these count as much as the system prompt. On Anthropic, Pi renames the four core tools to Claude Code's names (`Read`, `Bash`, `Edit`, `Write`) and `task` to `Task`; OpenAI keeps the lower-case names. MCP tools are not here: they are deferred, and `tool_search` loads them.
+Every tool definition in the same request: 86 tools, 108,350 characters of JSON, about 27,088 tokens. The model reads each description and parameter schema as prompt text, so these count as much as the system prompt. On Anthropic, Pi renames the four core tools to Claude Code's names (`Read`, `Bash`, `Edit`, `Write`) and `task` to `Task`; OpenAI keeps the lower-case names. MCP tools are not here: they are deferred, and `tool_search` loads them.
 
 Index: [`Read`](#read) · [`Bash`](#bash) · [`Edit`](#edit) · [`Write`](#write) · [`revisit_note`](#revisit_note) · [`update_notebook`](#update_notebook) · [`ask_user_question`](#ask_user_question) · [`search_session`](#search_session) · [`repo_rules`](#repo_rules) · [`tlc_check`](#tlc_check) · [`tla_symbolic_check`](#tla_symbolic_check) · [`pi_exec`](#pi_exec) · [`resolve_finding`](#resolve_finding) · [`review_code`](#review_code) · [`review_queue`](#review_queue) · [`read_review`](#read_review) · [`manage_review`](#manage_review) · [`explore`](#explore) · [`research`](#research) · [`ledger_add`](#ledger_add) · [`ledger_status`](#ledger_status) · [`wiki_lint`](#wiki_lint) · [`wiki_references`](#wiki_references) · [`context_lint`](#context_lint) · [`send_mail`](#send_mail) · [`reply`](#reply) · [`post`](#post) · [`escalate`](#escalate) · [`inbox`](#inbox) · [`create_channel`](#create_channel) · [`find_channels`](#find_channels) · [`join_channel`](#join_channel) · [`leave_thread`](#leave_thread) · [`invite_to_thread`](#invite_to_thread) · [`remove_thread_invitation`](#remove_thread_invitation) · [`read_thread`](#read_thread) · [`search_messages`](#search_messages) · [`pin_message`](#pin_message) · [`react`](#react) · [`archive_thread`](#archive_thread) · [`reopen_thread`](#reopen_thread) · [`communication_status`](#communication_status) · [`update_self`](#update_self) · [`directory`](#directory) · [`follow_external`](#follow_external) · [`unfollow_external`](#unfollow_external) · [`link`](#link) · [`take_task`](#take_task) · [`focus`](#focus) · [`finish_task`](#finish_task) · [`promote_task`](#promote_task) · [`schedule_mail`](#schedule_mail) · [`channel_charter`](#channel_charter) · [`remind_me`](#remind_me) · [`monitor`](#monitor) · [`Task`](#task) · [`search_branches`](#search_branches) · [`sign_off_code`](#sign_off_code) · [`sign_off_document`](#sign_off_document) · [`sign_off_task`](#sign_off_task) · [`explain_change`](#explain_change) · [`google_search`](#google_search) · [`generate_image`](#generate_image) · [`tool_search`](#tool_search) · [`hire`](#hire) · [`call_in`](#call_in) · [`send_home`](#send_home) · [`rename`](#rename) · [`move`](#move) · [`let_go`](#let_go) · [`assign`](#assign) · [`unassign`](#unassign) · [`economics`](#economics) · [`predictions`](#predictions) · [`experience`](#experience) · [`bottlenecks`](#bottlenecks) · [`progress`](#progress) · [`coordination`](#coordination) · [`watch_repository`](#watch_repository) · [`activity`](#activity) · [`triage`](#triage) · [`activity_rule`](#activity_rule) · [`notes`](#notes) · [`note`](#note) · [`canvases`](#canvases) · [`canvas`](#canvas)
 
@@ -342,7 +342,7 @@ Ask the user one to 4 related structured questions instead of guessing. Each que
 
 ## search_session
 
-Search this session's earlier conversation, tool calls, and write/edit payloads. Use it after compaction when you need to remember a prior decision, recover earlier tool output, or revisit a file version written during the session. This looks through session history, not git history or the current repository. Search text or regex, list touched files, inspect only write/edit payloads, expand entries, recover a written file with query:'#N:path', or recover an omitted tool result with query:'call:&lt;id>'. Expand any source by query:'entry:&lt;id>[:offset[:limit]]' (zero-based lines). New custom, summary and notebook records use stable IDs, not message ordinals. It follows the active lineage by default; scope:'all' includes other branches. Natural-language history discovery uses the runtime's index. Use tasks:[id] to search what people wrote while focused on those authorized tasks; task queries match words, not regex patterns, and punctuation is ignored. Use fields:'words' to omit tool payloads from indexed discovery. Other people's sources use entry:&lt;session>/&lt;id>[:offset[:limit]]. Runtime failures/refusals are reported, not replaced with another engine.  
+Search this session's earlier conversation, tool calls and write/edit payloads (not git history or the repository), including before compaction. Search text or regex, list touched files, or search only write/edit payloads. Recover exactly with query:'#N:path' (a written file), 'call:&lt;id>' (an omitted tool result) or 'entry:&lt;id>[:offset[:limit]]' (any source; zero-based lines; another person's as entry:&lt;session>/&lt;id>). scope:'all' includes other branches; tasks:[id] searches what people wrote while focused on those tasks (words, not regex).  
 
 <details><summary>Parameters</summary>
 
@@ -717,7 +717,7 @@ Run type-checked Python in bounded Monty to compose tools and HTTP requests, and
 
 ## resolve_finding
 
-Append an accountable finding response to a settled captured assessment. Supply its current revision and digest from read_review. Rejection needs counterevidence; accepted risk needs evidence and explicit scope. A claimed fix remains unverified. Fixed requires a specific completed, unchallenged question on a different captured target and supporting evidence; this records your judgment, not a correctness certificate. A fix in later code never changes the original snapshot. Responses retain the original allegation and invalidate older assessment approval. Only the operator can approve code through sign-off.  
+Respond to a finding of a settled review, with the revision and digest from read_review. Rejection needs counterevidence; accepted risk needs evidence and a scope. A claimed fix stays unverified; fixed needs a completed question on a newer captured target. The original allegation is kept, and only the operator approves code, through sign-off.  
 
 <details><summary>Parameters</summary>
 
@@ -843,7 +843,7 @@ Append an accountable finding response to a settled captured assessment. Supply 
 
 ## review_code
 
-Capture an exact commit, range, branch, staged index or working tree and enqueue independent semantic/risk-based review through ordinary role peers. This starts model work under the configured role profiles. Return after target capture and admission, not after review. The author's index and checkout stay unchanged. Supply approved intent when available; absent intent stays unassessed. The owner (you, by default) receives mail when the plan is ready, as each pass's findings are confirmed, and when the review settles; keep working and course-correct as findings arrive, or pass wait to block until it settles and get the outcome in the result instead of the mail. Exact request replay retains the original captured target even if the checkout changes.  
+Capture an exact commit, range, branch, staged index or working tree and queue an independent review by role peers; this starts model work. Returns once captured, leaving your checkout unchanged. Give the approved intent when there is one. The owner (you by default) gets mail when the plan is ready, as each pass's findings are confirmed, and when it settles; pass wait to block until it settles instead.  
 
 <details><summary>Parameters</summary>
 
@@ -960,7 +960,7 @@ Capture an exact commit, range, branch, staged index or working tree and enqueue
           "additionalProperties": false
         }
       ],
-      "description": "The change: {\"kind\":\"working-tree\",\"base\":\"HEAD\"} for tracked, staged and untracked edits against an exact base; {\"kind\":\"staged\"} for the index against HEAD; {\"kind\":\"commit\",\"commit\":\"X\"} for one commit against its parent (merges need \"parent\"); {\"kind\":\"range\",\"base\":\"A\",\"head\":\"B\"} for exact endpoints; {\"kind\":\"branch\",\"base\":\"main\",\"head\":\"feature\"} for feature since its merge base with main, as a pull request shows it."
+      "description": "The change, by kind: working-tree is tracked, staged and untracked edits against base; staged is the index against HEAD; commit is one commit against its parent (merges need parent); range is exact endpoints; branch is head since its merge base with base, as a pull request shows it."
     },
     "cwd": {
       "type": "string",
@@ -1043,7 +1043,7 @@ Capture an exact commit, range, branch, staged index or working tree and enqueue
 
 ## review_queue
 
-Inspect the durable review queue in your organization. Without limit, return state counts; with limit, return a page of meaningful status, coverage, findings and captured-target identity. Active work precedes queued priority/FIFO work and history. Reported cost covers retained primary turns across all attempts, including failures; missing observations stay explicit. Completion is not approval or proof of correctness. These reads do not establish current-checkout freshness.  
+Inspect your organization's review queue: state counts without limit, or a page of status, coverage, findings and captured target with one. Completion is not approval or proof of correctness.  
 
 <details><summary>Parameters</summary>
 
@@ -1129,7 +1129,7 @@ Inspect the durable review queue in your organization. Without limit, return sta
 
 ## read_review
 
-Read one captured review progressively. Summary separates execution, missing intent, question coverage, findings and reported primary-turn cost across all attempts. Cost excludes unobserved internal activity; missing observations and unavailable totals stay explicit. Freshness explicitly rechecks the requested target, current checkout and recorded review policy at a stated time; changed or unavailable is not current, and this read never transfers coverage/approval. Configuration shows captured review instructions and declared model/profile references, not a frozen ambient environment; actual role/model policy belongs to each attempt. Target gives captured source and Git revisions; ordinary tools remain available there. Source browses retained Git objects on the before or after side: omit path to list files, or name a captured file to read lines. It never follows symlinks or automatically appends .context sidecars; inspect captured context files and applicable docs separately. Source and the other collections return counts until limit is supplied; source file offsets are zero-based line offsets. Plan, changes, regions, findings, coverage and attempts also page explicitly. Pass requires its pass ID; attempt requires its attempt ID and exposes that retained input policy, raw result, observed turn usage and validated output. Thread pages the review's mail (milestones and comments). Log shows the recent transcript of the running passes, or of one attempt. Original allegations and validation remain distinct. These reads establish neither freshness nor approval.  
+Read one captured review part by part. summary: execution, intent, coverage, findings and cost. freshness: rechecks the target and current checkout now. configuration, target: the captured instructions, source and revisions. source: the retained files on the before or after side (omit path to list; offsets are zero-based lines). plan, changes, regions, findings, coverage, attempts: counts until you give limit. pass and attempt need their id. thread: the review's mail. log: the running passes' recent transcript. No read establishes approval.  
 
 <details><summary>Parameters</summary>
 
@@ -1265,7 +1265,7 @@ Read one captured review progressively. Summary separates execution, missing int
 
 ## manage_review
 
-Cancel unfinished review work and wait for guarded cleanup, explicitly resume interrupted/failed/incomplete work on the same verified artifact, reprioritize queued work, reassign responsibility, or rerun the original capture request as a new review linked to this one (owned by you unless owner is supplied). Resume checks current role/profile policy before reusing exact-input work. A changed policy or advisory catalog requires a new plan and fresh inspections; challenged or incomplete work also reruns. Rerun resolves mutable targets again and grants no old coverage credit. Extend explicitly authorizes a concrete additional question with its reason and doneWhen evidence on the same retained target, bound to the current revision/digest. It replans required work and can incur new model cost; old attempts remain history, not automatic coverage credit. Resume alone is not a waiver or authorization of new questions.  
+Manage a review: cancel unfinished work, resume interrupted, failed or incomplete work on the same artifact, change its queue priority, reassign it, rerun the original capture as a new linked review (fresh target, no inherited coverage), or extend it with one more concrete question, its reason and doneWhen evidence, bound to the current revision and digest. Resume and extend can start new model work.  
 
 <details><summary>Parameters</summary>
 
@@ -2417,7 +2417,7 @@ Stop receiving pushed events from a GitHub PR/issue or Jira issue. Other followe
 
 ## link
 
-Record a relationship between two things, or resolve one by id. Name each thing as kind:id with kind one of task, person, thread, message, commit, pr, file, check, organization (a task by id or ledger path, a person by name or id, a commit by SHA, a PR by URL, a file by path, a check run by its command and time or CI URL, the organization by its root's id). Relations: blocks: The first cannot go on until the second is done. requires_decision: The first waits on a decision the second must make. produced: The first produced the second: a commit, a PR, a file, or another result. verifies: The first, a check run or a review, verifies the second. supersedes: The first replaces the second; nobody's fitness changes. predicts: The first, a message stating a change, holds a scenario forecasting the second's fitness. fixes: The first fixes a defect in the second, earlier work. finds: The first found a problem in the second; the second's owner resolves it accepted or rejected. A wait (blocks, requires_decision) on a task ends on its own when that task closes done; resolve any other link yourself. A finds link targets a task; its owner resolves it accepted or rejected as evidence, never value. Any link can carry data.impact: {dollars: number, kind: 'incurred' | 'estimated', at?: epoch milliseconds}. Only incurred impacts enter economic accounting, at that time or link creation. Record actual losses or gains, never avoided losses or value/cost already counted; impacts are assertions the substrate does not verify. A predicts link from the message stating a change to organization:&lt;root> stores unchanged forecast premises in data.scenario. Record before acting; keep hypothetical impacts nested inside data.scenario, not top-level data.impact.  
+Record a relationship between two things, or resolve one by id. Name each thing as kind:id with kind one of task, person, thread, message, commit, pr, file, check, organization (a task by id or ledger path, a person by name or id, a commit by SHA, a PR by URL, a file by path, a check run by its command and time or CI URL, the organization by its root's id). Relations: blocks: The first cannot go on until the second is done. requires_decision: The first waits on a decision the second must make. produced: The first produced the second: a commit, a PR, a file, or another result. verifies: The first, a check run or a review, verifies the second. supersedes: The first replaces the second; nobody's fitness changes. predicts: The first, a message stating a change, holds a scenario forecasting the second's fitness. fixes: The first fixes a defect in the second, earlier work. finds: The first found a problem in the second; the second's owner resolves it accepted or rejected. A wait (blocks, requires_decision) on a task ends when that task closes done; resolve other links yourself. data.impact records an actual gain or loss, never an avoided one; only incurred impacts count, and hypothetical ones stay inside data.scenario.  
 
 <details><summary>Parameters</summary>
 
@@ -2879,7 +2879,7 @@ Run several distinct implementation approaches in parallel, each in its own git 
 
 ## sign_off_code
 
-Open a code review page in the user's browser and wait for their verdict. You supply the structure: chapters in the order you reasoned, a brief for each, the diff pieces by file and line range, notes on lines, and real judgment calls. The page shows the real diff from git, so you cannot hide or invent code: any hunk you do not place appears under "Not in the story". With review, it renders that retained artifact and assessment; human submission binds its digest/revision and waits for the runtime to commit the verdict. Changed checkout/policy and review limits remain explicit. Returns the verdict, line-anchored comments, decision answers, and which hunks were seen.  
+Open a code review page in the user's browser and wait for their verdict. You supply the structure: chapters in the order you reasoned, a brief for each, the diff pieces by file and line range, notes on lines, and real judgment calls. The page shows the real diff from git: any hunk you do not place appears under "Not in the story". With review, it shows that captured review and its assessment instead. Returns the verdict, line-anchored comments, decision answers, and which hunks were seen.  
 
 <details><summary>Parameters</summary>
 
@@ -3013,7 +3013,7 @@ Open a code review page in the user's browser and wait for their verdict. You su
           "additionalProperties": false
         }
       ],
-      "description": "The change: {\"kind\":\"working-tree\",\"base\":\"HEAD\"} for tracked, staged and untracked edits against an exact base; {\"kind\":\"staged\"} for the index against HEAD; {\"kind\":\"commit\",\"commit\":\"X\"} for one commit against its parent (merges need \"parent\"); {\"kind\":\"range\",\"base\":\"A\",\"head\":\"B\"} for exact endpoints; {\"kind\":\"branch\",\"base\":\"main\",\"head\":\"feature\"} for feature since its merge base with main, as a pull request shows it. Default: the working tree against HEAD. Ignored with review.",
+      "description": "The change, by kind: working-tree is tracked, staged and untracked edits against base; staged is the index against HEAD; commit is one commit against its parent (merges need parent); range is exact endpoints; branch is head since its merge base with base, as a pull request shows it. Default: the working tree against HEAD. Ignored with review.",
       "~optional": true
     },
     "focus": {
@@ -3378,7 +3378,7 @@ Open a ledger task bundle in the user's browser for review and wait for their ve
 
 ## explain_change
 
-Open an explanation of a code change in the user's browser, so they understand it well enough to build on it. You write it: a one-minute summary, background (with an optional primer for newcomers), the intuition before the details, a walkthrough of steps in a sensible order, and a five-question quiz. Cite code with `code path:FROM-TO` fences: the page shows the real lines from git with diff marks, and lists every changed file the walkthrough skips. Returns at once with the page's address and a saved copy to attach to a pull request or a page. While the session lives, the reader can talk the explanation through with you in a Socratic sidebar; a note on their quiz results and questions arrives with your next turn.  
+Open an explanation of a code change in the user's browser, so they understand it well enough to build on it. You write it: a one-minute summary, background (with an optional primer for newcomers), the intuition before the details, a walkthrough of steps in a sensible order, and a five-question quiz. Cite code with `code path:FROM-TO` fences: the page shows the real lines from git with diff marks, and lists every changed file the walkthrough skips. Returns at once with the page's address and a saved copy. While the session lives, the reader can discuss it with you in a sidebar; their quiz results and questions arrive with your next turn.  
 
 <details><summary>Parameters</summary>
 
@@ -3503,7 +3503,7 @@ Open an explanation of a code change in the user's browser, so they understand i
           "additionalProperties": false
         }
       ],
-      "description": "The change: {\"kind\":\"working-tree\",\"base\":\"HEAD\"} for tracked, staged and untracked edits against an exact base; {\"kind\":\"staged\"} for the index against HEAD; {\"kind\":\"commit\",\"commit\":\"X\"} for one commit against its parent (merges need \"parent\"); {\"kind\":\"range\",\"base\":\"A\",\"head\":\"B\"} for exact endpoints; {\"kind\":\"branch\",\"base\":\"main\",\"head\":\"feature\"} for feature since its merge base with main, as a pull request shows it. Default: the working tree against HEAD.",
+      "description": "The change, by kind: working-tree is tracked, staged and untracked edits against base; staged is the index against HEAD; commit is one commit against its parent (merges need parent); range is exact endpoints; branch is head since its merge base with base, as a pull request shows it. Default: the working tree against HEAD.",
       "~optional": true
     },
     "review": {
@@ -3714,7 +3714,7 @@ Some of the tools, such as tools of MCP servers, may not have been provided to y
 
 ## hire
 
-Hire a person into your organization: a new lasting colleague, a top-level Pi session in its own tmux window next to yours (headless outside tmux), which reports to you (directory shows you as its manager, and it mails you when it closes). It holds its role, mind, and posture for life, and receives a unique two-part human name unless you give one. Its role is its standing job. Give a goal and title to assign an initial task, or omit the goal to bring the person in idle for later work. Returns once the person connects.  
+Hire a lasting colleague who reports to you: a new session in its own tmux window, holding its role, mind and posture for life. Give a goal and title to assign a first task, or omit the goal to bring the person in idle. Returns once the person connects.  
 
 <details><summary>Parameters</summary>
 
@@ -3903,7 +3903,7 @@ Move a person under another manager in your organization; a manager moves with i
 
 ## let_go
 
-Request permanent departure after finishing or explicitly reassigning the person's assignments, moving its reports and settling its program delegations. Returns an accepted request ID, not completion. By default the runtime asks its own session for a final handoff and saves a private durable Markdown file. Set handoff:false to skip that model turn and file, without waking a sleeping person. Both paths commit departure and retry safe process/file/private-record cleanup. You and its manager receive progress and any handoff pointer. Caller disconnection leaves accepted work running; handoff failure preserves the person and transcript. Shared organizational evidence remains. Hire a new person for later work.  
+Let a person go for good, once its assignments are finished or reassigned and its reports moved. Returns an accepted request, not completion; you and its manager get mail as it progresses. By default the person first writes a handoff file; handoff:false skips that. A failed handoff keeps the person.  
 
 <details><summary>Parameters</summary>
 
@@ -4016,7 +4016,7 @@ Take an assignment back from a person. The assignment ends without being marked 
 
 ## economics
 
-Compare recorded value, delay and compute in dollars over a past window. This is optional economic comparison beside progress, bottlenecks, coordination and experience, not a compulsory objective. Shows totals/rates, task/person/link contributions, incurred impacts, finding records and unvalued coverage. Estimates and findings are evidence, not charges. Dropped-work spend explains costs already counted on currently cancelled/replaced tasks, possibly classified after the window; it is not extra cost or a waste verdict. Temporary-peer spend follows immutable ancestry to a lasting caller under event-time membership; missing legacy callers and spans stay unknown. New peers have recorded zero baselines; legacy first-sight spend remains a baseline. Task compute uses accounting-person focus as an estimate, including caller focus for peers; absent/ineligible focus stays unattributed. Subtree filtering narrows contributions, not organization totals. Alternatively give scenarios alone for probability-weighted comparison through the same evaluator. Scenarios require identical decision point, horizon, opportunity/task identities, valuations and starting histories; their premises are supplied assumptions, not measured benefits or certified live snapshots. Times are millisecond offsets. decisionAt:'recording' binds preview now and a separately recorded prediction at link creation. Use predictions for qualified calibration, not causal proof.  
+Compare recorded value, delay and compute in dollars over a past window (since, until, subtree), or give scenarios alone to compare probability-weighted forecasts on equal premises. An optional instrument beside progress and bottlenecks, not an objective. Estimates and findings are evidence, not charges; subtree narrows contributions, not organization totals. Scenario times are millisecond offsets from decisionAt; decisionAt:'recording' binds to now in a preview and to link creation in a recorded prediction.  
 
 <details><summary>Parameters</summary>
 
@@ -4263,7 +4263,7 @@ Compare recorded value, delay and compute in dollars over a past window. This is
 
 ## predictions
 
-Read recorded predicts links targeting your current root organization exactly. Record a forecast with link from the message stating the change to organization:&lt;root>, carrying unchanged data.scenario in the economics scenario shape. Relative decisionAt:'recording' binds to immutable link creation time; an absolute origin differing from recording stays a clock mismatch, never shifted. Pending until creation+horizon, then expected and observed dollars with forecast error (observed minus expected), calibration not causal effect. Numeric valuation changes or unmapped/missing/unvalued/not-yet-opened-at-recording opportunities suppress error. Observed coverage, incompleteness, exclusions and unmeasured attention remain visible; incomplete observed valuation suppresses error, while static exclusions alone do not. Nonfinite observed totals or calibration errors are explicitly unavailable/unscored, and bound horizons must advance representably. Expected and available observed totals remain visible. Unreadable scenarios retain raw data and reason. No aggregation of former-root forecasts after a merge.  
+Read your organization's recorded forecasts beside what was observed once each horizon passed. Record one with link from the message stating the change to organization:&lt;root>, carrying data.scenario in the economics scenario shape. Forecast error (observed minus expected) is calibration, not causal effect; it is withheld when valuations changed or observed coverage is incomplete.  
 
 <details><summary>Parameters</summary>
 
@@ -4321,7 +4321,7 @@ Find relevant recorded experience, not a skill ranking. Give an area (path, dire
 
 ## bottlenecks
 
-Find candidate constraints, not diagnoses: explicit wait targets, distinct directly/transitively affected tasks, witness links, cycle groups, age and resolved waits. Beside dependency evidence, inspect responsible people's commitments, pending decisions/escalations, focus changes and fresh availability observations. Counts overlap across targets; resolving one need may leave others. Reporting and assignment supply context, never invented wait edges. A large team or busy person alone is not a bottleneck. Omit limit for the overview; request detail pages and follow task/thread/link references before choosing an ordinary authorized management action. Give since for interval and resolved-wait evidence.  
+Find candidate constraints, not diagnoses: what work explicitly waits on, the tasks each wait affects directly or transitively, cycles, age and resolved waits, beside the responsible people's commitments and pending decisions. Start from the overview, then page detail and follow the task, thread and link references before acting. A busy person alone is not a bottleneck.  
 
 <details><summary>Parameters</summary>
 
@@ -4373,7 +4373,7 @@ Find candidate constraints, not diagnoses: explicit wait targets, distinct direc
 
 ## progress
 
-See what the organization delivered and what remains: arrivals, completions, cancellations, ready/held/waiting work, age, unioned waiting intervals, assignment/focus changes and attributed outcome/result/check links. Start with the aggregate overview; give limit and offset for each named detail table, or select a person, subtree or task. Current owner availability and errors have their own timestamps. Assignment is responsibility, not active execution; task counts and recorded outcomes are not a productivity score or verified value. Give since for a period; compare explicit windows rather than assuming a baseline. Execution evidence distinguishes incoming-mail-associated time, pre-mail prefixes, unknowns and gaps. Follow bottlenecks for dependency paths and coordination for related discussion.  
+See what the organization delivered and what remains: arrivals, completions, ready, held and waiting work, age, assignments and recorded outcomes. Start from the overview; give limit and offset for detail, or select a person, subtree or task, and since for a period. Assignment is responsibility, not execution, and counts are not a productivity score.  
 
 <details><summary>Parameters</summary>
 
@@ -4425,7 +4425,7 @@ See what the organization delivered and what remains: arrivals, completions, can
 
 ## coordination
 
-Inspect coordination beside associated work over a stated window. Count authored posts once and distinguish actual authors, potential audiences, quiet channel publication, explicit notification, addressed delivery, transcript receipts and catch-up watermarks. Follow task-thread or explicit-link associations to outcomes, waits and results; select a thread to investigate otherwise unassociated discussion. High discussion may be useful work, while silence may hide an unresolved dependency. Incoming-mail-associated run time is mixed provider/tool/work time, not exclusive communication effort or wasted chatting; pre-mail, unknown and unobserved time remain separate. Metadata grants no message-body access: use read_thread/search_messages under their normal authority. Overview by default; limit/offset page each named detail table.  
+Inspect discussion beside the work it relates to over a stated window: who posted, who was addressed or notified, and what was read, linked through task threads to outcomes and waits. Select a thread to look at unrelated discussion. Much discussion may be useful work, and silence may hide a dependency. Bodies stay behind read_thread and search_messages.  
 
 <details><summary>Parameters</summary>
 

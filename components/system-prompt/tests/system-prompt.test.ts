@@ -110,15 +110,14 @@ test("a real root session gets the operating model, a toolbox that teaches every
 
 test("a toolbox teaches only the tools a session has, and passes on guidance for tools it does not know", () => {
 	const toolbox = toolboxSection(
-		["read", "bash", "send_mail", "mcp__docs__search"],
+		["read", "bash", "directory", "send_mail", "reply", "mcp__docs__search"],
 		{ read: "Grouped snippet", mcp__docs__search: "Search the docs" },
 		{ read: ["Grouped guideline"], mcp__docs__search: ["Search before reading."] },
 		["Prefer small commits."],
 	);
-	const listed = [...toolbox.matchAll(/^Tools: (.*)\.$/gm)].flatMap((line) => mentioned(line[1]!));
-	expect(listed.sort()).toEqual(["bash", "read", "send_mail"].sort());
-	expect(toolbox).not.toContain("## Staffing");
-	expect(toolbox).not.toContain("## Code review");
+	expect(mentioned(toolbox).sort()).toEqual(["bash", "directory", "read", "reply", "send_mail"]);
+	expect(toolbox).not.toContain("## The review board");
+	expect(toolbox).not.toContain("When you staff and steer");
 	expect(toolbox).not.toContain("Grouped snippet");
 	expect(toolbox).not.toContain("Grouped guideline");
 	expect(toolbox).toContain("- `mcp__docs__search`: Search the docs\n  - Search before reading.");

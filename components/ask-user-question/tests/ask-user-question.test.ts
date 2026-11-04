@@ -97,7 +97,7 @@ describe("ask_user_question registration and validation", () => {
 		expect(tool.executionMode).toBe("sequential");
 		expect(tool.parameters.properties).toHaveProperty("questions");
 		expect(toolboxSection([tool.name], {}, {})).toContain(
-			"`ask_user_question` interrupts the operator now: finish the work the answer does not affect",
+			"`ask_user_question` interrupts him now: first finish what the answer does not affect",
 		);
 		expect(handlers.has("before_agent_start")).toBe(true);
 	});

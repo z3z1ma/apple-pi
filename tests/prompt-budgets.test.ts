@@ -47,7 +47,7 @@ test("the full package root prompt and active schemas stay within their token bu
 		expect(prompt).toContain("<ledger-workbench>");
 		expect(prompt).toContain("<pair-protocol>");
 		expect(run.session.resourceLoader.getSkills().skills.length).toBeGreaterThan(0);
-		budget("root prompt estimated tokens", measured.tokens, 34654, measured);
+		budget("root prompt estimated tokens", measured.tokens, 34270, measured);
 	} finally {
 		await run.close();
 	}
@@ -78,7 +78,7 @@ for (const kind of ["explore", "research"] as const) {
 			expect(getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"))).toContain(
 				"<ledger-workbench>",
 			);
-			budget(`${kind} intern prompt estimated tokens`, measured.tokens, kind === "explore" ? 2262 : 2273, measured);
+			budget(`${kind} intern prompt estimated tokens`, measured.tokens, kind === "explore" ? 2325 : 2336, measured);
 		} finally {
 			await run.close();
 		}
@@ -96,7 +96,7 @@ test("BTW's production loader stays within its prompt and schema token budget", 
 			const measured = promptSize(conversation.session);
 			expect(measured.tools).toEqual(["find", "grep", "ls", "read"]);
 			expect(toolboxGaps(conversation.session)).toEqual({ untaught: [], absent: [] });
-			budget("BTW prompt estimated tokens", measured.tokens, 833, measured);
+			budget("BTW prompt estimated tokens", measured.tokens, 830, measured);
 		} finally {
 			await conversation.close();
 		}

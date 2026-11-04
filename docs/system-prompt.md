@@ -4,8 +4,11 @@ apple-pi writes the whole system prompt itself. The composer in `components/syst
 
 ## What the composer writes
 
-- **The operating model** (`src/preamble.ts`) replaces Pi's preamble: who the agent is, how work gets done (yourself, an intern, a program, a colleague), where knowledge lives, and the evidence standard. Interns get a short intern preamble instead; the intern runner passes `--intern`. `/btw` uses the same composer with its own side-conversation preamble and no docs pointer.
-- **The toolbox** (`src/toolbox.ts`) replaces Pi's tool list, rules and docs. It groups the active tools by job, each group with a few lines on when to use which tool. A group appears only when one of its tools is active, and a line that names an inactive tool is left out. A tool no group knows, such as an MCP tool, is listed with its own snippet and guidelines.
+The prompt is an operating frame: one story in which the agent's role and its environment are the same thing, so every tool has a place and composing them follows from the story.
+
+- **The operating model** (`src/preamble.ts`) replaces Pi's preamble: who the agent is (a person in an organization on this machine), and how we know things here (seen, reported, told, believed). Every later part refers back to these four kinds of evidence. Interns get a short intern preamble instead; the intern runner passes `--intern`. `/btw` uses the same composer with its own side-conversation preamble and no docs pointer.
+- **The place** (`src/toolbox.ts`, the `toolbox` section) replaces Pi's tool list, rules and docs. It describes the environment room by room (your bench, the record, help you can call, the people, the review board, the proving ground, the operator's door, the operator's desk), and every active tool appears in the room where it belongs. A room appears only when one of its tools is active, and a line that names an inactive tool is left out.
+- **How a goal moves** (`GOAL_FLOW`, root sessions only): the path from a goal to a finished, proven result, through the rooms. A tool no group knows, such as an MCP tool, is listed with its own snippet and guidelines.
 - **Skills, project context and a pointer to Pi's docs**, which Pi would otherwise write in its own order.
 
 Setting the preamble turns off Pi's own tool list, rules and docs. The composer never sends a whole replacement prompt (`forceSystemPrompt`), so a changed section still reaches the model as a delta and the cached prefix survives.

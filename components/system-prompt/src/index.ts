@@ -5,11 +5,12 @@ import {
 	getReadmePath,
 	type NormalizedBuildSystemPromptOptions,
 } from "@earendil-works/pi-coding-agent";
-import { INTERN_MODEL, OPERATING_MODEL } from "./preamble.js";
+import { GOAL_FLOW, INTERN_MODEL, OPERATING_MODEL } from "./preamble.js";
 import { toolboxSection } from "./toolbox.js";
 
 export const SECTION_ORDER = [
 	"toolbox",
+	"goal-flow",
 	"pi-exec-peers",
 	"role-catalog",
 	"pair-protocol",
@@ -51,17 +52,23 @@ function skillsSection(options: NormalizedBuildSystemPromptOptions, declared: st
 
 export const INTERN_FLAG = "intern";
 
-export function composeSystemPrompt(
-	options: NormalizedBuildSystemPromptOptions,
-	preamble = OPERATING_MODEL,
-	docs = true,
-): void {
+export interface Frame {
+	preamble: string;
+	flow?: string;
+	docs: boolean;
+}
+
+const ROOT_FRAME: Frame = { preamble: OPERATING_MODEL, flow: GOAL_FLOW, docs: true };
+const INTERN_FRAME: Frame = { preamble: INTERN_MODEL, docs: true };
+
+export function composeSystemPrompt(options: NormalizedBuildSystemPromptOptions, frame = ROOT_FRAME): void {
 	const declared = options.selectedTools.filter((name) => !options.hiddenTools.includes(name));
 	const owned: Record<string, string | undefined> = options.customPrompt
 		? {}
 		: {
 				toolbox: toolboxSection(declared, options.toolSnippets, options.toolGuidelines, options.promptGuidelines),
-				docs: docs ? docsSection() : undefined,
+				"goal-flow": frame.flow,
+				docs: frame.docs ? docsSection() : undefined,
 			};
 	owned.skills = skillsSection(options, declared);
 	owned.project_context = projectContext(options.contextFiles);
@@ -71,17 +78,17 @@ export function composeSystemPrompt(
 		const content = all[name];
 		if (content && !(name in ordered)) ordered[name] = content;
 	}
-	options.customPrompt ??= preamble;
+	options.customPrompt ??= frame.preamble;
 	options.skills = [];
 	options.contextFiles = [];
 	options.sections = ordered;
 }
 
-export function systemPromptComposer(preamble: (pi: ExtensionAPI) => string, docs = true) {
+export function systemPromptComposer(frame: (pi: ExtensionAPI) => Frame) {
 	return (pi: ExtensionAPI): void => {
 		pi.on("before_agent_start", (event) => {
 			event.systemPromptOptions.selectedTools = pi.getActiveTools();
-			composeSystemPrompt(event.systemPromptOptions, preamble(pi), docs);
+			composeSystemPrompt(event.systemPromptOptions, frame(pi));
 		});
 	};
 }
@@ -91,5 +98,5 @@ export default function installSystemPrompt(pi: ExtensionAPI): void {
 		type: "boolean",
 		description: "This session is a one-shot intern answering another agent's question",
 	});
-	systemPromptComposer((api) => (api.getFlag(INTERN_FLAG) ? INTERN_MODEL : OPERATING_MODEL))(pi);
+	systemPromptComposer((api) => (api.getFlag(INTERN_FLAG) ? INTERN_FRAME : ROOT_FRAME))(pi);
 }

@@ -1,5 +1,7 @@
 # The operating frame: draft
 
+Approved by the operator on 2026-11-04 with notes; implemented in `components/system-prompt/src/preamble.ts` and `toolbox.ts`, which are now the source of truth. Applied notes: tool names only where the tool exists in that posture (sentences drop per posture), "he or your manager", `edits[]`, top-level read for context files, open learnings hold a ledger close, saved programs, sign-off of a captured review. Still open from the notes: folding `ledger-workbench`, `wiki-workbench` and `pi-exec-peers` into the frame.
+
 This is the text a root session would read, in place of today's operating model and toolbox. Everything below the line is prompt text. A room appears only when the session holds one of its tools (an intern sees the bench and the record; a hired worker does not see staffing or the desk). `<org>`, `<self>`, skills and project context stay where they are, after this text. Exact arguments stay in each tool's own description.
 
 ---

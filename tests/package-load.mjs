@@ -270,7 +270,7 @@ try {
 	assert(monitorTool, "missing monitor tool");
 	assert.deepEqual(Object.keys(monitorTool.definition.parameters.properties), ["command", "max_events"]);
 	assert.deepEqual(monitorTool.definition.parameters.required, ["command"]);
-	assert.match(toolbox, /every stdout line steers you at once/);
+	assert.match(toolbox, /`monitor` turns every line a line-buffered command prints into a nudge/);
 	assert(
 		result.extensions.some(
 			(extension) =>
@@ -368,8 +368,8 @@ try {
 	assert.deepEqual(searchBranchesTool.definition.parameters.required, ["goal", "judges"]);
 	assert.equal(searchBranchesTool.definition.executionMode, "sequential");
 	for (const taught of [
-		/several approaches are plausible/,
-		/gates \(such as the test suite\) must pass/,
+		/several approaches in their own worktrees/,
+		/gated by tests and scored by judge commands you write/,
 		/Protect the files the judges read/,
 	])
 		assert.match(toolbox, taught);
@@ -378,8 +378,7 @@ try {
 		.flatMap((extension) => [...extension.tools.values()])
 		.find((tool) => tool.definition.name === "pi_exec");
 	assert(piExecTool, "missing pi_exec tool");
-	assert.match(toolbox, /return only the smallest result that keeps the evidence/);
-	assert.match(toolbox, /Check each outcome before using it; a failed status is not an answer/);
+	assert.match(toolbox, /reduces their output to the evidence you need; check each outcome before using it/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /top-level await/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /asyncio\.gather/);
 	assert.match(piExecTool.definition.parameters.properties.code.description, /type-checked before execution/);

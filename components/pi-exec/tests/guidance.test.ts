@@ -11,8 +11,7 @@ const toolbox = toolboxSection(
 
 describe("runtime capability guidance", () => {
 	it("teaches evidence reduction and outcome checks in the toolbox, with peer lifecycle in its role section", () => {
-		expect(toolbox).toContain("return only the smallest result that keeps the evidence");
-		expect(toolbox).toContain("Check each outcome before using it; a failed status is not an answer");
+		expect(toolbox).toContain("reduces their output to the evidence you need; check each outcome before using it");
 		const guidance = PI_EXEC_PEER_PROMPT_GUIDELINES.join("\n");
 		expect(guidance).toContain("Their role owns their model and thinking");
 		expect(guidance).toContain("They stay alive after the program");
@@ -44,7 +43,7 @@ describe("runtime capability guidance", () => {
 
 	it("distinguishes transcript recall from current files and known notebook sources", () => {
 		expect(sessionSearchTool.description).toContain("not git history or the repository");
-		expect(toolbox).toContain("`revisit_note` recovers the evidence behind one");
+		expect(toolbox).toContain("each with its source (`update_notebook`, `revisit_note`)");
 		const queryDescription = sessionSearchTool.parameters.properties.query.description;
 		expect(queryDescription).toContain("#N:path[:offset[:limit]|:full]");
 		expect(queryDescription).toContain("call:<toolCallId>");

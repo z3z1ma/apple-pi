@@ -17,8 +17,9 @@ const SOURCES = {
 	],
 	toolbox: [
 		"apple-pi: system-prompt, from the active tools",
-		"Active tools grouped by job, each group with its routing guidance (`components/system-prompt/src/toolbox.ts`). Groups and lines that name an inactive tool are left out.",
+		"The place, room by room, with every active tool where it belongs (`components/system-prompt/src/toolbox.ts`). Rooms and lines that name an inactive tool are left out.",
 	],
+	"goal-flow": ["apple-pi: system-prompt", "How a goal moves through the place, from task to proven result (`GOAL_FLOW` in `preamble.ts`)."],
 	docs: ["apple-pi: system-prompt", "Where Pi's own documentation lives."],
 	project_context: [
 		"apple-pi: system-prompt, from Pi's context files",

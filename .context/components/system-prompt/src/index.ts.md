@@ -12,7 +12,7 @@ Pi's built-in MCP extension runs after apple-pi's and adds `mcp_servers` last, s
 Intern detection is a flag the runner passes, not an inference from missing sections: an ordinary root session with the session-state bridge switched off also has no organization.
 Coupled: components/interns/src/runner.ts, tests/helpers/prompt-budget.ts
 
-`/btw` loads no package extensions, so it adds the composer itself as an extension factory, `systemPromptComposer(() => PROMPT, false)`: its own preamble, the same toolbox, and no pointer to Pi's docs. Its loader keeps `systemPromptOverride` returning undefined, because a discovered `SYSTEM.md` would become `customPrompt` and switch the toolbox off.
+Each context is a `Frame`: root sessions get the operating model and the goal flow, interns the intern preamble and no flow. `/btw` loads no package extensions, so it adds the composer itself as an extension factory, `systemPromptComposer(() => ({ preamble: PROMPT, docs: false }))`: its own preamble, the same toolbox, and no pointer to Pi's docs. Its loader keeps `systemPromptOverride` returning undefined, because a discovered `SYSTEM.md` would become `customPrompt` and switch the toolbox off.
 Coupled: components/btw/src/session.ts
 
 The design and the next steps are in `.ledger/202611032038-custom-system-prompt/vision.md`.
@@ -20,6 +20,6 @@ Verify: components/system-prompt/tests/system-prompt.test.ts, tests/system-promp
 
 ## symbol:toolboxSection
 
-The toolbox groups tools by job (`TOOL_GROUPS` in `toolbox.ts`). A group appears only when one of its tools is active, and a guidance line that names an inactive grouped tool is dropped, so no session is told about a tool it cannot call. A tool no group knows (MCP, another package) is listed with its own snippet and guidelines.
+The toolbox describes the place as rooms (`TOOL_GROUPS` in `toolbox.ts`), each a list of lines that name their tools in backticks. A room appears only when one of its tools is active, and a line that names an inactive grouped tool is dropped, so no session is told about a tool it cannot call. Write each line so that the tools it names are active together in every posture: a line naming one present and one absent tool drops both, and the posture test then reports the present one untaught. Name a shell command that shares a tool's name (`find`, `ls`) without backticks. A tool no group knows (MCP, another package) is listed with its own snippet and guidelines.
 Why: tools appear and disappear by posture (manager tools for managing roles and unroled roots, desk tools for managers and the scout, the pair tool while the pair is on). The real-session test checks that every active tool is taught and no taught tool is absent.
 Coupled: components/system-prompt/src/toolbox.ts
