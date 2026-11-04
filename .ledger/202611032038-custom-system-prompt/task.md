@@ -29,7 +29,8 @@ Done when:
 - Two parts stay outside the composer: Pi's built-in MCP extension writes `mcp_servers` after apple-pi's handlers run, and the Anthropic provider adds its identity line.
 - **Step 3, done (`ba1c167b`):** `org` holds facts and norms only (tool mechanics moved to the toolbox and tool descriptions); the role catalog is grouped by posture. `docs/system-prompt.md` documents the design; AGENTS.md maps the component.
 - **Step 4, partly done:** `/btw` composes through the same composer (`a0c58027`); the heaviest descriptions were cut (`e4512865`). Root fixture budget 38,749 → 35,056 tokens; tool schemas 113.6k → 107.5k chars; real capture system prompt 102k → 93k chars.
-- **Open:** (a) the projection table: activation is still decided by each component's own gate, and only root pair on/off is tested end to end; (b) the pair sidecar keeps its own authored, user-overridable prompt; (c) more tool-definition trimming; (d) `promptGuidelines` on grouped tools are no longer rendered anywhere and can be deleted; (e) `npm run audit:cache` needs real sessions started on the new composer.
+- **The operating frame** (`e2db6816`, `dc892df3`, `784f78c6`; design in `frame.md`, approved with notes): evidence kinds, the place room by room (the ledger and the wiki folded into the record room), and a worked goal. Measured in `salience/`: over three samples the plan practices rose from 62% to 84% (GPT-6.1) and 78% to 95% (Opus 5.5); the cold-read revision held that level. Root budget 34,384 tokens.
+- **Superseded open items:** (a) the projection table: activation is still decided by each component's own gate, and only root pair on/off is tested end to end; (b) the pair sidecar keeps its own authored, user-overridable prompt; (c) more tool-definition trimming; (d) `promptGuidelines` on grouped tools are no longer rendered anywhere and can be deleted; (e) `npm run audit:cache` needs real sessions started on the new composer.
 
 ## Outcome
 
