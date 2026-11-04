@@ -5,15 +5,14 @@ import {
 	type ExtensionContext,
 	getAgentDir,
 	type ModelRuntime,
-	type NormalizedBuildSystemPromptOptions,
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { AUTO_COMPACT_EXTENSION_PATH } from "../../../extensions/auto-compact.js";
 import { HOME_SEARCH_GUARD_EXTENSION_PATH } from "../../../extensions/home-search-guard.js";
 import { VROOM_EXTENSION_PATH } from "../../../extensions/vroom.js";
-import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { createTurnObserver } from "../../shared/src/turn-observer.js";
+import { systemPromptComposer } from "../../system-prompt/src/index.js";
 
 export const BTW_EXTENSION_PATHS = [
 	AUTO_COMPACT_EXTENSION_PATH,
@@ -23,20 +22,6 @@ export const BTW_EXTENSION_PATHS = [
 const PROMPT = `You are a concise side-channel assistant for a coding session.
 Answer the user's questions directly. Use the read-only repository tools when local facts are needed, and keep files unchanged.
 Questions may include a conversation-only snapshot captured when the BTW overlay opened. Use that snapshot as background for the question. The operator decides what to carry back to the main session.`;
-
-function toolGuidance(options: NormalizedBuildSystemPromptOptions): void {
-	const declared = options.selectedTools.filter((name) => !options.hiddenTools.includes(name));
-	const tools = declared
-		.filter((name) => options.toolSnippets[name])
-		.map((name) => `- ${name}: ${options.toolSnippets[name]}`);
-	const rules = new Set(
-		[...declared.flatMap((name) => options.toolGuidelines[name] ?? []), ...options.promptGuidelines]
-			.map((rule) => rule.trim())
-			.filter(Boolean),
-	);
-	if (tools.length) setSystemPromptSection(options, "tools", tools.join("\n"));
-	if (rules.size) setSystemPromptSection(options, "rules", [...rules].map((rule) => `- ${rule}`).join("\n"));
-}
 
 export class BtwConversation {
 	status: "running" | "completed" | "error" | "aborted" = "completed";
@@ -174,13 +159,9 @@ export async function createBtwConversation(ctx: ExtensionContext): Promise<BtwC
 		noPromptTemplates: true,
 		noThemes: true,
 		noContextFiles: true,
-		systemPromptOverride: () => PROMPT,
+		systemPromptOverride: () => undefined,
 		appendSystemPromptOverride: () => [],
-		extensionFactories: [
-			(pi) => {
-				pi.on("before_agent_start", (event) => toolGuidance(event.systemPromptOptions));
-			},
-		],
+		extensionFactories: [systemPromptComposer(() => PROMPT, false)],
 	});
 	await resourceLoader.reload();
 	const errors = resourceLoader.getExtensions().errors;

@@ -7,8 +7,9 @@ export interface ToolGroup {
 export const TOOL_GROUPS: ToolGroup[] = [
 	{
 		title: "Files and shell",
-		tools: ["read", "bash", "edit", "write"],
+		tools: ["read", "grep", "find", "ls", "bash", "edit", "write"],
 		guidance: [
+			"Search with `grep`, `find` and `ls` in a named directory, and read a file with `read`.",
 			"Search with `bash` (`rg`, `find`, `ls`) in a named directory; read a file with `read`, not `cat`.",
 			"Change a file with `edit`: each `oldText` must match the original file exactly and once, edits in one call must not overlap, and all of one file's changes go in one call. Use `write` for a new file or a complete rewrite.",
 			"Choose `bash` by intent: plain for immediate work, `run_in_background` for finite work that should wake you only when it ends. Pass text through `stdin` rather than shell quoting, and `verbatim` when you need raw output.",

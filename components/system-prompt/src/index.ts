@@ -51,13 +51,17 @@ function skillsSection(options: NormalizedBuildSystemPromptOptions, declared: st
 
 export const INTERN_FLAG = "intern";
 
-export function composeSystemPrompt(options: NormalizedBuildSystemPromptOptions, preamble = OPERATING_MODEL): void {
+export function composeSystemPrompt(
+	options: NormalizedBuildSystemPromptOptions,
+	preamble = OPERATING_MODEL,
+	docs = true,
+): void {
 	const declared = options.selectedTools.filter((name) => !options.hiddenTools.includes(name));
 	const owned: Record<string, string | undefined> = options.customPrompt
 		? {}
 		: {
 				toolbox: toolboxSection(declared, options.toolSnippets, options.toolGuidelines, options.promptGuidelines),
-				docs: docsSection(),
+				docs: docs ? docsSection() : undefined,
 			};
 	owned.skills = skillsSection(options, declared);
 	owned.project_context = projectContext(options.contextFiles);
@@ -73,13 +77,19 @@ export function composeSystemPrompt(options: NormalizedBuildSystemPromptOptions,
 	options.sections = ordered;
 }
 
+export function systemPromptComposer(preamble: (pi: ExtensionAPI) => string, docs = true) {
+	return (pi: ExtensionAPI): void => {
+		pi.on("before_agent_start", (event) => {
+			event.systemPromptOptions.selectedTools = pi.getActiveTools();
+			composeSystemPrompt(event.systemPromptOptions, preamble(pi), docs);
+		});
+	};
+}
+
 export default function installSystemPrompt(pi: ExtensionAPI): void {
 	pi.registerFlag(INTERN_FLAG, {
 		type: "boolean",
 		description: "This session is a one-shot intern answering another agent's question",
 	});
-	pi.on("before_agent_start", (event) => {
-		event.systemPromptOptions.selectedTools = pi.getActiveTools();
-		composeSystemPrompt(event.systemPromptOptions, pi.getFlag(INTERN_FLAG) ? INTERN_MODEL : OPERATING_MODEL);
-	});
+	systemPromptComposer((api) => (api.getFlag(INTERN_FLAG) ? INTERN_MODEL : OPERATING_MODEL))(pi);
 }

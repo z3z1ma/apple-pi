@@ -1,6 +1,7 @@
 ## file
 
-BTW borrows the parent's selected model runtime, not its tools, role, notebook, or session state. `ModelRegistry.runtime` is the current SDK's private facade seam; capture it and the selected mind before asynchronous loading, and fail visibly if unavailable. Disposing BTW must leave that shared runtime usable by the parent. Only the three explicit safety/fast-mode extensions load.
+BTW borrows the parent's selected model runtime, not its tools, role, notebook, or session state. `ModelRegistry.runtime` is the current SDK's private facade seam; capture it and the selected mind before asynchronous loading, and fail visibly if unavailable. Disposing BTW must leave that shared runtime usable by the parent. Only the three explicit safety/fast-mode extensions load, plus the system-prompt composer as a factory with BTW's own preamble. `systemPromptOverride` returns undefined so a user's `SYSTEM.md` never replaces that preamble (the composer treats a supplied prompt as the user's and writes no toolbox).
+Coupled: components/system-prompt/src/index.ts
 
 Pi's current `getSessionStats()` reads all session entries, including compaction usage. It supplies lifetime totals directly; the former subagent accumulator's claim that SDK statistics reset at compaction is obsolete. The UI excludes cache-read tokens from its cumulative token label.
 
