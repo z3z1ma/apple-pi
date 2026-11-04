@@ -3,10 +3,18 @@
 <table>
   <tr>
     <td width="50%">
-      <img width="100%" alt="apple-pi screenshot 1" src="https://github.com/user-attachments/assets/8c3807a7-a674-4ec4-854e-37c8f58ad4ea" />
+      <img width="100%" alt="apple-pi screenshot 1" src="https://github.com/user-attachments/assets/d1798163-4c79-4370-a13c-631306e86aeb" />
     </td>
     <td width="50%">
       <img width="100%" alt="apple-pi screenshot 2" src="https://github.com/user-attachments/assets/bd635802-7742-4f45-aa1b-a94828ed8bea" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img width="100%" alt="apple-pi screenshot 3" src="https://github.com/user-attachments/assets/6ab1a90d-73dc-494d-83c3-9b4445e78edf" />
+    </td>
+    <td width="50%">
+      <img width="100%" alt="apple-pi screenshot 4" src="https://github.com/user-attachments/assets/d798b53a-c011-407c-be0b-cd2a13f1a5cc" />
     </td>
   </tr>
 </table>
@@ -20,8 +28,6 @@ I publish this in the spirit of **closed to pull requests, open to remix**. The 
 ---
 
 ## What Working This Way Taught Me
-
-<img width="1728" height="1117" alt="image" src="https://github.com/user-attachments/assets/6ab1a90d-73dc-494d-83c3-9b4445e78edf" />
 
 I used to think the primary bottleneck in AI-assisted software engineering was model weights—that if we just waited for the next frontier checkpoint or wrote a sufficiently surgical `AGENTS.md`, the model would stop hallucinating imports, stop nuking adjacent functions, and remember why we rejected an architectural approach forty minutes ago.
 
@@ -597,8 +603,6 @@ Then, inside Pi, run `/notify-setup` to create the optional `~/Applications/Pi N
 ---
 
 ## Provenance & Remixing
-
-<img width="1728" height="1060" alt="image" src="https://github.com/user-attachments/assets/d798b53a-c011-407c-be0b-cd2a13f1a5cc" />
 
 Built and maintained by **Alexander Butler** for daily production use.
 
