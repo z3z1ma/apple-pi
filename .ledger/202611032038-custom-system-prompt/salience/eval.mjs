@@ -6,7 +6,7 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const models = process.argv.slice(2).length ? process.argv.slice(2) : ["openai/gpt-6.1-sol"];
-const variants = ["baseline", "frame"];
+const variants = process.env.VARIANTS?.split(",") ?? ["baseline", "frame"];
 
 const cases = [
 	[
@@ -205,7 +205,7 @@ for (const id of models) {
 	if (!model) throw new Error(`Model ${id} is not available`);
 	for (const variant of variants) {
 		const { systemPrompt, tools } = surface(variant);
-		const key = `${id} ${variant}`;
+		const key = `${id} ${variant}${process.env.SAMPLE ? ` #${process.env.SAMPLE}` : ""}`;
 		const ask = (content) =>
 			runtime.completeSimple(
 				model,

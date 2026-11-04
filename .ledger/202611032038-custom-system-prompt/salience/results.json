@@ -2338,5 +2338,8377 @@
         "of": 5
       }
     ]
+  },
+  "openai/gpt-6.1-sol frame2": {
+    "hits": 28,
+    "first": 14,
+    "cases": 30,
+    "practices": 30,
+    "of": 39,
+    "cost": 2.7763031999999996,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "monitor"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "explore"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "google_search"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "bash"
+        ],
+        "hit": false,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "search_branches"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "review_code",
+          "read_review"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "read",
+          "take_task",
+          "notes",
+          "bash",
+          "read"
+        ],
+        "hit": false,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "progress",
+          "link"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "read",
+          "ledger_add"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "notes",
+          "directory",
+          "find_channels",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "call_in"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "read",
+          "bottlenecks",
+          "progress",
+          "read_thread",
+          "directory"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "read",
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "read_thread",
+          "triage"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "follow_external"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "notes",
+          "tool_search",
+          "activity",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "read",
+          "context_lint"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "read",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "read",
+          "review_code",
+          "read_review",
+          "edit",
+          "bash",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "read",
+          "ask_user_question",
+          "ledger_add",
+          "read",
+          "write",
+          "write",
+          "sign_off_task",
+          "ledger_status",
+          "read",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "sign_off_code",
+          "edit",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "read",
+          "read",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "ask_user_question",
+          "explore",
+          "read",
+          "research",
+          "ask_user_question",
+          "pi_exec",
+          "write",
+          "read",
+          "sign_off_document",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "read",
+          "notes",
+          "ask_user_question",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "bash",
+          "notes",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "bash",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "write",
+          "tlc_check",
+          "edit",
+          "tlc_check",
+          "write",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "read",
+          "read",
+          "review_code",
+          "read_review",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "edit",
+          "bash",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "read",
+          "take_task",
+          "notes",
+          "progress",
+          "bottlenecks",
+          "directory",
+          "find_channels",
+          "read_thread",
+          "ask_user_question",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "promote_task",
+          "send_mail",
+          "read_thread",
+          "write",
+          "write",
+          "sign_off_task",
+          "edit",
+          "ledger_status",
+          "assign",
+          "assign",
+          "assign",
+          "assign",
+          "link",
+          "link",
+          "link",
+          "ledger_status",
+          "read_thread",
+          "progress",
+          "bottlenecks",
+          "reply",
+          "read_thread",
+          "bash",
+          "read",
+          "review_code",
+          "read_review",
+          "read",
+          "ask_user_question",
+          "reply",
+          "read_thread",
+          "bash",
+          "read",
+          "read_thread",
+          "edit",
+          "edit",
+          "finish_task",
+          "ledger_status"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "bash",
+          "ask_user_question",
+          "read",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "read_review",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "bash",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      }
+    ]
+  },
+  "anthropic/claude-opus-5-5 frame2": {
+    "hits": 30,
+    "first": 15,
+    "cases": 30,
+    "practices": 37,
+    "of": 39,
+    "cost": 1.0199645999999998,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "bash",
+          "monitor"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "explore"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "google_search",
+          "research"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "pi_exec"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "explore",
+          "search_branches",
+          "review_code"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "explore",
+          "read",
+          "tlc_check",
+          "tla_symbolic_check",
+          "review_code"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes",
+          "search_messages",
+          "experience",
+          "explore"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "link"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "explore",
+          "read",
+          "ask_user_question",
+          "bash"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "read",
+          "ledger_add",
+          "edit",
+          "ledger_status"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "search_session",
+          "directory",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "call_in"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "bottlenecks",
+          "progress",
+          "directory",
+          "coordination",
+          "inbox"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "search_session",
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "search_session",
+          "bash",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "activity",
+          "triage",
+          "note"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "bash",
+          "follow_external",
+          "take_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "activity",
+          "notes",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "context_lint",
+          "bash",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "explore",
+          "read",
+          "read",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "link",
+          "bash",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "read",
+          "ask_user_question",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "link",
+          "update_notebook",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "explore",
+          "read",
+          "read",
+          "research",
+          "hire",
+          "hire",
+          "pi_exec",
+          "ledger_add",
+          "write",
+          "sign_off_document",
+          "ask_user_question",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "explore",
+          "google_search",
+          "bash",
+          "bash",
+          "bash",
+          "pi_exec",
+          "bash",
+          "update_notebook",
+          "note",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "bash",
+          "bash",
+          "explore",
+          "read",
+          "read",
+          "ask_user_question",
+          "take_task",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "context_lint",
+          "wiki_lint",
+          "review_code",
+          "resolve_finding",
+          "bash",
+          "bash",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "read",
+          "search_session",
+          "update_notebook",
+          "tlc_check",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "link",
+          "update_notebook",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "notes",
+          "canvases",
+          "activity",
+          "search_messages",
+          "directory",
+          "progress",
+          "bottlenecks",
+          "coordination",
+          "read_thread",
+          "read",
+          "ask_user_question",
+          "ledger_add",
+          "take_task",
+          "write",
+          "sign_off_task",
+          "ledger_status",
+          "hire",
+          "assign",
+          "create_channel",
+          "channel_charter",
+          "link",
+          "schedule_mail",
+          "bottlenecks",
+          "progress",
+          "inbox",
+          "reply",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "sign_off_code",
+          "update_notebook",
+          "note",
+          "edit",
+          "ledger_status",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "bash",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "link",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      }
+    ]
+  },
+  "openai/gpt-6.1-sol baseline #2": {
+    "hits": 29,
+    "first": 9,
+    "cases": 30,
+    "practices": 24,
+    "of": 39,
+    "cost": 2.2826875999999996,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "monitor"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "take_task",
+          "explore",
+          "finish_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "take_task",
+          "google_search"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "ask_user_question",
+          "take_task",
+          "bash"
+        ],
+        "hit": false,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "search_branches"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "review_code"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "take_task",
+          "read",
+          "bash",
+          "read",
+          "tlc_check"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "search_session",
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "progress",
+          "link"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "ledger_add",
+          "take_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "notes",
+          "find_channels",
+          "directory",
+          "read_thread",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "take_task",
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "progress",
+          "assign"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "take_task",
+          "read",
+          "progress",
+          "bottlenecks",
+          "directory"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "read",
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "read",
+          "search_session",
+          "bash",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "activity",
+          "triage"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "follow_external"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "search_session",
+          "communication_status"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "read",
+          "context_lint",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "read",
+          "write",
+          "finish_task"
+        ],
+        "met": 2,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "read",
+          "ask_user_question",
+          "edit",
+          "focus",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "read",
+          "edit",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "ask_user_question",
+          "explore",
+          "read",
+          "research",
+          "read",
+          "write",
+          "sign_off_document",
+          "edit",
+          "write",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "read",
+          "notes",
+          "activity",
+          "ask_user_question",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "write",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "context_lint",
+          "bash",
+          "read",
+          "edit",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "write",
+          "finish_task"
+        ],
+        "met": 2,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "take_task",
+          "read",
+          "progress",
+          "bottlenecks",
+          "notes",
+          "directory",
+          "read_thread",
+          "ask_user_question",
+          "edit",
+          "focus",
+          "send_mail",
+          "read_thread",
+          "assign",
+          "assign",
+          "assign",
+          "assign",
+          "link",
+          "link",
+          "link",
+          "schedule_mail",
+          "progress",
+          "bottlenecks",
+          "read_thread",
+          "reply",
+          "escalate",
+          "progress",
+          "read_thread",
+          "read",
+          "ask_user_question",
+          "reply",
+          "read_thread",
+          "edit",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "bash",
+          "ask_user_question",
+          "read",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "read",
+          "edit",
+          "finish_task"
+        ],
+        "met": 2,
+        "of": 5
+      }
+    ]
+  },
+  "openai/gpt-6.1-sol frame #2": {
+    "hits": 29,
+    "first": 13,
+    "cases": 30,
+    "practices": 33,
+    "of": 39,
+    "cost": 2.0210168,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "monitor"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "notes",
+          "explore"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "google_search"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "ask_user_question",
+          "bash"
+        ],
+        "hit": false,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "search_branches"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "review_code"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "read",
+          "take_task",
+          "notes",
+          "explore",
+          "tlc_check"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "search_session",
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes",
+          "search_messages",
+          "read_thread"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "link"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "read",
+          "ledger_add",
+          "edit"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "directory",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "assign"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "read",
+          "bottlenecks",
+          "progress",
+          "read_thread",
+          "directory"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "read",
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "activity",
+          "search_messages",
+          "triage"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "follow_external"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "tool_search",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "read",
+          "context_lint",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "bash",
+          "edit",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "read",
+          "ask_user_question",
+          "read",
+          "ledger_add",
+          "write",
+          "write",
+          "write",
+          "sign_off_task",
+          "ledger_status",
+          "read",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "sign_off_code",
+          "write",
+          "write",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "read",
+          "read",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "ask_user_question",
+          "research",
+          "read",
+          "pi_exec",
+          "write",
+          "sign_off_document",
+          "edit",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "read",
+          "notes",
+          "ask_user_question",
+          "tool_search",
+          "bash",
+          "bash",
+          "pi_exec",
+          "bash",
+          "bash",
+          "bash",
+          "google_search",
+          "bash",
+          "pi_exec",
+          "bash",
+          "note",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "bash",
+          "notes",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "bash",
+          "edit",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "write",
+          "bash",
+          "edit",
+          "bash",
+          "read",
+          "write",
+          "write",
+          "tlc_check",
+          "bash",
+          "read",
+          "review_code",
+          "read_review",
+          "bash",
+          "link",
+          "edit",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "take_task",
+          "read",
+          "notes",
+          "progress",
+          "bottlenecks",
+          "directory",
+          "ask_user_question",
+          "read_thread",
+          "read_thread",
+          "read_thread",
+          "read_thread",
+          "ledger_add",
+          "write",
+          "write",
+          "write",
+          "sign_off_task",
+          "ledger_status",
+          "assign",
+          "assign",
+          "assign",
+          "assign",
+          "link",
+          "link",
+          "link",
+          "link",
+          "send_mail",
+          "progress",
+          "bottlenecks",
+          "read_thread",
+          "reply",
+          "escalate",
+          "progress",
+          "read",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "read",
+          "sign_off_document",
+          "ask_user_question",
+          "read_thread",
+          "read_thread",
+          "read_thread",
+          "read_thread",
+          "write",
+          "write",
+          "note",
+          "finish_task",
+          "ledger_status"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "read",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "bash",
+          "ask_user_question",
+          "read",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      }
+    ]
+  },
+  "openai/gpt-6.1-sol frame2 #2": {
+    "hits": 30,
+    "first": 13,
+    "cases": 30,
+    "practices": 34,
+    "of": 39,
+    "cost": 1.4598360000000001,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "monitor"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "explore"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "google_search"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "bash",
+          "pi_exec"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "explore",
+          "search_branches"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "review_code",
+          "read_review"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "read",
+          "take_task",
+          "notes",
+          "explore",
+          "tla_symbolic_check"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "search_session",
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "progress",
+          "link"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "read",
+          "ledger_add"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "call_in"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "read",
+          "bottlenecks",
+          "progress",
+          "read_thread",
+          "directory"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "read",
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "read",
+          "git_change",
+          "git_patch",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "activity",
+          "read_thread",
+          "triage"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "follow_external"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "notes",
+          "canvases",
+          "activity",
+          "tool_search",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "context_lint",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "edit",
+          "update_notebook",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "ask_user_question",
+          "read",
+          "send_mail",
+          "read_thread",
+          "read",
+          "ask_user_question",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "read",
+          "sign_off_code",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "read",
+          "read",
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "research",
+          "read",
+          "ask_user_question",
+          "pi_exec",
+          "write",
+          "read",
+          "sign_off_document",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "read",
+          "notes",
+          "activity",
+          "ask_user_question",
+          "bash",
+          "bash",
+          "bash",
+          "explore",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "pi_exec",
+          "bash",
+          "write",
+          "pi_exec",
+          "note",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "bash",
+          "notes",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "read",
+          "review_code",
+          "read_review",
+          "bash",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "write",
+          "tlc_check",
+          "edit",
+          "tlc_check",
+          "write",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "link",
+          "edit",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "read",
+          "notes",
+          "progress",
+          "bottlenecks",
+          "directory",
+          "ask_user_question",
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "promote_task",
+          "send_mail",
+          "read_thread",
+          "read_thread",
+          "read_thread",
+          "read_thread",
+          "read",
+          "write",
+          "write",
+          "sign_off_task",
+          "assign",
+          "assign",
+          "assign",
+          "assign",
+          "link",
+          "link",
+          "link",
+          "read_thread",
+          "progress",
+          "bottlenecks",
+          "reply",
+          "read",
+          "bash",
+          "review_code",
+          "read_review",
+          "read",
+          "send_mail",
+          "read_thread",
+          "sign_off_code",
+          "read",
+          "ask_user_question",
+          "assign",
+          "read_thread",
+          "bash",
+          "read",
+          "send_mail",
+          "read_thread",
+          "write",
+          "edit",
+          "finish_task",
+          "bash",
+          "bash",
+          "ledger_status"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "bash",
+          "ask_user_question",
+          "read",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      }
+    ]
+  },
+  "anthropic/claude-opus-5-5 baseline #2": {
+    "hits": 30,
+    "first": 15,
+    "cases": 30,
+    "practices": 29,
+    "of": 39,
+    "cost": 1.1307517999999999,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "take_task",
+          "read",
+          "monitor"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "explore"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "take_task",
+          "google_search",
+          "research",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "pi_exec"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "take_task",
+          "explore",
+          "search_branches",
+          "bash",
+          "finish_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "review_code",
+          "read_review"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "take_task",
+          "explore",
+          "read",
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "search_session",
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes",
+          "search_messages",
+          "experience",
+          "find_channels"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "link"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "explore",
+          "ask_user_question",
+          "read",
+          "edit"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "ledger_add",
+          "ledger_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "take_task",
+          "directory",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "take_task",
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "call_in"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "bottlenecks",
+          "progress",
+          "coordination",
+          "directory",
+          "read_thread"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "search_session",
+          "bash",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "take_task",
+          "directory",
+          "schedule_mail",
+          "finish_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "triage",
+          "finish_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "follow_external"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "take_task",
+          "activity",
+          "notes",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "context_lint",
+          "read",
+          "bash",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "bash",
+          "bash",
+          "read",
+          "read",
+          "bash",
+          "bash",
+          "read",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "update_notebook",
+          "edit",
+          "finish_task"
+        ],
+        "met": 2,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "explore",
+          "read",
+          "ask_user_question",
+          "edit",
+          "bash",
+          "review_code",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "explore",
+          "explore",
+          "research",
+          "read",
+          "hire",
+          "hire",
+          "pi_exec",
+          "write",
+          "sign_off_document",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "google_search",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "explore",
+          "bash",
+          "bash",
+          "write",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "bash",
+          "explore",
+          "bash",
+          "read",
+          "read",
+          "ask_user_question",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "context_lint",
+          "bash",
+          "bash",
+          "review_code",
+          "bash",
+          "bash",
+          "write",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "bash",
+          "explore",
+          "read",
+          "read",
+          "read",
+          "tlc_check",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "bash",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "take_task",
+          "notes",
+          "canvases",
+          "progress",
+          "bottlenecks",
+          "coordination",
+          "ask_user_question",
+          "read",
+          "hire",
+          "assign",
+          "create_channel",
+          "link",
+          "schedule_mail",
+          "inbox",
+          "read_thread",
+          "progress",
+          "bottlenecks",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "explore",
+          "read",
+          "bash",
+          "bash",
+          "ask_user_question",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "bash",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      }
+    ]
+  },
+  "anthropic/claude-opus-5-5 frame #2": {
+    "hits": 30,
+    "first": 15,
+    "cases": 30,
+    "practices": 37,
+    "of": 39,
+    "cost": 1.0188814000000002,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "read",
+          "monitor"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "explore",
+          "read"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "google_search",
+          "research"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "pi_exec"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "take_task",
+          "explore",
+          "search_branches",
+          "review_code",
+          "finish_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "explore",
+          "read",
+          "tlc_check",
+          "tla_symbolic_check",
+          "link"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "search_session",
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes",
+          "search_messages",
+          "experience",
+          "wiki_references",
+          "explore"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "link"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "read",
+          "ledger_add",
+          "edit",
+          "ledger_status"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "search_session",
+          "directory",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "notes",
+          "hire",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "call_in"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "bottlenecks",
+          "progress",
+          "directory",
+          "coordination",
+          "inbox"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "search_session",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "activity",
+          "triage",
+          "note"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "bash",
+          "follow_external"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "activity",
+          "notes",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "context_lint",
+          "read",
+          "bash",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "bash",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "link",
+          "bash",
+          "bash",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "ask_user_question",
+          "edit",
+          "bash",
+          "review_code",
+          "link",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "explore",
+          "read",
+          "bash",
+          "research",
+          "ledger_add",
+          "hire",
+          "hire",
+          "pi_exec",
+          "write",
+          "sign_off_document",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "ask_user_question",
+          "research",
+          "pi_exec",
+          "bash",
+          "pi_exec",
+          "google_search",
+          "explore",
+          "update_notebook",
+          "note",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "bash",
+          "ask_user_question",
+          "read",
+          "edit",
+          "bash",
+          "context_lint",
+          "wiki_lint",
+          "bash",
+          "review_code",
+          "bash",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "tlc_check",
+          "edit",
+          "write",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "link",
+          "bash",
+          "bash",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "take_task",
+          "notes",
+          "search_messages",
+          "activity",
+          "canvases",
+          "progress",
+          "bottlenecks",
+          "coordination",
+          "directory",
+          "experience",
+          "read_skill_via_read_tiger-team",
+          "ask_user_question",
+          "ledger_add",
+          "write",
+          "sign_off_task",
+          "hire",
+          "create_channel",
+          "channel_charter",
+          "assign",
+          "link",
+          "schedule_mail",
+          "inbox",
+          "read_thread",
+          "bottlenecks",
+          "progress",
+          "review_code",
+          "read_review",
+          "escalate",
+          "update_notebook",
+          "note",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "bash",
+          "update_notebook",
+          "ask_user_question",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "link",
+          "bash",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      }
+    ]
+  },
+  "anthropic/claude-opus-5-5 frame2 #2": {
+    "hits": 30,
+    "first": 15,
+    "cases": 30,
+    "practices": 37,
+    "of": 39,
+    "cost": 0.8256373999999997,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "bash",
+          "monitor"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "explore",
+          "read"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "google_search",
+          "research"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "pi_exec"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "explore",
+          "search_branches",
+          "bash",
+          "review_code"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "explore",
+          "read",
+          "write",
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes",
+          "explore",
+          "search_messages"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "link"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "read",
+          "ledger_add",
+          "edit",
+          "ledger_status"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "search_session",
+          "directory",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "call_in"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "bottlenecks",
+          "progress",
+          "directory",
+          "coordination",
+          "inbox"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "search_session",
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "search_session",
+          "bash",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "activity",
+          "triage",
+          "note"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "bash",
+          "follow_external",
+          "take_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "activity",
+          "notes",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "context_lint",
+          "bash",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "explore",
+          "read",
+          "read",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "link",
+          "bash",
+          "update_notebook",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "read",
+          "ask_user_question",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "send_mail",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "explore",
+          "read",
+          "read",
+          "research",
+          "ledger_add",
+          "hire",
+          "hire",
+          "send_mail",
+          "write",
+          "sign_off_document",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "explore",
+          "google_search",
+          "bash",
+          "bash",
+          "bash",
+          "pi_exec",
+          "bash",
+          "update_notebook",
+          "note",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "bash",
+          "bash",
+          "explore",
+          "take_task",
+          "read",
+          "read",
+          "ask_user_question",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "bash",
+          "bash",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "read",
+          "tlc_check",
+          "update_notebook",
+          "bash",
+          "edit",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "link",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "notes",
+          "canvases",
+          "activity",
+          "directory",
+          "bottlenecks",
+          "progress",
+          "coordination",
+          "read_skill_via_Read",
+          "read",
+          "ask_user_question",
+          "ledger_add",
+          "take_task",
+          "hire",
+          "create_channel",
+          "channel_charter",
+          "assign",
+          "assign",
+          "assign",
+          "assign",
+          "link",
+          "link",
+          "schedule_mail",
+          "inbox",
+          "read_thread",
+          "bottlenecks",
+          "progress",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "sign_off_task",
+          "update_notebook",
+          "ledger_status",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "bash",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "link",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      }
+    ]
+  },
+  "openai/gpt-6.1-sol baseline #3": {
+    "hits": 28,
+    "first": 9,
+    "cases": 30,
+    "practices": 26,
+    "of": 39,
+    "cost": 2.2810075999999997,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "monitor"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "take_task",
+          "explore"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "take_task",
+          "google_search"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "write",
+          "finish_task"
+        ],
+        "hit": false,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "search_branches"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "take_task",
+          "read",
+          "bash",
+          "review_code"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "take_task",
+          "read",
+          "bash",
+          "read",
+          "tlc_check"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "search_session",
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "notes",
+          "link"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "ledger_add"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "search_messages",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "progress",
+          "assign"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "take_task",
+          "read",
+          "progress",
+          "bottlenecks",
+          "directory"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "take_task",
+          "read",
+          "search_session",
+          "bash",
+          "read"
+        ],
+        "hit": false,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "take_task",
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "activity",
+          "triage"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "follow_external"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "search_session",
+          "communication_status"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "take_task",
+          "tool_search",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "context_lint",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "read",
+          "edit",
+          "finish_task"
+        ],
+        "met": 2,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "ask_user_question",
+          "edit",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "bash",
+          "edit",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "ask_user_question",
+          "explore",
+          "read",
+          "read",
+          "research",
+          "read",
+          "ask_user_question",
+          "write",
+          "sign_off_document",
+          "read",
+          "edit",
+          "write",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "read",
+          "notes",
+          "activity",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "write",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "context_lint",
+          "bash",
+          "read",
+          "edit",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "edit",
+          "focus",
+          "write",
+          "write",
+          "tlc_check",
+          "write",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "write",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "take_task",
+          "read",
+          "notes",
+          "progress",
+          "bottlenecks",
+          "directory",
+          "ask_user_question",
+          "read",
+          "send_mail",
+          "read_thread",
+          "assign",
+          "assign",
+          "assign",
+          "assign",
+          "link",
+          "link",
+          "link",
+          "link",
+          "schedule_mail",
+          "progress",
+          "read_thread",
+          "reply",
+          "bottlenecks",
+          "escalate",
+          "progress",
+          "read",
+          "ask_user_question",
+          "read",
+          "send_mail",
+          "read_thread",
+          "progress",
+          "read",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "ask_user_question",
+          "edit",
+          "focus",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "read",
+          "edit",
+          "finish_task"
+        ],
+        "met": 2,
+        "of": 5
+      }
+    ]
+  },
+  "openai/gpt-6.1-sol frame #3": {
+    "hits": 28,
+    "first": 12,
+    "cases": 30,
+    "practices": 32,
+    "of": 39,
+    "cost": 1.305242,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "monitor"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "notes",
+          "explore"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "google_search",
+          "google_search"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "ask_user_question",
+          "bash"
+        ],
+        "hit": false,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "explore",
+          "search_branches"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "review_code"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "read",
+          "take_task",
+          "notes",
+          "explore",
+          "read"
+        ],
+        "hit": false,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "search_session",
+          "update_notebook",
+          "read",
+          "edit",
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "link"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "read",
+          "ledger_add"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "directory",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "call_in"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "read",
+          "notes",
+          "bottlenecks",
+          "progress",
+          "read_thread"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "read",
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "read",
+          "search_session",
+          "bash",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "search_messages",
+          "read_thread",
+          "triage"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "follow_external"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "invite_to_thread",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "canvases",
+          "tool_search",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "context_lint",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "bash",
+          "bash",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "bash",
+          "edit",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "directory",
+          "send_mail",
+          "ask_user_question",
+          "read_thread",
+          "read",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "sign_off_code",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "read",
+          "read",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "ask_user_question",
+          "explore",
+          "research",
+          "read",
+          "read",
+          "write",
+          "pi_exec",
+          "edit",
+          "sign_off_document",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "read",
+          "notes",
+          "ask_user_question",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "send_mail",
+          "write",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "bash",
+          "notes",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "read",
+          "review_code",
+          "read_review",
+          "bash",
+          "edit",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "write",
+          "write",
+          "tlc_check",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "link",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "read",
+          "take_task",
+          "notes",
+          "progress",
+          "bottlenecks",
+          "directory",
+          "ask_user_question",
+          "send_mail",
+          "read_thread",
+          "read_thread",
+          "read_thread",
+          "read_thread",
+          "ask_user_question",
+          "create_channel",
+          "post",
+          "pin_message",
+          "assign",
+          "assign",
+          "assign",
+          "assign",
+          "link",
+          "link",
+          "link",
+          "progress",
+          "bottlenecks",
+          "read_thread",
+          "reply",
+          "escalate",
+          "read",
+          "read",
+          "read_thread",
+          "read_thread",
+          "read_thread",
+          "read_thread",
+          "ask_user_question",
+          "reply",
+          "progress",
+          "read_thread",
+          "read",
+          "send_mail",
+          "read_thread",
+          "note",
+          "archive_thread",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "read",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "bash",
+          "ask_user_question",
+          "read",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "link",
+          "edit",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      }
+    ]
+  },
+  "openai/gpt-6.1-sol frame2 #3": {
+    "hits": 30,
+    "first": 12,
+    "cases": 30,
+    "practices": 33,
+    "of": 39,
+    "cost": 0.6976552,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "monitor"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "notes",
+          "explore"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "google_search"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "ask_user_question",
+          "bash",
+          "pi_exec"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "ask_user_question",
+          "search_branches"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "review_code"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "read",
+          "take_task",
+          "notes",
+          "explore",
+          "tla_symbolic_check"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "search_session",
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "progress",
+          "link"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "read",
+          "ledger_add",
+          "take_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "notes",
+          "directory",
+          "invite_to_thread",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "assign"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "read",
+          "notes",
+          "bottlenecks",
+          "progress",
+          "read_thread"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "read",
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "read",
+          "bash",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "activity",
+          "triage"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "follow_external"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "tool_search",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "read",
+          "context_lint",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "read",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "edit",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "ask_user_question",
+          "directory",
+          "send_mail",
+          "read_thread",
+          "read",
+          "ledger_add",
+          "write",
+          "write",
+          "sign_off_task",
+          "ledger_status",
+          "read",
+          "write",
+          "bash",
+          "edit",
+          "bash",
+          "edit",
+          "review_code",
+          "read_review",
+          "sign_off_code",
+          "write",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "read",
+          "read",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "research",
+          "pi_exec",
+          "write",
+          "read",
+          "sign_off_document",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "notes",
+          "read",
+          "activity",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "google_search",
+          "bash",
+          "bash",
+          "note",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "read",
+          "review_code",
+          "read_review",
+          "bash",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "ask_user_question",
+          "read",
+          "write",
+          "write",
+          "tlc_check",
+          "write",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "read",
+          "edit",
+          "review_code",
+          "read_review",
+          "bash",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "read",
+          "take_task",
+          "notes",
+          "progress",
+          "bottlenecks",
+          "directory",
+          "ask_user_question",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "send_mail",
+          "read_thread",
+          "promote_task",
+          "write",
+          "write",
+          "sign_off_task",
+          "assign",
+          "assign",
+          "assign",
+          "assign",
+          "link",
+          "link",
+          "link",
+          "link",
+          "read_thread",
+          "progress",
+          "bottlenecks",
+          "send_mail",
+          "read_thread",
+          "read",
+          "review_code",
+          "read_review",
+          "read",
+          "bash",
+          "read",
+          "send_mail",
+          "read_thread",
+          "ask_user_question",
+          "assign",
+          "read_thread",
+          "bash",
+          "read",
+          "write",
+          "write",
+          "note",
+          "finish_task",
+          "bash",
+          "bash",
+          "ledger_status"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "read",
+          "explore",
+          "read",
+          "bash",
+          "bash",
+          "ask_user_question",
+          "read",
+          "edit",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "bash",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      }
+    ]
+  },
+  "anthropic/claude-opus-5-5 baseline #3": {
+    "hits": 30,
+    "first": 14,
+    "cases": 30,
+    "practices": 31,
+    "of": 39,
+    "cost": 1.1274317999999999,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "take_task",
+          "monitor"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "explore"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "take_task",
+          "google_search",
+          "research",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "pi_exec"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "take_task",
+          "explore",
+          "search_branches",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "review_code",
+          "read_review"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "take_task",
+          "explore",
+          "read",
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "search_session",
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes",
+          "search_messages",
+          "experience",
+          "find_channels"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "progress",
+          "link"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "explore",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "ledger_add"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "take_task",
+          "directory",
+          "post",
+          "finish_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "take_task",
+          "directory",
+          "hire",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "call_in"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "bottlenecks",
+          "progress",
+          "coordination",
+          "directory",
+          "inbox"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "search_session",
+          "bash",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "take_task",
+          "schedule_mail",
+          "finish_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "triage",
+          "finish_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "take_task",
+          "bash",
+          "follow_external"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "take_task",
+          "activity",
+          "notes",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "read",
+          "context_lint",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "bash",
+          "bash",
+          "read",
+          "read",
+          "read",
+          "bash",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "update_notebook",
+          "bash",
+          "bash",
+          "write",
+          "finish_task"
+        ],
+        "met": 2,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "explore",
+          "read",
+          "ask_user_question",
+          "edit",
+          "bash",
+          "review_code",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "explore",
+          "explore",
+          "read",
+          "research",
+          "hire",
+          "hire",
+          "send_mail",
+          "ledger_add",
+          "write",
+          "sign_off_document",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "google_search",
+          "bash",
+          "bash",
+          "bash",
+          "bash",
+          "pi_exec",
+          "bash",
+          "explore",
+          "bash",
+          "ask_user_question",
+          "write",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "bash",
+          "explore",
+          "read",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "context_lint",
+          "bash",
+          "bash",
+          "bash",
+          "review_code",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "bash",
+          "explore",
+          "read",
+          "read",
+          "read",
+          "read",
+          "tlc_check",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "edit",
+          "bash",
+          "bash",
+          "bash",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "progress",
+          "bottlenecks",
+          "coordination",
+          "experience",
+          "directory",
+          "ask_user_question",
+          "read",
+          "hire",
+          "create_channel",
+          "link",
+          "assign",
+          "post",
+          "schedule_mail",
+          "inbox",
+          "read_thread",
+          "bottlenecks",
+          "progress",
+          "reply",
+          "escalate",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "bash",
+          "explore",
+          "read",
+          "bash",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "bash",
+          "finish_task"
+        ],
+        "met": 3,
+        "of": 5
+      }
+    ]
+  },
+  "anthropic/claude-opus-5-5 frame #3": {
+    "hits": 30,
+    "first": 15,
+    "cases": 30,
+    "practices": 38,
+    "of": 39,
+    "cost": 1.0200214000000003,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "read",
+          "monitor"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "explore"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "google_search",
+          "research"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "pi_exec"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "take_task",
+          "explore",
+          "search_branches",
+          "review_code",
+          "finish_task"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "explore",
+          "read",
+          "tlc_check",
+          "tla_symbolic_check",
+          "link"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "search_session",
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes",
+          "wiki_references",
+          "search_messages",
+          "experience",
+          "explore"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "link"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "read",
+          "ledger_add",
+          "edit",
+          "ledger_status"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "search_session",
+          "directory",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "hire",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "call_in"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "bottlenecks",
+          "progress",
+          "directory",
+          "coordination",
+          "inbox"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "search_session",
+          "bash",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "activity",
+          "triage",
+          "note"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "bash",
+          "follow_external"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "take_task",
+          "activity",
+          "notes",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "context_lint",
+          "read",
+          "bash",
+          "wiki_lint"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "read",
+          "read",
+          "bash",
+          "bash",
+          "read",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "link",
+          "bash",
+          "bash",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "ask_user_question",
+          "read",
+          "edit",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "send_mail",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "explore",
+          "read",
+          "research",
+          "ledger_add",
+          "write",
+          "hire",
+          "send_mail",
+          "write",
+          "sign_off_document",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "ask_user_question",
+          "research",
+          "bash",
+          "bash",
+          "pi_exec",
+          "bash",
+          "bash",
+          "update_notebook",
+          "note",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "explore",
+          "bash",
+          "read",
+          "ask_user_question",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "bash",
+          "context_lint",
+          "wiki_lint",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "bash",
+          "bash",
+          "update_notebook",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "read",
+          "bash",
+          "read",
+          "tlc_check",
+          "edit",
+          "write",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "bash",
+          "link",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "take_task",
+          "notes",
+          "search_messages",
+          "canvases",
+          "activity",
+          "progress",
+          "bottlenecks",
+          "coordination",
+          "directory",
+          "experience",
+          "read_skill_tiger-team_via_Read",
+          "ask_user_question",
+          "ledger_add",
+          "hire",
+          "assign",
+          "create_channel",
+          "channel_charter",
+          "link",
+          "schedule_mail",
+          "inbox",
+          "read_thread",
+          "bottlenecks",
+          "progress",
+          "review_code",
+          "read_review",
+          "sign_off_task",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "bash",
+          "bash",
+          "search_branches",
+          "bash",
+          "review_code",
+          "link",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      }
+    ]
+  },
+  "anthropic/claude-opus-5-5 frame2 #3": {
+    "hits": 30,
+    "first": 15,
+    "cases": 30,
+    "practices": 38,
+    "of": 39,
+    "cost": 0.8247974000000001,
+    "rows": [
+      {
+        "expected": [
+          "remind_me"
+        ],
+        "planned": [
+          "remind_me"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "monitor"
+        ],
+        "planned": [
+          "read",
+          "monitor"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explore"
+        ],
+        "planned": [
+          "explore"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "research",
+          "google_search"
+        ],
+        "planned": [
+          "google_search",
+          "research"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "pi_exec"
+        ],
+        "planned": [
+          "pi_exec"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_branches"
+        ],
+        "planned": [
+          "explore",
+          "search_branches",
+          "bash",
+          "review_code"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "review_code"
+        ],
+        "planned": [
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "tlc_check",
+          "tla_symbolic_check"
+        ],
+        "planned": [
+          "explore",
+          "read",
+          "tlc_check",
+          "tla_symbolic_check",
+          "review_code"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "update_notebook"
+        ],
+        "planned": [
+          "update_notebook"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "search_session"
+        ],
+        "planned": [
+          "search_session"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "notes"
+        ],
+        "planned": [
+          "notes",
+          "wiki_references",
+          "search_messages",
+          "experience"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "link"
+        ],
+        "planned": [
+          "link"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "take_task"
+        ],
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ledger_add",
+          "promote_task"
+        ],
+        "planned": [
+          "read",
+          "ledger_add",
+          "edit",
+          "ledger_status"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "send_mail",
+          "directory"
+        ],
+        "planned": [
+          "directory",
+          "send_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "post"
+        ],
+        "planned": [
+          "search_session",
+          "directory",
+          "post"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "escalate"
+        ],
+        "planned": [
+          "escalate"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "experience",
+          "hire"
+        ],
+        "planned": [
+          "directory",
+          "hire"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "call_in",
+          "assign"
+        ],
+        "planned": [
+          "directory",
+          "call_in"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "bottlenecks",
+          "progress"
+        ],
+        "planned": [
+          "bottlenecks",
+          "progress",
+          "directory",
+          "coordination",
+          "inbox"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "ask_user_question"
+        ],
+        "planned": [
+          "ask_user_question"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "sign_off_document",
+          "sign_off_task"
+        ],
+        "planned": [
+          "search_session",
+          "sign_off_document"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "explain_change"
+        ],
+        "planned": [
+          "search_session",
+          "bash",
+          "read",
+          "explain_change"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "schedule_mail"
+        ],
+        "planned": [
+          "schedule_mail"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "activity",
+          "triage"
+        ],
+        "planned": [
+          "notes",
+          "activity",
+          "activity",
+          "triage",
+          "note"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "follow_external"
+        ],
+        "planned": [
+          "bash",
+          "follow_external"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "channel_charter"
+        ],
+        "planned": [
+          "find_channels",
+          "directory",
+          "hire",
+          "channel_charter"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "communication_status"
+        ],
+        "planned": [
+          "communication_status"
+        ],
+        "hit": true,
+        "first": true
+      },
+      {
+        "expected": [
+          "canvas"
+        ],
+        "planned": [
+          "activity",
+          "notes",
+          "canvases",
+          "canvas"
+        ],
+        "hit": true,
+        "first": false
+      },
+      {
+        "expected": [
+          "context_lint"
+        ],
+        "planned": [
+          "bash",
+          "context_lint",
+          "read",
+          "bash"
+        ],
+        "hit": true,
+        "first": false
+      }
+    ],
+    "plans": [
+      {
+        "goal": "Fix the flaky upload test in components/upload; it fails about one run in ten.",
+        "planned": [
+          "take_task",
+          "notes",
+          "bash",
+          "explore",
+          "read",
+          "read",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "link",
+          "bash",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Add retry with exponential backoff to the webhook sender. Two other teams' services depend on its timing.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "read",
+          "ask_user_question",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "read_review",
+          "resolve_finding",
+          "send_mail",
+          "link",
+          "update_notebook",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Design how we would move the job queue from Redis to Postgres. I will make the decision.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "explore",
+          "read",
+          "read",
+          "research",
+          "ledger_add",
+          "hire",
+          "hire",
+          "pi_exec",
+          "write",
+          "sign_off_task",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 4
+      },
+      {
+        "goal": "CI got about 40% slower this week across our 12 repositories. Find out why.",
+        "planned": [
+          "take_task",
+          "notes",
+          "activity",
+          "explore",
+          "research",
+          "bash",
+          "bash",
+          "pi_exec",
+          "bash",
+          "google_search",
+          "update_notebook",
+          "write",
+          "note",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Rename the `retire` concept to `let_go` across the code and the docs.",
+        "planned": [
+          "bash",
+          "search_session",
+          "explore",
+          "bash",
+          "ask_user_question",
+          "take_task",
+          "read",
+          "read",
+          "edit",
+          "edit",
+          "edit",
+          "bash",
+          "context_lint",
+          "wiki_lint",
+          "bash",
+          "bash",
+          "review_code",
+          "bash",
+          "bash",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Two consumers of the outbox can both deliver the same message after a crash. Fix it.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "read",
+          "update_notebook",
+          "tlc_check",
+          "edit",
+          "bash",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "link",
+          "update_notebook",
+          "finish_task"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "This quarter's migration spans four teams and keeps failing at the hand-offs. Get it delivered.",
+        "planned": [
+          "notes",
+          "canvases",
+          "activity",
+          "directory",
+          "progress",
+          "bottlenecks",
+          "coordination",
+          "read_skill_tiger_team_via_Read",
+          "read",
+          "ask_user_question",
+          "take_task",
+          "promote_task",
+          "hire",
+          "create_channel",
+          "channel_charter",
+          "assign",
+          "assign",
+          "assign",
+          "assign",
+          "link",
+          "schedule_mail",
+          "inbox",
+          "read_thread",
+          "bottlenecks",
+          "progress",
+          "reply",
+          "escalate",
+          "review_code",
+          "read_review",
+          "sign_off_task",
+          "finish_task",
+          "note"
+        ],
+        "met": 5,
+        "of": 5
+      },
+      {
+        "goal": "Speed up the search index build; it takes 9 minutes and blocks every release.",
+        "planned": [
+          "take_task",
+          "notes",
+          "explore",
+          "read",
+          "bash",
+          "bash",
+          "update_notebook",
+          "edit",
+          "bash",
+          "review_code",
+          "resolve_finding",
+          "link",
+          "finish_task"
+        ],
+        "met": 4,
+        "of": 5
+      }
+    ]
   }
 }
