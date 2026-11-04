@@ -352,7 +352,7 @@ export function ThreadsView({
 }) {
 	const selectedThread = thread?.id;
 	const [filter, setFilter] = useState("");
-	const [scope, setScope] = useState<ThreadFilter>("all");
+	const [scope, setScope] = useState<ThreadFilter>("live");
 	const [bodyMatches, setBodyMatches] = useState<Set<string>>();
 	const rows = useMemo(() => {
 		const activity = world.workplace?.taskActivity ?? {};

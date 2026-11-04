@@ -571,12 +571,20 @@ test("Chat opens at the desk, and a post there always notifies its coordinator",
 	}
 });
 
-test("Threads lists live work before closed work, and Activity puts questions first", { timeout: 60_000 }, async () => {
+test("Threads opens on work in flight, lists live work before closed work, and Activity puts questions first", {
+	timeout: 60_000,
+}, async () => {
 	const { page, errors } = await openDesk("dark");
 	try {
 		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
 		await shot(page, "dark");
 		await page.getByRole("button", { name: /^Threads/ }).click();
+		expect(await page.getByRole("button", { name: /^In flight/ }).getAttribute("aria-pressed")).toBe("true");
+		expect(await page.locator(".wp-threads-list strong").allTextContents()).toEqual([
+			"Add GitHub PR threads",
+			"Review the schedules change",
+		]);
+		await page.getByRole("button", { name: /^All/ }).click();
 		const titles = await page.locator(".wp-threads-list strong").allTextContents();
 		expect(titles).toEqual(["Add GitHub PR threads", "Review the schedules change", "Presence dots"]);
 		const list = page.getByRole("region", { name: "Threads", exact: true });
