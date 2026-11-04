@@ -149,7 +149,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
 		title: "The proving ground",
 		tools: ["tlc_check", "tla_symbolic_check", "alloy_check", "lean_check"],
 		guidance: [
-			"Formal checking pays where an ordering, a structure or a law is both easy and expensive to get wrong, and it works before the code or after. Start from the property, taken from intent rather than from the code: before coding a new protocol, data model or law, model or prove the design, so a counterexample costs an edit instead of a defect; for code that exists, derive the model from the implementation to find where it falls short.",
+			"Formal checking pays where an ordering, a structure or a law is both easy and expensive to get wrong. Start from the property, taken from intent rather than from the code: before coding a new protocol, data model or law, model or prove the design, so a counterexample costs an edit instead of a defect; for code that exists, derive the model from the implementation to find where it falls short.",
 			"When correctness depends on the order of events, model it in TLA+: `tlc_check` searches every state of a finite model, and `tla_symbolic_check` proves it with Apalache for unbounded values and any length.",
 			"When it depends on how things relate (ownership, references, cycles, permissions), model the structure in Alloy: `alloy_check` searches every instance within a scope for a counterexample, and a run that finds no instance means the facts rule out too much.",
 			"When a function must obey a law for every input (idempotent, associative, conserving), state it as a Lean theorem: `lean_check` passes only a proof without `sorry` or extra axioms.",
