@@ -18,7 +18,7 @@ import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
 import registerTasks from "../../tasks/src/index.js";
-import { type ForkWorktree, inForkedContinuation } from "../src/fork-context.js";
+import { type ForkWorktree, forkMessages, inForkedContinuation } from "../src/fork-context.js";
 import { type ForkRequest, startFork } from "../src/forked-continuation.js";
 
 const cleanup: (() => void)[] = [];
@@ -91,6 +91,70 @@ function fork(session: AgentSession, cwd: string, text: string, request: Partial
 		...request,
 	});
 }
+
+describe("provider sessions", () => {
+	it("keeps concurrent forks out of the parent's provider history and resumes the parent afterwards", async () => {
+		const { session, cwd } = await settledSession({
+			"fork A": call("ls", {}, "ls-a"),
+			"fork B": call("ls", {}, "ls-b"),
+		});
+		const parentId = session.agent.sessionId;
+		const histories = new Map<string | undefined, Context>();
+		const ids: (string | undefined)[] = [];
+		const stream = session.agent.streamFunction;
+		session.agent.streamFunction = (model, context, options) => {
+			ids.push(options?.sessionId);
+			histories.set(options?.sessionId, structuredClone(context));
+			return stream(model, context, options);
+		};
+		await session.prompt("Remember the original conversation");
+		const parentHistory = histories.get(parentId);
+		const parentMessages = structuredClone(session.messages);
+		const results = await Promise.all([
+			fork(session, cwd, "fork A", { worktree: undefined }).result,
+			fork(session, cwd, "fork B").result,
+		]);
+
+		expect(results.map((result) => result.messages.at(-1)?.role)).toEqual(["assistant", "assistant"]);
+		expect(histories.get(parentId)).toEqual(parentHistory);
+		expect(session.messages).toEqual(parentMessages);
+		const forkIds = [...histories.keys()].filter((id) => id !== parentId);
+		expect(forkIds).toHaveLength(2);
+		for (const id of forkIds) {
+			expect(id).toMatch(new RegExp(`^${parentId}:fork:[0-9a-f-]{36}$`));
+			expect(ids.filter((seen) => seen === id)).toHaveLength(2);
+		}
+
+		await session.prompt("Continue the original conversation");
+		expect(ids.at(-1)).toBe(parentId);
+		expect(session.agent.sessionId).toBe(parentId);
+		const resumed = histories.get(parentId) as Context;
+		expect(resumed.messages.slice(0, parentHistory?.messages.length)).toEqual(parentHistory?.messages);
+		expect(JSON.stringify(resumed.messages)).not.toContain("fork A");
+		expect(JSON.stringify(resumed.messages)).not.toContain("fork B");
+	});
+
+	it("assigns distinct provider identities even when the parent has no provider session id", async () => {
+		const { session, cwd } = await settledSession({});
+		session.agent.sessionId = undefined;
+		const ids: (string | undefined)[] = [];
+		const stream = session.agent.streamFunction;
+		session.agent.streamFunction = (model, context, options) => {
+			ids.push(options?.sessionId);
+			return stream(model, context, options);
+		};
+		await fork(session, cwd, "first fork", { worktree: undefined }).result;
+		await fork(session, cwd, "second fork", { worktree: undefined }).result;
+
+		expect(ids).toHaveLength(2);
+		for (const id of ids) {
+			expect(id).toEqual(expect.any(String));
+			expect(id).not.toBe("");
+		}
+		expect(ids[0]).not.toBe(ids[1]);
+		expect(session.agent.sessionId).toBeUndefined();
+	});
+});
 
 describe("worktree forks", () => {
 	it("keeps the writes of concurrent forks in their own worktrees", async () => {
@@ -302,18 +366,38 @@ describe("worktree forks", () => {
 		expect(session.isStreaming).toBe(false);
 	});
 
-	it("marks its tool calls as forked and records its usage", async () => {
-		const forked = new Map<string, boolean>();
+	it("scopes tool hooks to the parent Pi identity, not the fork provider identity, and records usage", async () => {
+		let providerId: string | undefined;
+		const scopes = new Map<
+			string,
+			{ parent: boolean; provider: boolean; messages: readonly AgentMessage[] | undefined }
+		>();
 		const recorder = (pi: ExtensionAPI) => {
-			pi.on("tool_call", (event) => {
-				forked.set(event.toolCallId, inForkedContinuation());
+			pi.on("tool_call", (event, ctx) => {
+				const parentPiId = ctx.sessionManager.getSessionId();
+				scopes.set(event.toolCallId, {
+					parent: inForkedContinuation(parentPiId),
+					provider: inForkedContinuation(providerId),
+					messages: forkMessages(parentPiId),
+				});
 			});
 		};
 		const { session, cwd } = await settledSession({ "fork usage": call("ls", {}, "ls-usage") }, [recorder]);
+		const stream = session.agent.streamFunction;
+		session.agent.streamFunction = (model, context, options) => {
+			providerId = options?.sessionId;
+			return stream(model, context, options);
+		};
 		const { usage } = await fork(session, cwd, "fork usage").result;
+		const parentPiId = session.sessionManager.getSessionId();
 
-		expect(forked.get("ls-usage")).toBe(true);
-		expect(inForkedContinuation()).toBe(false);
+		expect(providerId).toEqual(expect.any(String));
+		expect(providerId).not.toBe(parentPiId);
+		expect(scopes.get("ls-usage")).toMatchObject({ parent: true, provider: false });
+		expect(JSON.stringify(scopes.get("ls-usage")?.messages)).toContain("fork usage");
+		expect(JSON.stringify(session.messages)).not.toContain("fork usage");
+		expect(inForkedContinuation(parentPiId)).toBe(false);
+		expect(forkMessages(parentPiId)).toBeUndefined();
 		expect(usage).toHaveLength(2);
 		expect(usage[0]).toHaveProperty("cacheRead");
 		const entries = session.sessionManager

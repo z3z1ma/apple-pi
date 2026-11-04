@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
@@ -229,7 +230,7 @@ export function startFork(session: AgentSession, request: ForkRequest): ForkHand
 			return parent.beforeToolCall?.(context, toolSignal);
 		},
 		afterToolCall: parent.afterToolCall,
-		sessionId: parent.sessionId,
+		sessionId: `${parent.sessionId ?? "fork"}:fork:${randomUUID()}`,
 		thinkingBudgets: parent.thinkingBudgets,
 		transport: parent.transport,
 		maxRetryDelayMs: parent.maxRetryDelayMs,

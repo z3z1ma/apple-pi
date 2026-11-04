@@ -2,6 +2,15 @@
   "comments": "forbid",
   "rules": [
     {
+      "grit": "fork-provider-session.grit",
+      "message": "Give each fork its own provider session ID; reusing the parent's ID corrupts stateful provider history.",
+      "includes": [
+        "components/shared/src/forked-continuation.ts"
+      ],
+      "fires": "const fork = new Agent({ initialState: {}, sessionId: parent.sessionId, transport: parent.transport });\n",
+      "passes": "const fork = new Agent({ sessionId: `${parent.sessionId ?? \"fork\"}:fork:${randomUUID()}` });\n"
+    },
+    {
       "grit": "hot-bounded-io.grit",
       "message": "Hot paths use bounded file reads and asynchronous child processes; keep whole-file reads and synchronous subprocesses outside .hot.ts modules.",
       "includes": [
