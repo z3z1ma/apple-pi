@@ -11,6 +11,7 @@ import {
 	sessionSelf,
 	sessionSoulLine,
 } from "../../organization/src/index.js";
+import { OPERATOR_PAGE_CHANNEL, type OpenOperatorPage } from "../../shared/src/operator-page-events.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { mainToolArgument } from "../../shared/src/tool-activity.js";
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
@@ -30,6 +31,7 @@ import {
 	lineReader,
 	PROGRAM_ID_ENV,
 	PROGRAM_PARENT_ENV,
+	type Prompt,
 	type RunState,
 	type Tool,
 } from "./protocol.js";
@@ -486,17 +488,32 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		});
 	};
 
+	const toolPrompts = new Map<string, Prompt>();
+	const holdPrompt = (target: StateLink, prompt: Prompt & { id: string }, closed: Promise<void>) => {
+		toolPrompts.set(prompt.id, prompt);
+		target.facts({ prompt });
+		void closed.then(() => {
+			toolPrompts.delete(prompt.id);
+			if (target.hello.facts.prompt?.id === prompt.id)
+				target.facts({ prompt: [...toolPrompts.values()].at(-1) ?? null });
+		});
+	};
+
 	const questionnaires = new Map<string, OpenQuestionnaire>();
 	pi.events.on(QUESTIONNAIRE_CHANNEL, (data) => {
 		const open = data as OpenQuestionnaire;
 		const target = link;
 		if (!target || open.sessionId !== target.hello.session.id) return;
 		questionnaires.set(open.toolCallId, open);
-		target.facts({ prompt: { kind: "questionnaire", id: open.toolCallId, questions: open.questions } });
-		void open.closed.then(() => {
-			questionnaires.delete(open.toolCallId);
-			if (target.hello.facts.prompt?.id === open.toolCallId) target.facts({ prompt: null });
-		});
+		void open.closed.then(() => questionnaires.delete(open.toolCallId));
+		holdPrompt(target, { kind: "questionnaire", id: open.toolCallId, questions: open.questions }, open.closed);
+	});
+
+	pi.events.on(OPERATOR_PAGE_CHANNEL, (data) => {
+		const open = data as OpenOperatorPage;
+		const target = link;
+		if (!target || open.sessionId !== target.hello.session.id) return;
+		holdPrompt(target, { kind: "sign-off", id: open.toolCallId, title: open.title, url: open.url }, open.closed);
 	});
 
 	pi.events.on(SELF_CHANNEL, (data) => {
@@ -842,11 +859,11 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	});
 
 	pi.on("ui_prompt_start", (event) => {
-		if (link && link.hello.facts.prompt?.kind !== "questionnaire")
+		if (link && toolPrompts.size === 0)
 			link.facts({ prompt: { kind: event.kind, ...(event.title ? { title: event.title } : {}) } });
 	});
 	pi.on("ui_prompt_end", () => {
-		if (link && link.hello.facts.prompt?.kind !== "questionnaire") link.facts({ prompt: null });
+		if (link && toolPrompts.size === 0) link.facts({ prompt: null });
 	});
 
 	pi.on("session_before_compact", () => link?.run("compacting"));

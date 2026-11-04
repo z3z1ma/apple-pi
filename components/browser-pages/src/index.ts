@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { liveSession, trackLiveSessions } from "../../shared/src/forked-continuation.js";
+import { OPERATOR_PAGE_CHANNEL, type OpenOperatorPage } from "../../shared/src/operator-page-events.js";
 import { askAgent, askFork, type Passage } from "./ask-agent.js";
 import { buildCapturedReview, capturedChange, submitCapturedReview } from "./captured-review.js";
 import {
@@ -107,12 +108,20 @@ export default function browserPages(pi: ExtensionAPI): void {
 			tool: run.tool,
 			url: session.url,
 		});
+		let answered: () => void = () => {};
 		const where = present(session.url);
 		onUpdate?.({
 			content: text(`Waiting for the review at ${session.url}${where ? `\n${where}` : ""}`),
 			details: undefined,
 		});
 		try {
+			pi.events.emit(OPERATOR_PAGE_CHANNEL, {
+				sessionId: ctx.sessionManager.getSessionId(),
+				toolCallId: run.toolCallId,
+				title: page.title,
+				url: session.url,
+				closed: new Promise<void>((resolve) => (answered = resolve)),
+			} satisfies OpenOperatorPage);
 			const result = await session.result;
 			const saved = await savePage(
 				embedPage(template, { ...page, session: { token: "", live: false, ask: false }, result }),
@@ -121,6 +130,7 @@ export default function browserPages(pi: ExtensionAPI): void {
 			);
 			return { content: text(run.format(result, saved)), details: { verdict: result.verdict, saved } };
 		} finally {
+			answered();
 			unpublish();
 			session.close();
 			sessions.delete(session.close);

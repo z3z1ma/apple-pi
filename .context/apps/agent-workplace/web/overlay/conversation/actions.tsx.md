@@ -13,6 +13,9 @@ Coupled: apps/agent-workplace/web/workplace.tsx, apps/agent-workplace/web/workpl
 
 ## symbol:Footer
 
+A `sign-off` prompt (a browser review page waiting for a verdict) keeps the reply box and shows a note instead of the terminal-only panel: the verdict is given on the page (inline in the DM or in the browser), not in the terminal.
+Verify: apps/agent-workplace/tests/world-conversation.test.ts
+
 When the questionnaire shown here leaves the facts, the note says the operator answered it only if an `answer` for that questionnaire id was sent from the panel and did not fail; otherwise it was answered in its terminal (a late answer fails as not open and counts as the terminal's).
 Why: the runtime records no answerer in the prompt's close, so the panel's own record of what it sent is the only way to tell the two apart.
 Verify: apps/agent-workplace/tests/world-conversation.test.ts

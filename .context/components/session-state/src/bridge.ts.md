@@ -22,6 +22,11 @@ A program-created person's hello carries launch ownership identifiers only while
 Coupled: components/session-state/src/runtime.ts, components/session-state/src/program-client.ts
 Verify: components/session-state/tests/peer-history.test.ts, components/session-state/tests/program-peers.test.ts, components/session-state/tests/peer-turns.test.ts
 
+A tool that blocks on the operator publishes its own prompt fact: `ask_user_question` through the questionnaire channel, and the sign-off pages through the operator-page channel (`kind: "sign-off"`, with title and url). Each keeps the session "asking the operator" until its `closed` promise resolves, and Pi's own dialogs (`ui_prompt_start`/`end`) leave the prompt alone while one is open. When several are open, closing one shows the latest still open.
+Why: a session waiting minutes on a browser verdict otherwise reads as working in the sidebar, the status line and Workplace, so nobody knows it needs the operator.
+Coupled: components/shared/src/operator-page-events.ts, components/browser-pages/src/index.ts, components/ask-user-question/src/index.ts
+Verify: components/session-state/tests/operator-pages.test.ts, components/session-state/tests/questionnaires.test.ts
+
 ## symbol:StateLink.close
 
 A link closed without a reason (a reload, or a new `session_start` replacing the link) sends no shutdown, so the next bridge in the same process resumes the same incarnation; only a real session end sends one.

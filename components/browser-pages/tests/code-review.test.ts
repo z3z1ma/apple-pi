@@ -254,6 +254,7 @@ describe("sign_off_code tool", () => {
 					if (definition.name === "sign_off_code") tool = definition;
 				},
 				on: () => {},
+				events: { emit: () => {} },
 			} as any);
 			const updates: string[] = [];
 			const listed: unknown[] = [];

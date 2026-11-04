@@ -2,8 +2,8 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { OPERATOR_PAGE_CHANNEL, type OpenOperatorPage } from "../../shared/src/operator-page-events.js";
 
 import browserPages from "../src/index.js";
 import {
@@ -178,11 +178,17 @@ describe("sign_off_document tool", () => {
 		process.env.PI_CODING_AGENT_DIR = agentDir;
 		try {
 			let tool: any;
+			const opened: OpenOperatorPage[] = [];
 			browserPages({
 				registerTool: (definition: any) => {
 					if (definition.name === "sign_off_document") tool = definition;
 				},
 				on: () => {},
+				events: {
+					emit: (channel: string, data: OpenOperatorPage) => {
+						if (channel === OPERATOR_PAGE_CHANNEL) opened.push(data);
+					},
+				},
 			} as any);
 			const result = await tool.execute("call", { path: "docs/plan.md" }, undefined, undefined, {
 				hasUI: true,
@@ -190,6 +196,10 @@ describe("sign_off_document tool", () => {
 				sessionManager: { getSessionId: () => "test-session" },
 			});
 			expect(result.content[0].text).toContain("The reviewer approved the document (docs/plan.md).");
+			expect(opened).toHaveLength(1);
+			expect(opened[0]).toMatchObject({ sessionId: "test-session", toolCallId: "call" });
+			expect(opened[0]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\//);
+			await opened[0]?.closed;
 			const html = readFileSync(result.details.saved, "utf8");
 			expect(html).toContain('"kind":"markdown-review"');
 			expect(html).toContain('"live":false');

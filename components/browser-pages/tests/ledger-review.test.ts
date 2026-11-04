@@ -189,6 +189,7 @@ describe("sign_off_task tool", () => {
 					if (definition.name === "sign_off_task") tool = definition;
 				},
 				on: () => {},
+				events: { emit: () => {} },
 			} as any);
 			const result = await tool.execute("call", { task: ID }, undefined, undefined, {
 				hasUI: true,

@@ -31,6 +31,7 @@ export interface Prompt {
 	title?: string;
 	id?: string;
 	questions?: unknown;
+	url?: string;
 }
 
 export interface Facts {

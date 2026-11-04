@@ -77,12 +77,17 @@ export function Footer({
 	}, [questionnaire, character.name]);
 
 	if (questionnaire) return <QuestionForm key={questionnaire.id} character={character} questionnaire={questionnaire} />;
-	if (asking)
+	const signOff = asking?.kind === "sign-off";
+	if (asking && !signOff)
 		return <TerminalOnly character={character} asking={asking} goToTerminal={goToTerminal} problem={terminalProblem} />;
 	return (
 		<Actions
 			character={character}
-			note={note}
+			note={
+				signOff
+					? `${character.name} is waiting for your sign-off${asking.text ? ` on \u201c${asking.text}\u201d` : ""}. Open the review page to give it.`
+					: note
+			}
 			onSend={() => {
 				setNote(undefined);
 				onSend();

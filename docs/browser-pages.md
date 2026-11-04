@@ -6,6 +6,8 @@ Four tools open a page in the user's browser. Three are reviews and wait for the
 - `sign_off_document`: a Markdown document, rendered, for the user to annotate and sign off. See [Markdown review](#markdown-review).
 - `sign_off_task`: a whole ledger task bundle, with its ticket graph. See [Ledger task review](#ledger-task-review).
 
+While a review waits, the session shows as asking you, the same as during `ask_user_question`: in the tmux sidebar and status line, the directory, and Workplace. It stops when the verdict arrives or the call is cancelled.
+
 The fourth, `explain_change`, opens an explanation of a change for the user to understand, and returns at once. See [Explain change](#explain-change).
 
 Root sessions only; a run without an attached user gets a message instead of a page. Every page degrades gracefully: see [Without the agent](#without-the-agent).

@@ -1087,6 +1087,21 @@ test("a dialog only the terminal can answer shows a notice with Go to its termin
 	}
 }, 30000);
 
+test("a session waiting on a sign-off page keeps the reply box and says the verdict is given on the page", async () => {
+	const { page, errors } = await openWorld(asker({ kind: "sign-off", text: "Plan for the cache" }), { asker: SUITE });
+	try {
+		await talkTo(page, "asker");
+		const note = book(page).getByRole("status").filter({ hasText: "waiting for your sign-off" });
+		await note.waitFor({ timeout: 3000 });
+		await expect(note.textContent()).resolves.toContain("Plan for the cache");
+		await expect(book(page).getByRole("note").count()).resolves.toBe(0);
+		await expect(book(page).getByRole("textbox").count()).resolves.toBe(1);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
 const THINKER: TranscriptEntry[] = [
 	{ kind: "user", id: "t1", at: at(50), text: "Check the [guide](https://example.com/guide) links.", images: 0 },
 	{
