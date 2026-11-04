@@ -305,3 +305,30 @@ test("concurrent first installs of elan publish one complete home, and an incomp
 		rmSync(cache, { recursive: true, force: true });
 	}
 }, 300_000);
+
+test("a path dependency outside the project built without kernel checking is caught too", async () => {
+	const root = join(dir, "path-dependency");
+	const dep = join(dir, "path-dependency-dep");
+	mkdirSync(root, { recursive: true });
+	mkdirSync(dep, { recursive: true });
+	for (const folder of [root, dep]) writeFileSync(join(folder, "lean-toolchain"), `${LEAN_TOOLCHAIN}\n`);
+	writeFileSync(join(dep, "lakefile.toml"), 'name = "dep"\ndefaultTargets = ["Dep"]\n\n[[lean_lib]]\nname = "Dep"\n');
+	writeFileSync(
+		join(dep, "Dep.lean"),
+		`import Lean
+open Lean Elab Command in
+set_option debug.skipKernelTC true in
+run_cmd liftCoreM <| addDecl (.thmDecl { name := \`Dep.bad, levelParams := [], type := mkConst \`\`False, value := mkConst \`\`True.intro })
+`,
+	);
+	writeFileSync(
+		join(root, "lakefile.toml"),
+		'name = "app"\ndefaultTargets = ["App"]\n\n[[require]]\nname = "dep"\npath = "../path-dependency-dep"\n\n[[lean_lib]]\nname = "App"\n',
+	);
+	writeFileSync(join(root, "App.lean"), "import Dep\n");
+	const source = "import Dep\ntheorem result : False := Dep.bad\n";
+	writeFileSync(join(root, "Check.lean"), source);
+	const result = await runLean({ file: join(root, "Check.lean"), source, build: true });
+	expect(result.verdict, `${result.message}\n${result.output}`).toBe("error");
+	expect(result.message).toBe("The kernel rejected a declaration on replay.");
+}, 600_000);

@@ -37,20 +37,31 @@ test("runProcess always settles, leaves no killable process of its group, and re
 	expect(waitedForClose.message).toMatch(/[Tt]emporal/);
 }, 300_000);
 
-test("alloy_check's verdict passes only with every property proved, every expect met and a witness", async () => {
-	const result = await runAlloy({ spec: resolve("specs/alloy-verdict.als") });
-	expect(result.verdict, result.message).toBe("pass");
-	expect(result.commands.find((command) => command.name === "EveryRunFindsAnInstance")?.outcome).toBe("counterexample");
-}, 300_000);
-
-test("lean_check's default verdict is proved sound in Lean", async () => {
-	const file = resolve("specs/lean-verdict.lean");
+async function proved(path: string) {
+	const file = resolve(path);
 	const result = await runLean({ file, source: readFileSync(file, "utf8") });
 	expect(result.verdict, result.message).toBe("pass");
-	expect(result.theorems.map((theorem) => theorem.name).sort()).toEqual([
-		"pass_audits_a_written_theorem",
-		"pass_has_no_sorry",
-		"pass_has_only_standard_axioms",
+	return result.theorems.map((theorem) => theorem.name).sort();
+}
+
+test("lean_check's decision is proved sound for every possible run", async () => {
+	expect(await proved("specs/lean-verdict.lean")).toEqual([
+		"failed_replay_never_passes",
+		"pass_sound",
+		"resolve_theorem",
 		"sorry_warning_never_passes",
+		"summary_sound",
 	]);
+}, 300_000);
+
+test("alloy_check's decision is proved sound for any list of commands", async () => {
+	expect(await proved("specs/alloy-decision.lean")).toEqual(["execute_found", "pass_sound"]);
+}, 300_000);
+
+test("every declaration a passing Lean theorem depends on is replayed by the kernel or trusted by design", async () => {
+	const result = await runAlloy({ spec: resolve("specs/lean-trust.als") });
+	expect(result.verdict, result.message).toBe("pass");
+	const before = result.commands.find((command) => command.name === "BeforeCoversEveryDependency");
+	expect(before?.outcome).toBe("counterexample");
+	expect(before?.instance).toMatch(/Elsewhere/);
 }, 300_000);

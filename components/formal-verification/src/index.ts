@@ -169,7 +169,6 @@ function alloyReport(result: AlloyResult, spec: string): string {
 				`${command.outcome === "counterexample" ? "Counterexample" : "Instance"} for ${command.name}:`,
 				command.instance,
 			);
-	if (result.verdict === "error" && !result.commands.length) lines.push("", "Alloy output:", result.output.trimEnd());
 	return lines.join("\n");
 }
 

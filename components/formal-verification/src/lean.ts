@@ -262,13 +262,13 @@ async function standardAxioms(report: AuditReport): Promise<(axiom: Axiom) => bo
 	return (axiom) => STANDARD_AXIOMS.has(axiom.name) && toolchain.has(axiom.module);
 }
 
-export async function projectModules(report: AuditReport, root: string): Promise<string[]> {
-	const inside = `${await canonical(root)}/`;
+async function untrustedModules(report: AuditReport): Promise<string[]> {
+	const library = `${await canonical(join(report.sysroot, "lib", "lean"))}/`;
 	const names: string[] = [];
 	for (const module of report.modules) {
 		if (module.name === MODULE) continue;
 		const olean = await canonical(module.olean);
-		if (olean.startsWith(inside) && !olean.includes("/.lake/packages/")) names.push(module.name);
+		if (!olean.startsWith(library) && !olean.includes("/.lake/packages/")) names.push(module.name);
 	}
 	return names;
 }
@@ -425,11 +425,7 @@ export async function runLean(options: LeanOptions): Promise<LeanResult> {
 				message: "The axiom audit wrote no valid report.",
 				output: audited.output,
 			};
-		const replayed = await run(
-			"leanchecker",
-			[...pin, MODULE, ...(project ? await projectModules(report, project.root) : [])],
-			{ env },
-		);
+		const replayed = await run("leanchecker", [...pin, MODULE, ...(await untrustedModules(report))], { env });
 		if (replayed.timedOut)
 			return {
 				...withFound,
