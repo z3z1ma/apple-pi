@@ -18,3 +18,6 @@ Electron starts `src/electron/start.mjs`, not `main.js`: it installs the host-pa
 Why: Electron does not quit when its main module fails to load (it shows an error dialog, which can be invisible under WSLg). The old "still alive after 2 s" check therefore reported success for an app that never loaded, and the operator saw "Opening Workplace" forever.
 The environment carries `PI_HOST_PACKAGE_DIR` (`hostPackageEnv`), so that main's imports of Pi's own libraries resolve in an installed package (see register.mjs).
 Verify: apps/agent-workplace/tests/launch.test.ts
+
+Relaunching the operator's running app after a build: Electron, its userData and its log live under `~/.pi/agent/agent-workplace/`. Use the app's normal Quit, then start it again; the app's pid is the process matching `MacOS/Electron /Users`, and its command runs `apps/agent-workplace/src/electron/start.mjs`. Check the running commit after the restart. If Quit is refused by the app's leave guard (unsent drafts, live terminals), leave it running and ask the operator to quit and reopen it.
+Why: killing the app loses the operator's drafts and terminals, and a started process is not proof the new build loaded.

@@ -12,6 +12,14 @@ Why: crash/replay and rollback can otherwise duplicate a scheduled firing, lose 
 Review comments commit their post before the command result pointer; a stored comment proves publication during recovery. The harness owns review threads even if a person comments first, while the owner receives push and authorized commenters join. This shares normal thread/outbox semantics rather than creating another notification store.
 Why: a first comment must not prevent later milestones or disappear when the result pointer was lost.
 
+Operating the live daemon. The runtime is long-lived and keeps running old code after the checkout changes: new requests go unanswered and a new column is never migrated.
+- Compare its start time (`ps -o lstart -p $(cat ~/.pi/agent/state/apple-pi-runtime.pid)`) with the commit before relying on new behavior.
+- Restart it by stopping that pid; bridges start a new one. Wait a few seconds for a stable new pid before sending review mutations (one sent at once was accepted, then lost to the restart), and tell the operator.
+- A restart runs the checkout's working tree, including other lanes' uncommitted `runtime.ts`/`schema.ts` edits; a half-written migration could damage the operator's database. Restart only after every lane touching the runtime has committed and no review or program scope is active.
+- The runtime imports app modules by path (external threads use the app's credentials and Jira code), so moving app code also needs a restart.
+- Views (Workplace, the sidebar, the notch) select a new column only when `pragma_table_info` lists it, because the daemon may still run the old schema.
+- To tell a stale test runtime from the live one, check which database each process has open (`lsof -p <pid>`): tests serve temporary `aps-*/state/apple-pi.db` files; the live one serves `~/.pi/agent/state/apple-pi.db`.
+
 ## symbol:Runtime.checkFriction
 
 Startup and the existing liveness timer observe committed structural changes. Connection closure still checks process liveness but does not replay coordination history for every command socket. Its journal watermark is only a cheap trigger filter; the planner and durable raised/cleared entries remain authoritative. Include delivered/failed work because assignment persistence can precede a failed wake. Tool/cost/run-state chatter and alert mail receipts do not trigger graph replay. No extra polling timer, age threshold or process-local notification authority is introduced.

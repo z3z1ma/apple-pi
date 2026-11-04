@@ -1,3 +1,9 @@
+## file
+
+Checking the panel: `screencapture` grabs the operator's live screen, including video calls. Crop to the area under test (for example `-R x,0,w,40` for the notch), delete the file after reading it, prefer headless Playwright for layout, and never move the operator's cursor.
+
+To test `notch.sh` with a tool missing on macOS, use a PATH of symlinks to only the tools it needs (`shasum` also needs `perl`; `/usr/bin/swiftc` exists as an xcrun shim). Fakes on that PATH call other commands by absolute path (`/bin/chmod`).
+
 ## symbol:Shell.focus
 
 A click on a worker runs the notify component's focus script as `<tmux session> "" <pane id>`, with `TMUX_SOCKET` set to the agent's tmux server.

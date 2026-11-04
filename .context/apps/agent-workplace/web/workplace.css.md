@@ -34,5 +34,14 @@ Only `.wp-dm-summary` grows inside the DM row. The unread indicator owns a fixed
 Why: the former generic direct-child span rule also matched the unread dot and stretched it to an 81-by-7 oval, squeezing the person's name. State/acknowledgment tests passed without checking this appearance; the rendered regression and smoke now exercise it.
 Verify: apps/agent-workplace/tests/world-conversation.test.ts, apps/agent-workplace/scripts/workplace-smoke.mjs
 
+CSS traps that cost debugging rounds in Workplace stylesheets:
+- `display: flex` overrides the `hidden` attribute; add a `[hidden] { display: none }` rule for elements that use both.
+- Place an override after the base rule it overrides (Biome `noDescendingSpecificity`), and use `:where()` to narrow without raising specificity.
+- Give text columns their own class instead of broad `button > span` rules: one stretched badges and avatars, visible only in a screenshot.
+- The shell gives `.wp-app` the class `wp-<view>` (for example `wp-settings`), so never use that name as a view's root class: it restyled the whole app.
+- A plain `<button>` renders as bare text; only `.wp-primary` and `.wp-icon-button` are styled. Give each new button a class or a themed rule, and screenshot it.
+- CSS for an element inside the shared conversation panel goes in `conversation.css`; World does not load this stylesheet.
+- Put a child's controls in a host header by portalling into a slot the host renders (`toolbarHost`), not by absolute positioning.
+
 The embedded sidebar is hidden rather than removed, so its status text can still match DOM text queries. UI checks select visible text or accessible roles rather than relying on a single matching text node.
 Why: the same run-state label appears in the visible workplace header and the hidden modal sidebar; DOM uniqueness would test the reused layout's internals instead of what the operator sees.

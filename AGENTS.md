@@ -287,6 +287,19 @@ Never move credentials, private transcript content, or notebook records into rep
 3. Record source and license provenance.
 4. Update `docs/boundaries.md` only when the durable architectural decision changes. Update the README catalog only when the public surface changes.
 
+## Working with the repository owner
+
+The operator owns this repository and directs its work. These preferences come from his corrections:
+
+- **Classify before building.** Decide for each part of an idea whether it is a harness capability (usable in any repository, opt-in) or a convention of this repository, and say which. A capability other repositories need, whose result the agent uses as data, ships as a native tool, not a repo script. Design as if skills and tools installed outside this repository do not exist.
+- **Skills ship to every repository.** `skills/` is distributed with the package, so lessons from developing apple-pi belong in `docs/development.md`, `.context/` files or this file, never in a skill.
+- **Build after direction.** Propose a build order with a recommendation, then build once he approves. He validates through daily use and rejects benchmark or proof phases as verification theatre. Offer an evaluation gate as an option with its cost instead of adding one; by default land on main with focused tests and say what was not measured.
+- **Open design questions** start from his picture: ask him to describe it and build options only from it. Once the form is settled, offer a complete grounded proposal. When a choice confuses him, restate it with a small concrete example and mark your recommendation.
+- **Names** say plainly what a thing does; themed names belong only at playful edges (brand, notch, in-world). Offer the simplest design first.
+- **Visual work:** build prototypes in the root session, open a requested UI spike as soon as its main workflow is usable, and verify its real entry path, not only a direct route.
+- **Agent-facing procedures** (skills, charters, briefs) state goals and the conventions others rely on, and leave method to the reader; he finds over-control makes models work worse.
+- **Sign-off:** write a ticket set into `.ledger/<task>/tickets/` before opening `sign_off_task`; its verdict is the approval. Notes in any sign-off verdict are fixes for the same session, not items to file; ask before deferring one.
+
 ## Documentation discipline
 
 Do not expand this file with every command, tool parameter, configuration key, or file. Those details already have better owners. Update `AGENTS.md` only when a future agent's high-level mental model, change-routing decision, or safety boundary would otherwise be wrong.

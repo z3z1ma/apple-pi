@@ -11,4 +11,6 @@ Measure central-dock geometry against both Files and Source control sidebars, no
 Coupled: apps/agent-workplace/web/workplace-terminal.tsx, apps/agent-workplace/web/workplace-terminal.css, apps/agent-workplace/web/workplace-code.tsx, apps/agent-workplace/web/workplace.tsx, apps/agent-workplace/src/terminal.ts, apps/agent-workplace/src/backend/embedded-terminal.ts
 Verify: apps/agent-workplace/tests/world-terminal.test.ts, apps/agent-workplace/tests/build.test.ts
 
+When a case here fails alone but passes with the rest of its file, look for a timing lockout in the product first (Ghostty's 50 ms fit lockout) before changing waits. For a stale-ref race, push the guard's inputs to a `window` global, rebuild, read them with `page.evaluate`, then restore the source; printing fixture data hid the cause.
+
 The integration owner supplies a frozen build and the shared Chrome slot. Run this named file with one worker; AGENT_WORLD_SHOTS saves evidence. Preserve page and console errors so a visible canvas cannot hide a failed WASM asset or initialization. Browser tests consume dist, not current renderer source.

@@ -26,4 +26,18 @@ An invalid image payload (such as base64 `aGk=`) is stored as the text placehold
 `options.streamText` adds start, text, and end stream events so `message_update` fires; without it a faux reply arrives only as `done`. Inside the stream function, its own `options` parameter shadows `fauxSession`'s, so read session options into locals before it.
 Why: the first `streamText` attempt read the stream's `options` and never streamed, so a writing-a-reply run state was unobservable.
 
+Lifecycle traps, each found the hard way:
+- `session.dispose()` does not emit `session_shutdown`; emit it first (the session-state `close` helper does), or extension watchers outlive the session.
+- `session.reload()` emits `session_start` only after a host bound to the session, so call `bindExtensions({ onError })` before the scenario.
+- Compaction needs `session.settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } })`, or it reports "Nothing to compact".
+- Queued custom steers show in `session.agent.hasQueuedMessages()`, not `pendingMessageCount`, and a custom message reaches the model with role `user`.
+- A `vi.waitFor` inside a faux tool's `execute` that times out only becomes a tool error, so assert the tool result has `isError: false`.
+- With the session-state bridge, bind `{ mode: "tui", uiContext }` before the first prompt (`ask_user_question` drops itself at `before_agent_start` without a UI). After `bindExtensions` rebinds, wait for a database fact the rebind changes (`select role from sessions where id = ?`), not for a `gap` event, which the runtime records only when the old connection already closed.
+- A test that holds replies hangs after a delivered `follow_up` releases another held request; end it with `session.abort()`.
+- `expect(array).toContain(expect.stringContaining(..))` never matches; use `toContainEqual`.
+
+Extension fakes and model access:
+- A fake `ExtensionToolContext` needs `tools` and `executeTool`, and `ctx.executeTool()` also needs an assistant message that issued the parent call, so drive nested calls through a real faux-model turn.
+- `pi.setModel` accepts any Model object. `ctx.modelRegistry.find` is the private `session.extensionRunner.modelRegistry.find`, reachable with an `as unknown as { modelRegistry: ... }` cast to spy on which provider and id exist.
+
 Verify: components/browser-pages/tests/ask-agent.test.ts, components/session-title/tests/session-title.test.ts

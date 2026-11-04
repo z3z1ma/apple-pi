@@ -10,6 +10,8 @@ Role policy is recorded before launch and rechecked before dispatch and after th
 
 Around each turn the attempt checks only the retained manifest and comparison (verifyCapturedSource). Full verifyArtifact runs before the planner (which starts every review and resume, so no reviewer reads unverified source), and at additional work and decisions. With eight passes in parallel, a full fsck plus file hashing before and after every turn cost seconds each and contended for the same files.
 
+A change to review execution is first truly exercised by a paid review; scripted fixtures echo the contract exactly. A live validator shard named findings by bare id and fail-fast cancelled its siblings, and a recorded deep policy never reached the peer launch (`--role-profile`), so every deep pass failed its model check. Accept the obvious local form at model-output boundaries, make fixtures model the launch and model selection, and say such changes are unexercised until a live run. When model output is slow or large, check the runtime validator before the prompt: a forced region-per-pass grid, not the planner prompt, made 18-pass reviews.
+
 An attempt is cancelled only when the stop caused its failure (the abort reason or an AbortError). Passes run in parallel, and one pass failing stops its siblings; a sibling that had already failed on its own (for example a policy change after its turn) stays failed rather than being relabelled cancelled.
 
 Coupled: components/code-review/src/policy.ts, components/session-state/src/review-jobs.ts, components/session-state/src/runtime.ts, components/session-state/src/program-client.ts, components/session-state/src/schema.ts, components/organization/src/session-role.ts

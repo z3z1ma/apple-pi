@@ -17,5 +17,7 @@ Verify: components/session-state/tests/idle-hire.test.ts, components/session-sta
 
 `let_go` returns an accepted request reference; the daemon owns any requested handoff and the retryable cleanup. The caller's explicit handoff:false skips the writing, not responsibility or cleanup checks. The native caller's command connection closes at that receipt and is not the job's cancellation owner. Permanent departure and reversible dormancy remain different operations, so `call_in` remains available and `rehire` has no public registration.
 Why: waiting for complete cleanup would block the manager on a model run or a failed filesystem/process proof, while cancelling on caller disconnection could undo already-accepted organizational work.
+Using these tools well: resolve an uncertain colleague name with `directory` before mailing or assigning. When reopening someone, see fresh acknowledgment or activity before making others depend on them; a current provider failure outranks the model the person is recorded with. Reassign a blocked seam to someone who can execute it. Before `send_home`, check that the person is idle and holds no tasks, so their final work is kept.
+
 Coupled: components/session-state/src/peers.ts, components/session-title/src/index.ts, components/session-state/src/runtime.ts, components/organization/src/session-role.ts
 Verify: components/session-state/tests/coordinator.test.ts, components/session-state/tests/departure-lifecycle.test.ts

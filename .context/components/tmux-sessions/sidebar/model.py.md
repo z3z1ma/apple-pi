@@ -24,6 +24,10 @@ Coupled: components/session-state/src/work.ts
 The views never mark a session seen because its pane is focused.
 Why: the runtime marks a session seen when a tmux client shows its pane; the views only send `mark_seen` for an explicit `x` or for reading it in the dashboard.
 
+## file
+
+Python lint is `npm run lint` (ruff `--isolated --select E4,E7,E9,F`); plain `uvx ruff check` reports rules the repository does not use. In `npm run test:sidebar`, `test_dashboard.py::test_a_reply_is_not_sent_when_the_agent_starts_working_while_you_type` is timing-flaky; rerun it alone before blaming a change.
+
 ## symbol:Store.poll
 
 Tool history is folded from `tool_started` events after the last `seq` read, not re-queried each poll.

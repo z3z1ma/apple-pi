@@ -63,6 +63,10 @@ npm run pack:check
 
 After changing `components/browser-pages/web/`, run `npm run build:web` and commit the pages it writes to `components/browser-pages/dist/`. `npm test` fails while the committed page is stale. `npm run typecheck` checks the page with `tsconfig.web.json`.
 
+`npm run typecheck` checks the web half (`tsconfig.web.json`) only after the Node half passes, so web errors hide behind Node errors; rerun it after every fix.
+
+Biome's `useHookAtTopLevel` treats any function named `use...` as a React hook, and `noFocusedTests` reads any call to a local `fit(...)` as a focused test. Name test helpers without those forms.
+
 ## Agent Workplace
 
 [Agent Workplace](agent-workplace.md) lives in `apps/agent-workplace/`: `src/backend/` is a plain Node module (no Electron import), `src/electron/` is the main process and the preload, `web/` contains the React Workplace chat/mail interface and the Phaser World with its React overlays, and `themes/` holds the theme packs.
@@ -71,6 +75,14 @@ After changing `components/browser-pages/web/`, run `npm run build:web` and comm
 - **Tests:** the backend runs in Vitest against a real session-state runtime with fake bridges and faux Pi sessions; the built UI runs in headless Chrome (`/Applications/Google Chrome.app`, through `playwright-core`) against a fixture `window.agentWorkplace`. `AGENT_WORLD_SHOTS=<dir>` makes the UI tests save screenshots there. They run as their own step, `npm run test:workplace`, after `test:unit` (which excludes `apps/`): run together, the many Chrome instances made unrelated suites time out. It uses a 30 s hook timeout, because launching Chrome under heavy load took longer than the 10 s default.
 - **Start-up check:** `npm run check:workplace-start` starts the built app with the installed Electron (or the binary named by `AGENT_WORLD_ELECTRON`) in a scratch agent directory with its own runtime, captures the window once the world has drawn, and fails unless the capture shows a rendered world. It needs Electron installed (run `/workplace` once) and a display; the window shows for a few seconds. It is not part of `npm test`.
 - **Workplace checks:** from a checkout with dev dependencies, `node apps/agent-workplace/scripts/workplace-smoke.mjs [screenshot-directory]` exercises the built Chat/Mail UI against an in-memory bridge in headless Chrome. `node apps/agent-workplace/scripts/workplace-electron-check.mjs` checks bare Chat startup, real Monaco editing and guarded file/Git IPC, observational profiles, Org navigation/progress and the explicit World round trip in an isolated Electron window. Both need a current build; the latter needs the installed Electron and a display. They send no live messages. Historical ledger copies are evidence, not the maintained validation entrypoints. For focused Vitest runs on this shared machine, select relevant files and use `--maxWorkers=1`.
+- **Chrome test pitfalls:** these cost debugging rounds before they were understood.
+  - Wait for a rendered selector before pressing keys, and take screenshots with `animations="disabled"`: CSS animations never advance in headless Chrome. Collect `pageerror` and console errors in every test.
+  - Playwright's web-first `expect(locator)` matchers fail under Vitest; use `locator.waitFor` and `vi.waitFor`. A `vi.waitFor` longer than 5 s needs the test's own timeout raised, and a menu action that walks first needs several seconds.
+  - Clicking a visually hidden radio waits until the test times out with no clear error: click its label text and assert `isChecked()`. Rerun a hanging test with `--testTimeout=60000` to see Playwright's own locator error.
+  - Make only the children of `.aw-places` clickable (`.aw-places > *, .aw-places > * *`): the container covers the whole window, so making it clickable swallows every right-click on the world.
+  - Check the preload API's union type before writing a fake. `readThread` returns `{ ok: true, page }`; a wrong shape shows only as a red banner in the screenshot. `conversation(id)` returns the full `ConversationPage` (`{ ok: true, entries, before, missing }`); without `ok` the DM renders empty with no error and the test only times out.
+  - `\u00b7` typed in JSX text prints literally; put it in a string expression.
+- **Auditing on real data:** to check Workplace against the operator's real organization without touching it, run the read-only live mirror: `node --import ./components/session-state/src/register.mjs .ledger/history/202611012305-front-desk-continuous-organization/live-mirror.ts <outDir> [tour|chat|rest]`. It drives the built UI in headless Chrome with real backends for reads and refuses mutations and catch-up. It showed real-data defects that fixture screenshots hid.
 - **Theme packs:** check a pack before opening it in the world with `node --import ./components/session-state/src/register.mjs apps/agent-workplace/src/check-theme.ts [apps/agent-workplace/themes/<id>]`; it prints each problem as `<pack>/<file>: <fault>` and exits 1 when there is any, and without a directory it checks every pack. The pack format is in `apps/agent-workplace/themes/README.md`.
 - **Art pipeline:** `apps/agent-workplace/art/` holds the style guide (`STYLE.md`), the per-theme briefs (`briefs/`), and `pipeline.py` (`uv run --script`), which generates art with Codex and then cuts, scales, quantizes to 256 colours, and checks it (`pipeline.py batch <theme>`, then `pipeline.py build <theme>`). Raw generated art stays local in `art/raw/`, which git ignores; the cleaned art in `themes/<theme>/` is what ships and is the source of truth. `npm run test:art` runs the pipeline's tests.
 
@@ -81,6 +93,7 @@ Biome is the repository formatter and lint runner. It formats all TypeScript and
 - Reuse [`tests/helpers/faux-session.ts`](../tests/helpers/faux-session.ts) to test real Pi sessions driven by scripted model responses in a temporary workspace.
 - Custom provider streams must handle both cancellation during a request and an `AbortSignal` already aborted when the request starts. Emit an aborted response in either case; Pi can make a final request after cancellation. Verify cancellation through the provider signal. For fork cancellation, also confirm that the parent session can continue, as in the [forked continuation tests](../components/shared/tests/forked-continuation.test.ts).
 - Supply explicit, nonzero usage on returned assistant-message fixtures when testing accounting. `fauxAssistantMessage` defaults its usage counters to zero.
+- Prove each new regression test red at the previous commit in a detached worktree (`git worktree add --detach`, with a `node_modules` symlink), never by restoring shared files from `git show HEAD:`; a test once passed on old code because its fixture changed a field the comparison never read. Before removing the worktree, unlink only its `node_modules` symlink (`node_modules/` does not ignore symlinks) and confirm the removal with `git worktree list`.
 
 ## Manual TUI checks
 
@@ -95,3 +108,25 @@ tmux kill-session -t check
 ```
 
 The pane can be larger than the requested size when a client is attached; read it with `tmux display -t check -p '#{pane_width}'`. Fullscreen mouse input can be sent as SGR sequences, for example `tmux send-keys -t check -l $'\e[<64;COL;ROWM'` for wheel up.
+
+## Sources
+
+Sources that misled earlier work in this repository, and what to read instead:
+
+- **Search summaries** of a recent product feature can be truncated or secondhand; confirm them against an official source.
+- **Upstream Pi facts** come from the tagged file on `raw.githubusercontent.com`. For a minimum-version safety claim, read the consuming code at each patch tag, not release notes: Git 2.45.0 parses `GIT_NO_LAZY_FETCH`, but only 2.45.1's `promisor-remote.c` honours it.
+- **The installed Pi package:** grep `dist/core/` and `dist/modes/`, not `dist/bundle/chunks/`, whose minified single lines flood the output.
+- **npm versions:** fetch `https://registry.npmjs.org/-/package/<name>/dist-tags`, then `/<name>/<version>`. The full packument can exceed `pi_exec` fetch's 10 MB limit.
+- **A reference project's features** live in its ADRs, specs and tool contract as well as its README; read them before saying it lacks one.
+- **Citations into source:** take line numbers from `rg -n`, and check both ends of a cited range against the file's length. Citing a test's source is not evidence of running it.
+
+## Ledger bundles here
+
+- Scripts kept in `.ledger/<task>/` find the repository root by walking up to a marker directory, not a fixed number of parents: closing the task moves the bundle under `history/`.
+- After archiving a task, check its relative links from the extra `history/` level, move any `.context/.ledger/<task>/` to `.context/.ledger/history/<task>/` with its `Coupled:` paths, and rerun `context_lint`.
+- Write tickets and map gists in plain words or wiki-glossary terms, not terms only one session defined. When a ticket goes out of scope or moves, check resolved tickets for `Handed off` lines pointing at it.
+
+## Documentation edits
+
+- Before renaming or splitting a doc heading, search `docs`, `AGENTS.md`, `README.md` and `.wiki` for links to `<file>.md#<anchor>`; other docs link to section anchors.
+- After a word-level bulk rename, grep for broken articles ("an coordinator"), circular sentences, and name-history lines the replace also rewrote; write history lines after the replace. After renaming a packaged skill, tell long-lived sessions that cite its old path.

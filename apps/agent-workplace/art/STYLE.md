@@ -38,3 +38,7 @@ The painting is architecture and static decoration. Sprites and overlays bring e
 ## What good looks like
 
 The prototype's painted hall is the floor, not the ceiling. A finished place reads at a glance (where to walk, what can be used, who is where), feels lived in, and holds up when zoomed. A finished character reads at 86 px: silhouette, colours, and pose say who it is and what it is doing before any badge does.
+
+## Generating by hand
+
+For art outside the pipeline, use Codex first; the operator rates it above other image tools: `codex exec -s workspace-write --skip-git-repo-check "Use your image generation tool to create this image, then save the PNG as ./name.png. Image: <prompt>"` in the target directory. Its sheets come out 1254 × 1254, so normalise sizes. To keep a character the same person across sheets, attach its existing sheet with `-i <file>` placed after the prompt (`-i` takes several files and swallows a prompt that follows it). Generated art can draw real trademarks: inspect it and ask for original, unbranded art.
