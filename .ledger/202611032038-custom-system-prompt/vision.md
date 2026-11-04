@@ -55,7 +55,7 @@ The analyst's twenty loops, each read against the code:
 | 4 | Interns read `.wiki`, `.ledger`, `.context` and use `search_session`; their descriptions do not say so. | **True** (`runner.ts`). | One line in the delegation map. |
 | 5 | Saved `.pi/programs` become `program_<name>` tools. | **True.** It is taught, but as rule 31 of 77. | Group it with `pi_exec`. |
 | 6 | `tlc_check` reports actions that never stepped, the formal twin of a test that cannot fail. | **True.** | One "no vacuous proof" principle in the evidence section. |
-| 7 | `search_branches` judges can score anything numeric. | **True.** Never called in 14 days. | Candidate for deferral with a pointer. |
+| 7 | `search_branches` judges can score anything numeric. | **True.** Never called in 14 days, likely because nothing teaches when to reach for it. | Teach it in the evidence section. |
 | 8 | The pair programmer is never introduced outside apple-pi. | **Wrong.** `<pair-protocol>` introduces it whenever the pair is on; on this machine it is off (`.pair-state.json`). **Real defect found instead:** `acknowledge_pair_findings` and its rule ship while the pair is off. | Project the pair tool and its text only while the pair is on. |
 | 9 | `channel_charter`, `follow_external` and `schedule_mail` have no guidance. | **True for `<rules>` and `<org>`.** The coordinator's role charter teaches part of it. | Teach them where the person's posture uses them. |
 | 10 | `focus`, `finish_task` and `promote_task` are missing from `<tools>`. | **True but by design.** They have no `promptSnippet` and are taught in `<org>`. Pi lists a tool only if it has a snippet. | An owned prompt groups tools by job, so the split between "listed" and "taught elsewhere" goes away. |
@@ -63,7 +63,7 @@ The analyst's twenty loops, each read against the code:
 | 12 | Nothing says when to use `pi_exec` `agent(role)` and when to `hire`. | **True.** | One distinction in the delegation map. |
 | 13 | `sign_off_code`/`explain_change` accept `review` to bridge machine review into human sign-off. | **True.** | One line in the review workflow. |
 | 14 | Browser-page guidelines are about 21 bullets that repeat `cwd`, `target`, `note` and "apply the annotations". | **True** (seen in this session's own prompt). | One shared contract plus one line per tool; detail stays in the tool schemas and the existing skills. |
-| 15 | Desk, notes and canvas tools have no guidance. | **True, and for most sessions they should not be there.** They are gated to managers and the scout (`mayUseActivity`), so every unroled operator session gets them, and they were never called from those sessions. | Decision 3. |
+| 15 | Desk, notes and canvas tools have no guidance. | **True.** They are gated to managers and the scout (`mayUseActivity`), so every unroled operator session gets them, unexplained. | Unroled roots keep them (decision 3); the toolbox teaches them. |
 | 16 | `experience`/`bottlenecks` are underused before staffing. | **True** (0 and 0 calls; `hire` 22). | One line in the staffing story. |
 | 17 | Reflection runs automatically and the agent is not told. | **True.** | One line in the operating model. |
 | 18 | `.context`, `.wiki` and `notes` form one knowledge graph, taught in three places. | **True.** | One memory map. |
@@ -110,17 +110,17 @@ A new component, `components/system-prompt/`, installs one `before_agent_start` 
 
 The tool definitions get the same ownership:
 
-- **Exposure by posture.** Tools stay `direct` when the session's posture uses them (core work tools for everyone; staffing and inspection for managers; desk tools for the coordinator and scout). Tools that the evidence shows are rarely used become `deferred`; the toolbox names each one in a line so the agent knows to reach it through `tool_search`. This keeps every capability reachable, cutting roughly 11,000 to 17,000 tokens from every request, by the 14-day numbers.
+- **Exposure by posture.** Every tool the session's posture can use stays declared (core work tools for everyone; staffing, inspection and the desk for people who manage, including unroled roots). Low usage is not a reason to hide a tool: today's usage reflects today's prompt (operator's note). Tokens come down through cohesion and concise definitions instead, and usage is measured again after the new prompt ships.
 - **Short descriptions, detail on demand.** A long tool description (`sign_off_code` 1,872 tokens, `explain_change` 1,017, `read_review` 902) shrinks to what the call needs. The procedure moves to the skill the toolbox points at (`operator-sign-off`, `explain-change`, `code-review`), which ship to every repository and already hold most of it.
 - **One mechanism.** Exposure is decided in one place, the composer's projection table, through `prepareLoadout`, not scattered across components.
 
 ### Contexts
 
-The composer serves root sessions first. Interns, `/btw` and the pair sidecar each have their own small prompt today, and each would get its own variant of the same document later (decision 4).
+Interns, `/btw` and the pair sidecar each have their own small prompt today. They become rows of the same projection table and get their variant of the document in the same pass (decision 4).
 
 ## 5. The projection, made visible
 
-One table in the composer decides, for each context and posture, which sections and which tools are direct, deferred or absent. Today this logic is spread across `organization/install.ts`, `coordinator.ts`, `work-tools.ts`, `activity-tools.ts`, `pi-exec/index.ts`, `ask-user-question` and `pair-programmer`. The components keep their authorization checks at call time; the table decides only what the model is told and shown.
+One table in the composer decides, for each context and posture, which sections and which tools are declared. Today this logic is spread across `organization/install.ts`, `coordinator.ts`, `work-tools.ts`, `activity-tools.ts`, `pi-exec/index.ts`, `ask-user-question` and `pair-programmer`. The components keep their authorization checks at call time; the table decides only what the model is told and shown.
 
 | Dimension | Values |
 |---|---|
@@ -137,8 +137,9 @@ Each step lands on main with focused tests, and the capture in `current-prompt/`
 1. **Composer skeleton.** The component takes over the section order and writes the current text unchanged, except that order is grouped by stability. Proof: the re-captured prompt differs only in order. This makes every later step a content change in one place.
 2. **Preamble and toolbox.** Write the operating model; replace Pi's `tools`/`rules` with the grouped toolbox; drop the repeated browser-page and TLA+ guidance in favor of one line each plus their skills. Gate the pair tool on the pair being on.
 3. **Person.** Rewrite `org` as instructions, group the role catalog by posture, add the missing staffing, desk and channel lines where each posture uses them.
-4. **Tool exposure.** Projection table, deferred tools with toolbox pointers, shorter descriptions with detail in skills.
-5. **Other contexts** (decision 4).
+4. **Tool surface.** Projection table and shorter descriptions with detail in skills.
+
+Interns, `/btw`, the pair sidecar and program peers are rows of the same projection table from step 1, so the work is one pass over every context (decision 4).
 
 **Measured after each step:**
 - the re-captured prompt and tool tokens;
@@ -147,11 +148,9 @@ Each step lands on main with focused tests, and the capture in `current-prompt/`
 
 There is no evaluation gate. The operator validates through use.
 
-## 7. Decisions for the operator
+## 7. Decisions (operator, 2026-11-04)
 
-1. **Authoring model.**
-   - **(a) One authored document** with live data, where components stop writing prose (recommended: the only way to get one voice and no duplication).
-   - **(b) A composer that only reorders and lightly edits** the components' existing sections: less churn, and it keeps today's fragmentation.
-2. **Deferring tools.** Defer the rarely used tools behind `tool_search` with a one-line pointer each (recommended, about 11–17k tokens per request), or keep every tool declared and only shorten descriptions.
-3. **Desk tools in unroled sessions.** Today every unroled root (all of the operator's own sessions) gets the desk, notes and canvas tools because it counts as a manager; none of those sessions called them in 14 days. Either keep them for the coordinator and scout only, or keep them deferred for everyone who manages.
-4. **Scope.** Root sessions first and the other contexts later (recommended), or all contexts in one pass.
+1. **Authoring model: one authored document** with live data; components stop writing prose and provide facts.
+2. **No deferral by usage.** Tools unused today are unused because the prompt does not teach them. Every tool the posture allows stays declared; the goal is maximum cohesion and minimum tokens for salience, reached through the document and concise definitions. Usage is measured again after the new prompt ships.
+3. **Unroled roots keep the full manager posture.** An unroled session is a generalist that edits code and also disperses work to a team, so it keeps staffing, inspection and the desk tools. The coordinator is the role that manages an organization more exclusively. The toolbox teaches each desk tool in a line, so none is unexplained.
+4. **One pass over every context**, through the projection table, since that is simpler than two implementations.
