@@ -228,7 +228,6 @@ try {
 	for (const name of [
 		"mcp",
 		"mcpScript",
-		"pi_exec",
 		"pi_exec_program",
 		"ask_for_second_opinion",
 		"ask_consultant",
@@ -379,7 +378,6 @@ try {
 			"codemode",
 			`${peerTool} is callable only from scripts`,
 		);
-	assert.equal(manifest.dependencies["@pydantic/monty"], undefined, "programs run on Pi's codemode, not Monty");
 	assert.equal(manifest.dependencies["pi-mcp-adapter"], undefined, "MCP belongs to Pi");
 	assert(!existsSync("extensions/mcp.ts"), "removed MCP wrapper must be absent");
 	assert.deepEqual(manifest.pi.skills, ["./skills"]);

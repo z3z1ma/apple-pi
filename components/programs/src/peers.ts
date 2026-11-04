@@ -102,7 +102,7 @@ export async function runAgent(ctx: PeerContext, args: TurnArgs & { role: string
 	}
 }
 
-export async function runColleague(ctx: PeerContext, args: TurnArgs & { person: string }, signal?: AbortSignal) {
+async function runColleague(ctx: PeerContext, args: TurnArgs & { person: string }, signal?: AbortSignal) {
 	const self = caller(ctx);
 	const person = resolvePerson(self, args.person);
 	if (person === self) throw new Error("Ask another colleague; a session cannot give itself a turn");

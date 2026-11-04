@@ -11,7 +11,7 @@ import {
 import type { ExtensionAPI, ExtensionContext, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-export const PROGRAMS_DIRECTORY = ".pi/programs";
+const PROGRAMS_DIRECTORY = ".pi/programs";
 const PROGRAM_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const HEADER = /^\s*\/\/\s*@program:(.*)$/m;
 const OPTIONS = /^\s*\/\/\s*@options:.*$/m;
@@ -57,7 +57,7 @@ function readProgram(cwd: string, name: string): SavedProgram {
 	return parseProgram(name, readFileSync(path, "utf8"));
 }
 
-export function listPrograms(cwd: string): SavedProgram[] {
+function listPrograms(cwd: string): SavedProgram[] {
 	const directory = programsDirectory(cwd);
 	if (!directory) return [];
 	return readdirSync(directory, { withFileTypes: true })
@@ -72,7 +72,7 @@ export function listPrograms(cwd: string): SavedProgram[] {
 		});
 }
 
-export function programToolName(name: string): string {
+function programToolName(name: string): string {
 	return `program_${name.replace(/-/g, "_")}`;
 }
 
@@ -104,7 +104,7 @@ async function bounded(text: string, maxOutputTokens: number): Promise<string> {
 	return `${text.slice(0, half)}\n[${text.length - 2 * half} characters omitted; the full output is in ${path}]\n${text.slice(-half)}`;
 }
 
-export async function runScript(ctx: ExtensionToolContext, source: string, signal?: AbortSignal) {
+async function runScript(ctx: ExtensionToolContext, source: string, signal?: AbortSignal) {
 	const { code, options } = parseCodemodeSource(source);
 	const sandbox = new CodemodeSandbox({
 		tools: ctx.tools.map((tool) => ({

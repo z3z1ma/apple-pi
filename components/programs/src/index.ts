@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { installPeerTools } from "./peers.js";
 import { installPrograms } from "./programs.js";
 
-export function activateCodemode(pi: ExtensionAPI): void {
+function activateCodemode(pi: ExtensionAPI): void {
 	const active = pi.getActiveTools();
 	if (!active.includes("codemode") && pi.getAllTools().some((tool) => tool.name === "codemode"))
 		pi.setActiveTools([...active, "codemode"]);
