@@ -67,10 +67,10 @@ export const TOOL_GROUPS: ToolGroup[] = [
 	},
 	{
 		title: "Help you can call",
-		tools: ["explore", "research", "pi_exec", "search_branches", "google_search", "tool_search", "generate_image"],
+		tools: ["explore", "research", "codemode", "search_branches", "google_search", "tool_search", "generate_image"],
 		guidance: [
 			"- **Interns** (`explore`, `research`): cheap one-shot sessions outside your context that read files, the wiki, the ledger, context files and session history. One specific question each, in parallel when independent. What they return is told, not seen: read the source yourself when the detail decides.",
-			"- **Programs** (`pi_exec`): type-checked Python that chains tools and reduces their output to the evidence you need; check each outcome before using it. It can run turns on colleagues for bounded parallel work. A program saved as `.pi/programs/<name>.py`, with a docstring and `@param` tags, becomes the tool `program_<name>`.",
+			"- **Programs** (`codemode`): JavaScript that calls any tool as `tools.<name>(args)`, in parallel when independent, and returns only the evidence you need; a failed call rejects, so check each result before using it. In a script, `tools.temporary_peer` gives one task to a temporary peer in a role and `tools.colleague` gives a turn to an awake colleague, when you staff and steer. A script saved as `.pi/programs/<name>.js`, starting with a doc comment that holds its description and `@param {type} name` tags, becomes the tool `program_<name>`; its arguments arrive as `inputs`.",
 			"- **Parallel attempts** (`search_branches`): several approaches in their own worktrees, gated by tests and scored by judge commands you write; the best that passes is applied. Protect the files the judges read.",
 			"- **The outside world**: `google_search` for the current world; confirm a summary of something recent against an official source.",
 			"- `tool_search` loads tools not yet declared, including every MCP server's.",

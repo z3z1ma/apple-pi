@@ -13,7 +13,6 @@ import { toolboxSection } from "./toolbox.js";
 export const SECTION_ORDER = [
 	"toolbox",
 	"goal-flow",
-	"pi-exec-peers",
 	"role-catalog",
 	"pair-protocol",
 	"shell-output",

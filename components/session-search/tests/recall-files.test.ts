@@ -41,10 +41,10 @@ describe("file recall", () => {
 		expect(output).not.toContain("line 36");
 	});
 
-	it("aggregates direct and pi_exec nested writes in mode:touched data", () => {
+	it("aggregates direct and codemode nested writes in mode:touched data", () => {
 		const nested = {
 			role: "toolResult",
-			toolName: "pi_exec",
+			toolName: "codemode",
 			content: [{ type: "text", text: "done" }],
 			details: {
 				trace: {

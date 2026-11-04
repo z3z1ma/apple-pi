@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createBashToolDefinition, createExecBashToolDefinition } from "../../tasks/src/bash-tool.js";
+import { createBashToolDefinition } from "../../tasks/src/bash-tool.js";
 import { formatCollapsedLine, formatStatusBullet } from "../../terse-tools/src/formatters.js";
 import { isRtkAvailable, parseSemver, probeRtk, resetRtkCache, rewriteCommand } from "../src/index.js";
 
@@ -205,16 +205,9 @@ describe("Bash tool RTK rewriting vs Pi Exec isolation", () => {
 		expect(result.details?.rtk).toBe(false);
 	});
 
-	it("createExecBashToolDefinition does not include verbatim or run_in_background parameters", () => {
-		const tool = createExecBashToolDefinition();
-		const properties = (tool.parameters as any).properties;
-		expect(properties.verbatim).toBeUndefined();
-		expect(properties.run_in_background).toBeUndefined();
-	});
-
-	it("createExecBashToolDefinition never rewrites commands with RTK", async () => {
-		const tool = createExecBashToolDefinition();
-		const result = await tool.execute("call-4", { command: "git status" }, undefined, undefined, {
+	it("never rewrites a bash call another tool made", async () => {
+		const tool = createBashToolDefinition();
+		const result = await tool.execute("script/4", { command: "git status" }, undefined, undefined, {
 			cwd: process.cwd(),
 		} as any);
 		expect(result.details?.rtk).toBe(false);

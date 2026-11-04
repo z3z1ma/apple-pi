@@ -2,9 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
+import { createCodemodeExtension } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
-import piExec from "../../../extensions/pi-exec.js";
 import { startFork } from "../../shared/src/forked-continuation.js";
 import installCodeContext from "../src/index.js";
 
@@ -30,7 +30,7 @@ function resultText(messages: readonly AgentMessage[], id: string): { text: stri
 }
 
 async function session(replies: Reply[], extensions = [installCodeContext]) {
-	const faux = await fauxSession(extensions, replies, ["read", "edit", "write", "pi_exec"]);
+	const faux = await fauxSession(extensions, replies, ["read", "edit", "write", "codemode"]);
 	sessions.push(faux);
 	mkdirSync(join(faux.cwd, ".context"));
 	writeFileSync(join(faux.cwd, ".context/app.ts.md"), CONTEXT_FILE);
@@ -120,18 +120,18 @@ describe("code context files", () => {
 		expect(faux.text("read-empty").text).toContain(".context/app.ts.md could not be loaded because it is empty");
 	});
 
-	it("returns raw file content to pi_exec programs and does not gate their mutations", async () => {
+	it("returns raw file content to codemode scripts and does not gate their mutations", async () => {
 		const faux = await session(
 			[
 				call(
-					"pi_exec",
+					"codemode",
 					{
-						code: 'text = await read(path="app.ts")\nawait edit(path="app.ts", edits=[{"oldText": "value = 1", "newText": "value = 3"}])\ntext',
+						code: 'const text = await tools.read({ path: "app.ts" });\nawait tools.edit({ path: "app.ts", edits: [{ oldText: "value = 1", newText: "value = 3" }] });\nreturn text;',
 					},
 					"exec",
 				),
 			],
-			[installCodeContext, piExec],
+			[installCodeContext, createCodemodeExtension({ models: false })],
 		);
 		await faux.session.prompt("run it");
 

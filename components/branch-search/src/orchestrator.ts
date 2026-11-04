@@ -73,7 +73,7 @@ export const SEARCH_BLOCKED_TOOLS: ReadonlySet<string> = new Set([
 	"remind_me",
 	"monitor",
 	"task",
-	"pi_exec",
+	"codemode",
 ]);
 
 export const BRANCH_SEARCH_MESSAGE_TYPE = "branch-search";

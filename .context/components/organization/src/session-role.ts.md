@@ -1,9 +1,9 @@
 ## symbol:sessionRole
 
-Pi's real extension loader isolates module caches. A role resolved by session-state is therefore not automatically cached in pi_exec's copy of this module. Honor a local resolved value, including explicitly unroled; when this copy has no entry, resolve and cache the existing transcript role name against the catalog, just as startup does. An absent transcript role stays unseen so the first start can still finish recording it; a stored but unknown role stays unroled until reload. Catalog edits take effect at reload, not halfway through a turn. The transcript remains the authority across extension graphs, without another role store or a global cache.
-Why: direct-import or Vitest-spy tests can pass while real loaded manager calls are all denied. The Pi Exec integration fixture loads a real role installer through Pi's loader and checks managing-role and unroled-root execution and working-role rejection before any program scope or person is created.
-Coupled: components/organization/src/install.ts, components/pi-exec/src/peer-calls.ts
-Verify: tests/pi-exec-integration.test.ts, components/organization/tests/roles.test.ts
+Pi's real extension loader isolates module caches. A role resolved by session-state is therefore not automatically cached in another extension's copy of this module (the peer tools in `components/programs`). Honor a local resolved value, including explicitly unroled; when this copy has no entry, resolve and cache the existing transcript role name against the catalog, just as startup does. An absent transcript role stays unseen so the first start can still finish recording it; a stored but unknown role stays unroled until reload. Catalog edits take effect at reload, not halfway through a turn. The transcript remains the authority across extension graphs, without another role store or a global cache.
+Why: direct-import or Vitest-spy tests can pass while real loaded manager calls are all denied.
+Coupled: components/organization/src/install.ts, components/programs/src/peers.ts
+Verify: components/organization/tests/roles.test.ts, components/programs/tests/programs.test.ts
 
 ## symbol:installSessionRole
 
@@ -25,7 +25,7 @@ Why: the review runtime records each pass's policy (deep or balanced profile) an
 Coupled: components/session-state/src/review-attempt.ts, components/session-state/src/runtime.ts, components/code-review/src/policy.ts
 Verify: components/organization/tests/roles.test.ts, components/session-state/tests/review-queue.test.ts
 
-A dispatching role (`dispatches: true`) also drops `bash`, `pi_exec`, `search_branches` and `monitor`, keeping reading, interns, communication and management. Delegation is enforced by the tool set because prompt-only delegation fails: DeepSeek's ablation saw a neutral-prompt main session delegate in 0 of 5 runs.
+A dispatching role (`dispatches: true`) also drops `bash`, `codemode`, `search_branches` and `monitor`, keeping reading, interns, communication and management. Delegation is enforced by the tool set because prompt-only delegation fails: DeepSeek's ablation saw a neutral-prompt main session delegate in 0 of 5 runs.
 
 Posture (`writes: false` dropping `edit` and `write`) is applied at `session_start` and again at every `before_agent_start`.
 Why: Pi restores the active tool set from the saved transcript after extensions load, so a session created before the role existed, or one whose user re-enabled a tool, would otherwise start a run with `edit` back.

@@ -1,7 +1,7 @@
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { ActiveWorkEntry, ActiveWorkSource, ActiveWorkTheme } from "../../shared/src/active-work.js";
 import type { TaskManager } from "./task-manager.js";
-import { isActiveTask, type CommandTask, type ManagedTask, taskPreview } from "./types.js";
+import { type CommandTask, isActiveTask, type ManagedTask, taskPreview } from "./types.js";
 
 function formatMs(ms: number): string {
 	return `${(Math.max(0, ms) / 1000).toFixed(1)}s`;

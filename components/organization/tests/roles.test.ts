@@ -2,10 +2,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
-import { type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
+import { createCodemodeExtension, type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, test, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
-import piExec from "../../pi-exec/src/index.js";
 import { modelProfilesPath } from "../../shared/src/model-profiles.js";
 import * as reportingState from "../src/directory.js";
 import { installOrganization, loadRoles, PACKAGE_ROLES_DIR } from "../src/index.js";
@@ -104,17 +103,17 @@ test("a role without writes loses edit and write, gets the role section, and kee
 
 test("a dispatching role keeps reading and loses the shell, file writing and program tools", async () => {
 	const run = await fauxSession(
-		[piExec, organization],
+		[createCodemodeExtension(), organization],
 		[fauxAssistantMessage("ok")],
-		["read", "bash", "edit", "write", "grep", "pi_exec"],
+		["read", "bash", "edit", "write", "grep", "codemode"],
 	);
 	try {
-		expect(run.session.getActiveToolNames()).toContain("pi_exec");
+		expect(run.session.getActiveToolNames()).toContain("codemode");
 		await restartWithRole(run, "coordinator");
 		await run.session.prompt("hi");
 		const tools = run.session.getActiveToolNames();
 		expect(tools).toEqual(expect.arrayContaining(["read", "grep"]));
-		for (const name of ["bash", "edit", "write", "pi_exec"]) expect(tools).not.toContain(name);
+		for (const name of ["bash", "edit", "write", "codemode"]) expect(tools).not.toContain(name);
 	} finally {
 		run.dispose();
 	}
@@ -344,53 +343,36 @@ test.each([
 	{ role: "engineering-manager", parent: "boss", allowed: true },
 	{ role: "service-owner", parent: null, allowed: true },
 	{ role: "research-lead", parent: "boss", allowed: true },
-])(
-	"peer schemas and guidance follow current capabilities (role=$role, parent=$parent)",
-	async ({ role, parent, allowed }) => {
-		const reporting = vi
-			.spyOn(reportingState, "reportingOf")
-			.mockImplementation((id) => (parent === undefined ? undefined : { id, reportsTo: parent }));
-		const run = await fauxSession([piExec, organization], [fauxAssistantMessage("ok")], ["pi_exec"]);
-		const model = run.session.model;
-		const thinking = run.session.thinkingLevel;
-		try {
-			const errors: unknown[] = [];
-			const programs = join(run.cwd, ".pi", "programs");
-			mkdirSync(programs, { recursive: true });
-			writeFileSync(join(programs, "probe.py"), '"""A role schema probe."""\n1 + 2\n');
-			if (role) run.session.extensionRunner.setFlagValue("role", role);
-			await run.session.bindExtensions({ onError: (error) => errors.push(error) });
-			run.session.setActiveToolsByName(["pi_exec", "program_probe"]);
-			await run.session.prompt("ready");
-			expect(errors).toEqual([]);
-			const parameters = run.session.agent.state.tools.find((tool) => tool.name === "pi_exec")!.parameters as {
-				properties: { code: { description: string }; peers?: unknown };
-			};
-			expect("peers" in parameters.properties).toBe(allowed);
-			const program = run.session.agent.state.tools.find((tool) => tool.name === "program_probe")!;
-			const limits = (program.parameters as { properties: { limits: { properties: object } } }).properties.limits;
-			expect("agentBudget" in limits.properties).toBe(allowed);
-			expect(parameters.properties.code.description.includes("async def peer(")).toBe(allowed);
-			expect(parameters.properties.code.description.includes("async def agent_run(")).toBe(allowed);
-			expect(run.session.agent.state.systemPrompt.includes("Attach awake colleagues")).toBe(allowed);
+])("staffing guidance follows current capabilities (role=$role, parent=$parent)", async ({ role, parent, allowed }) => {
+	const reporting = vi
+		.spyOn(reportingState, "reportingOf")
+		.mockImplementation((id) => (parent === undefined ? undefined : { id, reportsTo: parent }));
+	const run = await fauxSession([organization], [fauxAssistantMessage("ok")], ["read"]);
+	const model = run.session.model;
+	const thinking = run.session.thinkingLevel;
+	try {
+		const errors: unknown[] = [];
+		if (role) run.session.extensionRunner.setFlagValue("role", role);
+		await run.session.bindExtensions({ onError: (error) => errors.push(error) });
+		await run.session.prompt("ready");
+		expect(errors).toEqual([]);
+		const prompt = run.session.agent.state.systemPrompt;
+		expect(prompt.includes("`let_go` is permanent")).toBe(allowed);
+		expect(prompt).not.toContain("`rehire`");
+		if (!role && allowed) {
 			const prompt = run.session.agent.state.systemPrompt;
-			expect(prompt.includes("`let_go` is permanent")).toBe(allowed);
-			expect(prompt).not.toContain("`rehire`");
-			if (!role && allowed) {
-				const prompt = run.session.agent.state.systemPrompt;
-				expect(prompt).toContain("<role-catalog>");
-				expect(prompt).toMatch(/work directly or delegate/i);
-				expect(prompt).not.toContain("<manager>");
-				expect(prompt).not.toContain("<role>");
-				expect(run.session.model).toBe(model);
-				expect(run.session.thinkingLevel).toBe(thinking);
-			}
-		} finally {
-			reporting.mockRestore();
-			run.dispose();
+			expect(prompt).toContain("<role-catalog>");
+			expect(prompt).toMatch(/work directly or delegate/i);
+			expect(prompt).not.toContain("<manager>");
+			expect(prompt).not.toContain("<role>");
+			expect(run.session.model).toBe(model);
+			expect(run.session.thinkingLevel).toBe(thinking);
 		}
-	},
-);
+	} finally {
+		reporting.mockRestore();
+		run.dispose();
+	}
+});
 
 test("everyone gets the org section; only a managing role gets the manager charter", async () => {
 	const reporting = vi.spyOn(reportingState, "reportingOf").mockReturnValue(undefined);

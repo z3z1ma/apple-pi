@@ -3,9 +3,9 @@
 A worktree fork sets `TMPDIR` to its own temporary directory, which is deleted when the fork settles. The child is detached so it leads its own process group; settling a fork kills that group, including children it left behind.
 Why: a shared temp directory or the parent's process group would leak files and children across worktrees.
 
-Bash commands the operator reads (foreground, background, scheduled) run on a pseudo-terminal; monitor and Pi Exec's bash keep pipes. Falling back to pipes when no terminal opens is deliberate (operator decision, 2026-10-24), and the reason travels in `details.terminalUnavailable`.
+Bash commands the operator reads (foreground, background, scheduled) run on a pseudo-terminal; monitor and a bash call another tool made (a codemode script or saved program, recognized by its `<parent>/<n>` call id) keep pipes, are never rewritten by RTK and never go to the background. Falling back to pipes when no terminal opens is deliberate (operator decision, 2026-10-24), and the reason travels in `details.terminalUnavailable`.
 Why: programs such as Git and bat choose colors and layout from `isatty`; capturing and rendering ANSI correctly did not make piped commands colorful. Monitor events and program-read output need plain, separate stdout.
-Coupled: components/tasks/src/terminal.ts, components/tasks/src/monitor-tool.ts, components/pi-exec/src/core-tools.ts
+Coupled: components/tasks/src/terminal.ts, components/tasks/src/monitor-tool.ts, components/programs/src/programs.ts
 Verify: components/tasks/tests/terminal.test.ts, components/tasks/tests/terminal-fallback.test.ts
 
 ## symbol:executeBashImpl

@@ -42,7 +42,7 @@ test("the full package root prompt and active schemas stay within their token bu
 		);
 		await run.prompt();
 		const measured = promptSize(run.session);
-		expect(measured.tools).toEqual(expect.arrayContaining(["pi_exec", "hire", "directory", "ask_user_question"]));
+		expect(measured.tools).toEqual(expect.arrayContaining(["hire", "directory", "ask_user_question"]));
 		const prompt = getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"));
 		expect(prompt).toContain("**The ledger**");
 		expect(prompt).toContain("<pair-protocol>");

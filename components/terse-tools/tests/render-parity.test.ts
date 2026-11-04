@@ -242,12 +242,12 @@ describe("native Pi rendering parity", () => {
 		}
 	});
 
-	it.each(["sum([1, 2, 3])", 'for name in ["Ada"]:\n    print(name)'])(
-		"highlights pi_exec code as Python: %s",
+	it.each(["[1, 2, 3].reduce((a, b) => a + b)", 'for (const name of ["Ada"])\n  text(name);'])(
+		"highlights codemode scripts as JavaScript: %s",
 		(code) => {
 			const args = Object.freeze({ code });
-			const output = viewer({ toolName: "pi_exec", args }, false).join("\n");
-			for (const line of highlightCode(code, "python")) expect(output).toContain(line);
+			const output = viewer({ toolName: "codemode", args }, false).join("\n");
+			for (const line of highlightCode(code, "javascript")) expect(output).toContain(line);
 			expect(args.code).toBe(code);
 		},
 	);
