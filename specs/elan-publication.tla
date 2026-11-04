@@ -3,9 +3,7 @@
    publish() renames the staging directory onto the cache home. rename()
    replaces a missing or empty home atomically and fails with ENOTEMPTY on a
    home that holds files; then a complete home is used and an incomplete one is
-   an error for the operator to remove. Nothing moves or deletes a home.
-   elan-publication-lock.tla is the earlier lock-file protocol, kept as the
-   counterexample that led here. *)
+   an error for the operator to remove. Nothing moves or deletes a home. *)
 CONSTANT Procs
 VARIABLES home, alive, pc, wasComplete
 vars == <<home, alive, pc, wasComplete>>

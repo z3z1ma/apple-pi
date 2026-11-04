@@ -14,16 +14,6 @@ test("elan publication by atomic rename never replaces a complete home", async (
 	expect(result.unused).toEqual([]);
 }, 120_000);
 
-test("the earlier lock-file publication moves a complete home aside after a stale-lock race", async () => {
-	const result = await runTlc({
-		spec: resolve("specs/elan-publication-lock.tla"),
-		config: resolve("specs/elan-publication-lock.cfg"),
-	});
-	expect(result.verdict).toBe("violation");
-	expect(result.property).toBe("NoCompleteReplaced");
-	expect(result.trace.some((state) => state.action === "RemoveStale")).toBe(true);
-}, 120_000);
-
 test("runProcess always settles, leaves no killable process of its group, and reports a timeout only for unfinished work", async () => {
 	const spec = resolve("specs/process-group.tla");
 	const config = resolve("specs/process-group.cfg");
