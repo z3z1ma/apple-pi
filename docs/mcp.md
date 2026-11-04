@@ -34,30 +34,18 @@ Run `/reload` after configuration changes. `/mcp` shows server state, tools, exp
 
 Pi registers each server tool as `mcp__<server>__<tool>`. Server-level `exposure` and per-tool `toolExposure` decide how the model reaches it: `direct` declares the tool like a built-in, `deferred` lets `tool_search` load it on demand, `codemode` (Pi's default) makes it callable only from Pi's native `codemode` scripts, and `hidden` makes it unreachable.
 
-Apple Pi recommends turning native `codemode` off and composing tools with `pi_exec`. `pi_exec` already covers the same need with type-checked Python, model workers, saved programs, budgets, and a durable trace, so a second composition runtime only adds a choice the model has to make on every call. Disable the built-in in `~/.pi/agent/settings.json` and give each server `deferred` (or `direct`) exposure in `mcp.json`, because tools left on the `codemode` default have no other route once the built-in is off:
+Apple Pi composes tools with Pi's native `codemode`, so any exposure works. `codemode` scripts and saved [programs](programs.md) call connected MCP tools through Pi's tool pipeline by their registered names, and an MCP call resolves to its `CallToolResult`:
 
-```json
-{ "extensions": ["-builtin:codemode"] }
+```js
+const result = await tools.mcp__docs__search({ query: "sessions" });
+return result.structuredContent ?? result.content;
 ```
 
-```json
-{ "mcpServers": { "docs": { "url": "https://example.com/mcp", "exposure": "deferred" } } }
-```
-
-`pi_exec` calls connected native MCP tools through Pi's tool pipeline. Use their registered names and schema-checked keyword arguments:
-
-```python
-result = await mcp__docs__search(query="sessions")
-result["text"]
-```
-
-Discover tools with `tools_search(query)`, inspect them with `tools_describe(name)`, and invoke dynamically with `tools_call(name, args)` inside Python. The old `mcp(tool=..., args=...)` gateway and adapter namespace proxies are gone. MCP tools become available after the server connects; Python signatures refresh at cache-safe boundaries.
-
-Nested calls from `pi_exec` go through Pi's tool pipeline, so exposure rules and `tool_call`/`tool_result` permission hooks apply to them as to native calls. `pi_exec` and saved `program_*` tools declare `reachesTools`, so a program waits for servers that are still connecting. Pi registers both `codemode` and `deferred` server tools as deferred tools; the exposure only selects whether Pi activates native `codemode` or `tool_search`. Pi does not treat `pi_exec` as a replacement for `codemode`, so keep servers on `deferred` or `direct` exposure. In Python, an MCP call's `structuredContent` holds the whole `CallToolResult`.
+Inside a script, `searchTools(query)` and `describeTool(name)` find and describe tools that are not listed. Nested calls go through Pi's tool pipeline, so exposure rules and `tool_call`/`tool_result` permission hooks apply to them as to native calls. Saved `program_*` tools declare `reachesTools`, so a program waits for servers that are still connecting. Give a server `deferred` exposure when the model should also load its tools directly with `tool_search`.
 
 ## Other sessions
 
-Every person, including a peer a `pi_exec` program starts, is a root Pi session and gets MCP from the Pi CLI as above. Interns and the internal `/btw` session do not load MCP; they keep their fixed tools and safety hooks.
+Every person, including a temporary peer a program starts, is a root Pi session and gets MCP from the Pi CLI as above. Interns and the internal `/btw` session do not load MCP; they keep their fixed tools and safety hooks.
 
 SDK sessions do not discover built-in extensions automatically. Supply Pi's `createMcpExtension()` and `createToolSearchExtension()` through `DefaultResourceLoader.extensionFactories`, then bind the session extensions. The Pi CLI supplies its built-ins itself, which is why the root session needs the settings entry above.
 
