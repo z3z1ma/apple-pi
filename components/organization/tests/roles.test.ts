@@ -374,13 +374,11 @@ test.each([
 			expect(parameters.properties.code.description.includes("async def agent_run(")).toBe(allowed);
 			expect(run.session.agent.state.systemPrompt.includes("Attach awake colleagues")).toBe(allowed);
 			const prompt = run.session.agent.state.systemPrompt;
-			expect(/handoff\s*:\s*false/.test(prompt)).toBe(allowed);
-			expect(prompt.includes("The tool returns acceptance")).toBe(allowed);
+			expect(prompt.includes("`let_go` is permanent")).toBe(allowed);
 			expect(prompt).not.toContain("`rehire`");
 			if (!role && allowed) {
 				const prompt = run.session.agent.state.systemPrompt;
 				expect(prompt).toContain("<role-catalog>");
-				expect(prompt).toContain("`progress`");
 				expect(prompt).toMatch(/work directly or delegate/i);
 				expect(prompt).not.toContain("<manager>");
 				expect(prompt).not.toContain("<role>");
@@ -407,12 +405,9 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		let prompt = run.session.agent.state.systemPrompt;
 		expect(prompt).toContain(`<org>\nYou are a session with no role, a person in an organization`);
 		expect(prompt).toContain(`Your session id is \`${id}\``);
-		expect(prompt).toContain("`directory` starts with organization counts");
-		expect(prompt).toContain("`history: {limit, offset}`");
 		expect(prompt).not.toContain("former: true");
 		expect(prompt).toContain("You are the root of your organization");
-		expect(prompt).not.toContain("You hold the manager tools");
-		expect(prompt).toContain("`link`");
+		expect(prompt).not.toContain("You staff and steer");
 		for (const tool of ["bottlenecks", "progress", "coordination", "experience", "economics", "predictions"])
 			expect(prompt).not.toContain(`\`${tool}\``);
 		expect(prompt).not.toContain("<role-catalog>");
@@ -426,7 +421,6 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		expect(prompt).toContain("<org>\nYou are Staff Engineer, Simplicity, a person");
 		expect(prompt).toContain("You report to the session `boss`");
 		expect(prompt).toContain("ask your manager to hire one");
-		expect(prompt).toContain("`link`");
 		for (const tool of ["bottlenecks", "progress", "coordination", "experience", "economics", "predictions"])
 			expect(prompt).not.toContain(`\`${tool}\``);
 		expect(prompt).not.toContain("<role-catalog>");
@@ -443,20 +437,10 @@ test("everyone gets the org section; only a managing role gets the manager chart
 		const prompt = manager.session.agent.state.systemPrompt;
 		expect(prompt).toContain("<org>\nYou are Coordinator, a person");
 		expect(prompt).toContain("<role-catalog>");
-		for (const tool of ["bottlenecks", "progress", "coordination", "experience", "economics", "predictions", "link"])
-			expect(prompt).toContain(`\`${tool}\``);
+		expect(prompt).toContain("You staff and steer");
+		expect(prompt).toContain("Manage people; route work and run no commands:\n");
 		expect(prompt).toContain("<manager>\nYou are a manager: the operator brings you work");
 		expect(prompt).toMatch(/check-in[\s\S]*remind_me[\s\S]*ordinary mail or channel discussion/);
-		for (const tool of [
-			"create_channel",
-			"invite_to_thread",
-			"search_messages",
-			"communication_status",
-			"archive_thread",
-		])
-			expect(prompt).toContain(`\`${tool}\``);
-		expect(prompt).toContain("names and @names in prose are ordinary text");
-		expect(prompt).toContain("organization-derived access remains");
 		expect(prompt).not.toContain("`meet`");
 		expect(prompt).not.toContain("`end_meeting`");
 		for (const moment of [

@@ -1,8 +1,8 @@
 # The tool definitions, as sent
 
-Every tool definition in the same request: 87 tools, 117,230 characters of JSON, about 29,308 tokens. The model reads each description and parameter schema as prompt text, so these count as much as the system prompt. On Anthropic, Pi renames the four core tools to Claude Code's names (`Read`, `Bash`, `Edit`, `Write`) and `task` to `Task`; OpenAI keeps the lower-case names. MCP tools are not here: they are deferred, and `tool_search` loads them.
+Every tool definition in the same request: 86 tools, 116,390 characters of JSON, about 29,098 tokens. The model reads each description and parameter schema as prompt text, so these count as much as the system prompt. On Anthropic, Pi renames the four core tools to Claude Code's names (`Read`, `Bash`, `Edit`, `Write`) and `task` to `Task`; OpenAI keeps the lower-case names. MCP tools are not here: they are deferred, and `tool_search` loads them.
 
-Index: [`Read`](#read) · [`Bash`](#bash) · [`Edit`](#edit) · [`Write`](#write) · [`revisit_note`](#revisit_note) · [`update_notebook`](#update_notebook) · [`acknowledge_pair_findings`](#acknowledge_pair_findings) · [`ask_user_question`](#ask_user_question) · [`search_session`](#search_session) · [`repo_rules`](#repo_rules) · [`tlc_check`](#tlc_check) · [`tla_symbolic_check`](#tla_symbolic_check) · [`pi_exec`](#pi_exec) · [`resolve_finding`](#resolve_finding) · [`review_code`](#review_code) · [`review_queue`](#review_queue) · [`read_review`](#read_review) · [`manage_review`](#manage_review) · [`explore`](#explore) · [`research`](#research) · [`ledger_add`](#ledger_add) · [`ledger_status`](#ledger_status) · [`wiki_lint`](#wiki_lint) · [`wiki_references`](#wiki_references) · [`context_lint`](#context_lint) · [`send_mail`](#send_mail) · [`reply`](#reply) · [`post`](#post) · [`escalate`](#escalate) · [`inbox`](#inbox) · [`create_channel`](#create_channel) · [`find_channels`](#find_channels) · [`join_channel`](#join_channel) · [`leave_thread`](#leave_thread) · [`invite_to_thread`](#invite_to_thread) · [`remove_thread_invitation`](#remove_thread_invitation) · [`read_thread`](#read_thread) · [`search_messages`](#search_messages) · [`pin_message`](#pin_message) · [`react`](#react) · [`archive_thread`](#archive_thread) · [`reopen_thread`](#reopen_thread) · [`communication_status`](#communication_status) · [`update_self`](#update_self) · [`directory`](#directory) · [`follow_external`](#follow_external) · [`unfollow_external`](#unfollow_external) · [`link`](#link) · [`take_task`](#take_task) · [`focus`](#focus) · [`finish_task`](#finish_task) · [`promote_task`](#promote_task) · [`schedule_mail`](#schedule_mail) · [`channel_charter`](#channel_charter) · [`remind_me`](#remind_me) · [`monitor`](#monitor) · [`Task`](#task) · [`search_branches`](#search_branches) · [`sign_off_code`](#sign_off_code) · [`sign_off_document`](#sign_off_document) · [`sign_off_task`](#sign_off_task) · [`explain_change`](#explain_change) · [`google_search`](#google_search) · [`generate_image`](#generate_image) · [`tool_search`](#tool_search) · [`hire`](#hire) · [`call_in`](#call_in) · [`send_home`](#send_home) · [`rename`](#rename) · [`move`](#move) · [`let_go`](#let_go) · [`assign`](#assign) · [`unassign`](#unassign) · [`economics`](#economics) · [`predictions`](#predictions) · [`experience`](#experience) · [`bottlenecks`](#bottlenecks) · [`progress`](#progress) · [`coordination`](#coordination) · [`watch_repository`](#watch_repository) · [`activity`](#activity) · [`triage`](#triage) · [`activity_rule`](#activity_rule) · [`notes`](#notes) · [`note`](#note) · [`canvases`](#canvases) · [`canvas`](#canvas)
+Index: [`Read`](#read) · [`Bash`](#bash) · [`Edit`](#edit) · [`Write`](#write) · [`revisit_note`](#revisit_note) · [`update_notebook`](#update_notebook) · [`ask_user_question`](#ask_user_question) · [`search_session`](#search_session) · [`repo_rules`](#repo_rules) · [`tlc_check`](#tlc_check) · [`tla_symbolic_check`](#tla_symbolic_check) · [`pi_exec`](#pi_exec) · [`resolve_finding`](#resolve_finding) · [`review_code`](#review_code) · [`review_queue`](#review_queue) · [`read_review`](#read_review) · [`manage_review`](#manage_review) · [`explore`](#explore) · [`research`](#research) · [`ledger_add`](#ledger_add) · [`ledger_status`](#ledger_status) · [`wiki_lint`](#wiki_lint) · [`wiki_references`](#wiki_references) · [`context_lint`](#context_lint) · [`send_mail`](#send_mail) · [`reply`](#reply) · [`post`](#post) · [`escalate`](#escalate) · [`inbox`](#inbox) · [`create_channel`](#create_channel) · [`find_channels`](#find_channels) · [`join_channel`](#join_channel) · [`leave_thread`](#leave_thread) · [`invite_to_thread`](#invite_to_thread) · [`remove_thread_invitation`](#remove_thread_invitation) · [`read_thread`](#read_thread) · [`search_messages`](#search_messages) · [`pin_message`](#pin_message) · [`react`](#react) · [`archive_thread`](#archive_thread) · [`reopen_thread`](#reopen_thread) · [`communication_status`](#communication_status) · [`update_self`](#update_self) · [`directory`](#directory) · [`follow_external`](#follow_external) · [`unfollow_external`](#unfollow_external) · [`link`](#link) · [`take_task`](#take_task) · [`focus`](#focus) · [`finish_task`](#finish_task) · [`promote_task`](#promote_task) · [`schedule_mail`](#schedule_mail) · [`channel_charter`](#channel_charter) · [`remind_me`](#remind_me) · [`monitor`](#monitor) · [`Task`](#task) · [`search_branches`](#search_branches) · [`sign_off_code`](#sign_off_code) · [`sign_off_document`](#sign_off_document) · [`sign_off_task`](#sign_off_task) · [`explain_change`](#explain_change) · [`google_search`](#google_search) · [`generate_image`](#generate_image) · [`tool_search`](#tool_search) · [`hire`](#hire) · [`call_in`](#call_in) · [`send_home`](#send_home) · [`rename`](#rename) · [`move`](#move) · [`let_go`](#let_go) · [`assign`](#assign) · [`unassign`](#unassign) · [`economics`](#economics) · [`predictions`](#predictions) · [`experience`](#experience) · [`bottlenecks`](#bottlenecks) · [`progress`](#progress) · [`coordination`](#coordination) · [`watch_repository`](#watch_repository) · [`activity`](#activity) · [`triage`](#triage) · [`activity_rule`](#activity_rule) · [`notes`](#notes) · [`note`](#note) · [`canvases`](#canvases) · [`canvas`](#canvas)
 
 ## Read
 
@@ -256,64 +256,6 @@ Record, supersede, or retire learnings in the notebook you share with the pair p
   },
   "required": [
     "reflections"
-  ]
-}
-```
-
-</details>
-
-## acknowledge_pair_findings
-
-Record that you considered one or more delivered pair programmer concerns or blockers. Use address when acting on a finding, decline when evidence shows it does not apply, or defer when it is valid but outside the authorized work. Give a concise reason. This records consideration only; it does not claim the work is fixed or validated.  
-
-<details><summary>Parameters</summary>
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "findings": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "disposition",
-          "reason"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "disposition": {
-            "anyOf": [
-              {
-                "type": "string",
-                "const": "address"
-              },
-              {
-                "type": "string",
-                "const": "decline"
-              },
-              {
-                "type": "string",
-                "const": "defer"
-              }
-            ]
-          },
-          "reason": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 500
-          }
-        }
-      },
-      "minItems": 1
-    }
-  },
-  "required": [
-    "findings"
   ]
 }
 ```

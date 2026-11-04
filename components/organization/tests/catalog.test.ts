@@ -64,7 +64,7 @@ test("concrete role recommendations match their workload's sizing band at each e
 	expect(roles.get("technical-writer")!.models[1]).toMatch(/^openai\/gpt-6\.1-terra:/);
 });
 
-test("a manager's prompt carries the catalog's titles and mandates; a hired non-manager's does not", async () => {
+test("a manager's prompt carries every role's mandate; a hired non-manager's does not", async () => {
 	const catalog = loadRoles(tempDir());
 	const run = await fauxSession([organization], [fauxAssistantMessage("ok"), fauxAssistantMessage("ok")], ["read"]);
 	try {
@@ -73,8 +73,7 @@ test("a manager's prompt carries the catalog's titles and mandates; a hired non-
 		await run.session.prompt("hi");
 		const prompt = run.session.agent.state.systemPrompt;
 		expect(prompt).toContain("<role-catalog>");
-		for (const role of catalog.roles.values())
-			expect(prompt).toContain(`\`${role.name}\`: ${role.title}. ${role.mandate}.`);
+		for (const role of catalog.roles.values()) expect(prompt).toContain(`\`${role.name}\`: ${role.mandate}.`);
 	} finally {
 		run.dispose();
 	}

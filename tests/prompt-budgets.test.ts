@@ -47,7 +47,7 @@ test("the full package root prompt and active schemas stay within their token bu
 		expect(prompt).toContain("<ledger-workbench>");
 		expect(prompt).toContain("<pair-protocol>");
 		expect(run.session.resourceLoader.getSkills().skills.length).toBeGreaterThan(0);
-		budget("root prompt estimated tokens", measured.tokens, 38749, measured);
+		budget("root prompt estimated tokens", measured.tokens, 36605, measured);
 	} finally {
 		await run.close();
 	}
