@@ -19,6 +19,7 @@ export async function promptSession(options: {
 	append?: string;
 	skills?: string[];
 	tui?: boolean;
+	flags?: Record<string, boolean | string>;
 }) {
 	const model = {
 		id: "budget-model",
@@ -63,6 +64,8 @@ export async function promptSession(options: {
 		],
 	});
 	await loader.reload();
+	for (const [name, value] of Object.entries(options.flags ?? {}))
+		loader.getExtensions().runtime.flagValues.set(name, value);
 	expect(loader.getExtensions().errors).toEqual([]);
 	const { session } = await createAgentSession({
 		cwd: options.cwd,

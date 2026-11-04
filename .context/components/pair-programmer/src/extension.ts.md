@@ -15,7 +15,10 @@ Why: a transcript replacement must not receive advice from its predecessor or ra
 Runtime construction is shared by concurrent hooks. An invalidated construction settles and disposes before its successor proceeds; teardown prevents stale publication.
 Why: generation checks alone prevent publication but would still permit overlapping private sessions if replacement skipped the outstanding construction.
 
-Coupled: components/pair-programmer/src/second-opinion.ts, components/pair-programmer/src/formatting.ts, components/pair-programmer/src/seed.ts, components/pair-programmer/src/types.ts
+`acknowledge_pair_findings` is active only while the pair is on; each `before_agent_start` adds or removes it to match.
+Why: the composed prompt teaches every active tool, so a pair tool left active while the pair was off taught the agent about a partner that did not exist.
+
+Coupled: components/pair-programmer/src/second-opinion.ts, components/pair-programmer/src/formatting.ts, components/pair-programmer/src/seed.ts, components/pair-programmer/src/types.ts, components/system-prompt/src/toolbox.ts
 Verify: components/pair-programmer/tests/second-opinion.test.ts, components/pair-programmer/tests/pair.test.mjs
 
 ## symbol:AdviseTool

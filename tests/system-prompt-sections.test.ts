@@ -25,11 +25,18 @@ let loaded: Awaited<ReturnType<typeof loadExtensions>>;
 beforeAll(async () => {
 	temp = mkdtempSync(join(tmpdir(), "apple-pi-prompt-sections-"));
 	process.env.PI_CODING_AGENT_DIR = join(temp, "agent");
+	let active = ["read", "bash", "edit", "write"];
+	const runtime = Object.assign(createExtensionRuntime(), {
+		getActiveTools: () => active,
+		setActiveTools: (names: string[]) => {
+			active = names;
+		},
+	});
 	loaded = await loadExtensions(
 		PACKAGE_EXTENSIONS.map((path) => join(ROOT, path)),
 		ROOT,
 		createEventBus(),
-		createExtensionRuntime(),
+		runtime,
 	);
 }, 30_000);
 

@@ -10,20 +10,21 @@ What the model receives today in a root session of this repository, captured fro
 
 | | Characters | About |
 |---|---:|---:|
-| System prompt | 113,784 | 28,446 tokens |
+| System prompt | 102,134 | 25,534 tokens |
 | Tool definitions (87 tools) | 117,230 | 29,308 tokens |
-| Together | 231,014 | 57,754 tokens |
+| Together | 219,364 | 54,841 tokens |
 
 Token counts are characters ÷ 4, an estimate.
 
 ## How it is put together
 
-Pi builds the prompt from ordered, named sections (`buildSystemPromptSections` in `pi-coding-agent/dist/core/system-prompt.js`). It writes the base sections itself. Then, on every run, each extension's `before_agent_start` hook can add or replace a section in `systemPromptOptions.sections`. Pi wraps every section except the preamble in `<name>…</name>`. The transcript records the sections, and when one changes between runs Pi records only the change (`diffSystemPromptSections`). The provider still receives the whole prompt on every request, so a section whose text stays stable keeps the request prefix cacheable.
+Pi records the prompt as ordered, named sections (`buildSystemPromptSections` in `pi-coding-agent/dist/core/system-prompt.js`). On every run, each extension's `before_agent_start` hook can add or replace a section. apple-pi's composer (`components/system-prompt`) runs last: it sets the preamble to the operating model, which turns off Pi's own tool list, rules and docs, writes the toolbox, skills and project context itself, and orders every section from most stable to most personal. Pi wraps every section except the preamble in `<name>…</name>`. The transcript records the sections, and when one changes between runs Pi records only the change (`diffSystemPromptSections`). The provider still receives the whole prompt on every request, so a section whose text stays stable keeps the request prefix cacheable.
 
 ```mermaid
 flowchart LR
-  A["Pi base<br/>preamble, tools, rules,<br/>docs, project_context,<br/>skills, cwd"] --> C["sections"]
-  B["apple-pi hooks<br/>(before_agent_start)"] --> C
+  B["apple-pi components<br/>(before_agent_start)"] --> S["composer<br/>preamble, toolbox, docs,<br/>skills, project context,<br/>order"]
+  A["Pi: cwd"] --> C["sections"]
+  S --> C
   M["Pi MCP<br/>mcp_servers"] --> C
   C --> P["provider request"]
   I["Anthropic identity line"] --> P
@@ -33,22 +34,21 @@ flowchart LR
 | # | Section | Written by | Characters | Tokens |
 |---:|---|---|---:|---:|
 | 1 | [`identity`](system-prompt.md#identity) | pi-ai, Anthropic provider | 57 | ~14 |
-| 2 | [`preamble`](system-prompt.md#preamble) | apple-pi: system-prompt (Pi's text) | 169 | ~42 |
+| 2 | [`preamble`](system-prompt.md#preamble) | apple-pi: system-prompt | 2,648 | ~662 |
 | 3 | [`cwd`](system-prompt.md#cwd) | Pi base | 51 | ~13 |
-| 4 | [`tools`](system-prompt.md#tools) | apple-pi: system-prompt, from every tool (Pi's format) | 6,629 | ~1,657 |
-| 5 | [`rules`](system-prompt.md#rules) | apple-pi: system-prompt, from every tool (Pi's format) | 15,517 | ~3,879 |
-| 6 | [`docs`](system-prompt.md#docs) | apple-pi: system-prompt (Pi's text) | 1,379 | ~345 |
-| 7 | [`pi-exec-peers`](system-prompt.md#pi-exec-peers) | apple-pi: pi_exec | 601 | ~150 |
-| 8 | [`role-catalog`](system-prompt.md#role-catalog) | apple-pi: organization | 5,474 | ~1,369 |
-| 9 | [`skills`](system-prompt.md#skills) | apple-pi: system-prompt, from Pi's skill discovery | 14,542 | ~3,636 |
-| 10 | [`project_context`](system-prompt.md#project_context) | apple-pi: system-prompt, from Pi's context files | 52,501 | ~13,125 |
-| 11 | [`project-learnings`](system-prompt.md#project-learnings) | apple-pi: notebook | 3,630 | ~908 |
-| 12 | [`repo-rules`](system-prompt.md#repo-rules) | apple-pi: repo rules | 1,557 | ~389 |
-| 13 | [`ledger-workbench`](system-prompt.md#ledger-workbench) | apple-pi: ledger | 983 | ~246 |
-| 14 | [`wiki-workbench`](system-prompt.md#wiki-workbench) | apple-pi: wiki | 682 | ~171 |
-| 15 | [`org`](system-prompt.md#org) | apple-pi: organization | 8,758 | ~2,190 |
-| 16 | [`self`](system-prompt.md#self) | apple-pi: organization | 140 | ~35 |
-| 17 | [`mcp_servers`](system-prompt.md#mcp_servers) | Pi base, native MCP | 701 | ~175 |
+| 4 | [`toolbox`](system-prompt.md#toolbox) | apple-pi: system-prompt, from the active tools | 8,653 | ~2,163 |
+| 5 | [`pi-exec-peers`](system-prompt.md#pi-exec-peers) | apple-pi: pi_exec | 601 | ~150 |
+| 6 | [`role-catalog`](system-prompt.md#role-catalog) | apple-pi: organization | 5,474 | ~1,369 |
+| 7 | [`docs`](system-prompt.md#docs) | apple-pi: system-prompt | 323 | ~81 |
+| 8 | [`skills`](system-prompt.md#skills) | apple-pi: system-prompt, from Pi's skill discovery | 14,542 | ~3,636 |
+| 9 | [`project_context`](system-prompt.md#project_context) | apple-pi: system-prompt, from Pi's context files | 52,937 | ~13,234 |
+| 10 | [`project-learnings`](system-prompt.md#project-learnings) | apple-pi: notebook | 3,630 | ~908 |
+| 11 | [`repo-rules`](system-prompt.md#repo-rules) | apple-pi: repo rules | 1,557 | ~389 |
+| 12 | [`ledger-workbench`](system-prompt.md#ledger-workbench) | apple-pi: ledger | 983 | ~246 |
+| 13 | [`wiki-workbench`](system-prompt.md#wiki-workbench) | apple-pi: wiki | 682 | ~171 |
+| 14 | [`org`](system-prompt.md#org) | apple-pi: organization | 8,757 | ~2,189 |
+| 15 | [`self`](system-prompt.md#self) | apple-pi: organization | 140 | ~35 |
+| 16 | [`mcp_servers`](system-prompt.md#mcp_servers) | Pi base, native MCP | 701 | ~175 |
 
 Pi offers three ways to own the prompt:
 
@@ -79,7 +79,7 @@ A fresh unroled root session does not get these; other sessions do.
 
 ## Provider differences
 
-The same session on `openai/gpt-6.1-sol` gets the same sections (113,727 characters), with these differences:
+The same session on `openai/gpt-6.1-sol` gets the same sections (102,077 characters), with these differences:
 
 - no Anthropic identity line;
 - the core tools keep their lower-case names (`read`, `bash`, `edit`, `write`, `task`);

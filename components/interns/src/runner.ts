@@ -62,6 +62,7 @@ export function buildInternCliArgs(
 		SESSION_SEARCH_EXTENSION_PATH,
 		"--extension",
 		SYSTEM_PROMPT_EXTENSION_PATH,
+		"--intern",
 	];
 	if (options.materialPath) args.push(`@${options.materialPath}`);
 	args.push("--", question);

@@ -1,15 +1,18 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { promptSession } from "../../../tests/helpers/prompt-budget.js";
 import { query, startRuntime, stopRuntime, tempStateDir } from "../../session-state/tests/helpers.js";
 import { composeSystemPrompt, SECTION_ORDER } from "../src/index.js";
+import { OPERATING_MODEL } from "../src/preamble.js";
+import { TOOL_GROUPS, toolboxSection } from "../src/toolbox.js";
 
 const ROOT = join(import.meta.dirname, "../../..");
 const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const EXTENSIONS: string[] = manifest.pi.extensions.map((path: string) => join(ROOT, path));
 const SKILLS: string[] = manifest.pi.skills.map((path: string) => join(ROOT, path));
+const KNOWN = TOOL_GROUPS.flatMap((group) => group.tools);
 const state = tempStateDir();
 const cwd = join(state.agentDir, "project");
 mkdirSync(join(cwd, ".wiki"), { recursive: true });
@@ -23,43 +26,77 @@ afterAll(async () => {
 	vi.unstubAllEnvs();
 });
 
-async function sections(extensions: string[]) {
-	const run = await promptSession({ cwd, agentDir: state.agentDir, extensions, skills: SKILLS, tui: true });
+const mentioned = (text: string) => KNOWN.filter((name) => text.includes(`\`${name}\``));
+
+async function rootSession() {
+	const run = await promptSession({ cwd, agentDir: state.agentDir, extensions: EXTENSIONS, skills: SKILLS, tui: true });
 	try {
 		const id = run.session.sessionManager.getSessionId();
 		await vi.waitFor(() => expect(query(state.dbPath, "select id from sessions where id = ?", id)).toHaveLength(1), {
 			timeout: 10000,
 		});
 		await run.prompt();
-		const system = getCurrentSystemMessage(run.session.messages);
-		return { sections: system?.sections ?? {}, preamble: String(system?.content ?? "") };
+		return {
+			sections: getCurrentSystemMessage(run.session.messages)?.sections ?? {},
+			active: run.session.getActiveToolNames(),
+		};
 	} finally {
 		await run.close();
 	}
 }
 
-test("a real root session's composed prompt holds Pi's and every extension's sections unchanged, ordered from stable to personal", async () => {
-	const withPi = await sections(EXTENSIONS.filter((path) => !path.endsWith("system-prompt.ts")));
-	const composed = await sections(EXTENSIONS);
-	const personal = (all: Record<string, string | null>) =>
-		Object.fromEntries(Object.entries(all).filter(([name]) => name !== "org"));
-	expect(personal(composed.sections)).toEqual(personal(withPi.sections));
-	expect(Object.keys(composed.sections).sort()).toEqual(Object.keys(withPi.sections).sort());
-	const names = Object.keys(composed.sections);
-	const known = names.filter((name) => SECTION_ORDER.includes(name));
-	expect(known).toEqual([...known].sort((a, b) => SECTION_ORDER.indexOf(a) - SECTION_ORDER.indexOf(b)));
-	for (const [earlier, later] of [
-		["tools", "role-catalog"],
-		["role-catalog", "skills"],
-		["skills", "ledger-workbench"],
-		["ledger-workbench", "org"],
-		["org", "self"],
-	])
-		expect(names.indexOf(earlier!), `${earlier} before ${later}`).toBeLessThan(names.indexOf(later!));
-	expect(composed.sections.tools).toContain("- take_task:");
+test("with the pair programmer off, its tool and its toolbox group are gone", async () => {
+	writeFileSync(join(state.agentDir, ".pair-state.json"), JSON.stringify({ enabled: false }));
+	try {
+		const { sections, active } = await rootSession();
+		expect(active).not.toContain("acknowledge_pair_findings");
+		expect(sections.toolbox).not.toContain("The pair programmer");
+		expect(sections["pair-protocol"]).toBeUndefined();
+	} finally {
+		rmSync(join(state.agentDir, ".pair-state.json"), { force: true });
+	}
 }, 120_000);
 
-test("a prompt the user supplies stays the preamble, and Pi's generic tool sections stay out", () => {
+test("a real root session gets the operating model, a toolbox that teaches every active tool, and sections ordered from stable to personal", async () => {
+	{
+		const { sections, active } = await rootSession();
+		expect(active).toContain("acknowledge_pair_findings");
+		expect(sections.preamble).toBe(OPERATING_MODEL);
+		expect(sections.tools).toBeUndefined();
+		expect(sections.rules).toBeUndefined();
+		const toolbox = sections.toolbox ?? "";
+		expect(active.filter((name) => !toolbox.includes(`\`${name}\``))).toEqual([]);
+		expect(mentioned(toolbox).filter((name) => !active.includes(name))).toEqual([]);
+		const names = Object.keys(sections);
+		const known = names.filter((name) => SECTION_ORDER.includes(name));
+		expect(known).toEqual([...known].sort((a, b) => SECTION_ORDER.indexOf(a) - SECTION_ORDER.indexOf(b)));
+		for (const [earlier, later] of [
+			["toolbox", "role-catalog"],
+			["role-catalog", "skills"],
+			["skills", "ledger-workbench"],
+			["ledger-workbench", "org"],
+			["org", "self"],
+		])
+			expect(names.indexOf(earlier!), `${earlier} before ${later}`).toBeLessThan(names.indexOf(later!));
+	}
+}, 120_000);
+
+test("a toolbox teaches only the tools a session has, and passes on guidance for tools it does not know", () => {
+	const toolbox = toolboxSection(
+		["read", "bash", "send_mail", "mcp__docs__search"],
+		{ mcp__docs__search: "Search the docs" },
+		{ mcp__docs__search: ["Search before reading."] },
+		["Prefer small commits."],
+	);
+	const listed = [...toolbox.matchAll(/^Tools: (.*)\.$/gm)].flatMap((line) => mentioned(line[1]!));
+	expect(listed.sort()).toEqual(["bash", "read", "send_mail"].sort());
+	expect(toolbox).not.toContain("## Staffing");
+	expect(toolbox).not.toContain("## Code review");
+	expect(toolbox).toContain("- `mcp__docs__search`: Search the docs\n  - Search before reading.");
+	expect(toolbox).toContain("- Prefer small commits.");
+});
+
+test("a prompt the user supplies stays the preamble, and the composer writes no toolbox", () => {
 	const options = {
 		cwd,
 		customPrompt: "You are the house agent.",
@@ -76,5 +113,4 @@ test("a prompt the user supplies stays the preamble, and Pi's generic tool secti
 	composeSystemPrompt(options);
 	expect(options.customPrompt).toBe("You are the house agent.");
 	expect(Object.keys(options.sections)).toEqual(["project_context", "ledger-workbench", "self"]);
-	expect(options.contextFiles).toEqual([]);
 });

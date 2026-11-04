@@ -1780,6 +1780,10 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	pi.on("before_agent_start", (event) => {
+		const active = pi.getActiveTools();
+		const acknowledging = active.includes("acknowledge_pair_findings");
+		if (enabled && !acknowledging) pi.setActiveTools([...active, "acknowledge_pair_findings"]);
+		if (!enabled && acknowledging) pi.setActiveTools(active.filter((name) => name !== "acknowledge_pair_findings"));
 		if (!enabled) return;
 		autoResumeSuppressed = false;
 		turnState = "running";

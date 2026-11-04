@@ -2906,6 +2906,11 @@ async function lifecycleHarness() {
 	const runtime = createExtensionRuntime();
 	runtime.sendMessage = (msg, opts) => sent.push({ ...msg, opts });
 	runtime.appendEntry = (customType, data) => appended.push({ customType, data });
+	let active = ["read", "bash", "edit", "write", "acknowledge_pair_findings"];
+	runtime.getActiveTools = () => active;
+	runtime.setActiveTools = (names) => {
+		active = names;
+	};
 	const res = await loadExtensions(["index.ts"], SOURCE_DIR, createEventBus(), runtime);
 	assert.deepEqual(res.errors, []);
 	const ext = res.extensions[0];
@@ -2927,6 +2932,7 @@ async function lifecycleHarness() {
 		appended,
 		h,
 		emit,
+		activeTools: () => active,
 		ack: ext.tools.get("acknowledge_pair_findings").definition,
 		cmd: ext.commands.get("pair").handler,
 		uiCtx: { cwd: tmpdir(), ui: { notify: () => {} } },
@@ -2948,6 +2954,11 @@ test("lifecycle: before_agent_start adds the primary protocol section only while
 		const off = { sections: {} };
 		x.h("before_agent_start")({ prompt: "go", systemPromptOptions: off }, x.uiCtx);
 		assert.deepEqual(off.sections, {});
+		assert.equal(x.activeTools().includes("acknowledge_pair_findings"), false);
+
+		await x.cmd("on", x.uiCtx);
+		x.h("before_agent_start")({ prompt: "go", systemPromptOptions: { sections: {} } }, x.uiCtx);
+		assert.equal(x.activeTools().includes("acknowledge_pair_findings"), true);
 	} finally {
 		if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = previousAgentDir;

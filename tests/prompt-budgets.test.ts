@@ -47,7 +47,7 @@ test("the full package root prompt and active schemas stay within their token bu
 		expect(prompt).toContain("<ledger-workbench>");
 		expect(prompt).toContain("<pair-protocol>");
 		expect(run.session.resourceLoader.getSkills().skills.length).toBeGreaterThan(0);
-		budget("root prompt estimated tokens", measured.tokens, 41703, measured);
+		budget("root prompt estimated tokens", measured.tokens, 38749, measured);
 	} finally {
 		await run.close();
 	}
@@ -67,6 +67,7 @@ for (const kind of ["explore", "research"] as const) {
 			extensions,
 			tools: args[args.indexOf("--tools") + 1]!.split(","),
 			append: args[args.indexOf("--append-system-prompt") + 1],
+			flags: args.includes("--intern") ? { intern: true } : {},
 		});
 		try {
 			await run.prompt();
@@ -76,7 +77,7 @@ for (const kind of ["explore", "research"] as const) {
 			expect(getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"))).toContain(
 				"<ledger-workbench>",
 			);
-			budget(`${kind} intern prompt estimated tokens`, measured.tokens, kind === "explore" ? 2767 : 2779, measured);
+			budget(`${kind} intern prompt estimated tokens`, measured.tokens, kind === "explore" ? 2289 : 2301, measured);
 		} finally {
 			await run.close();
 		}
