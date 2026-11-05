@@ -17,7 +17,7 @@ Operator, 2026-11-04, after the Git tab: make code review a first-class Workplac
 
 ## Current State
 
-Built and verified; awaiting commit and relaunch.
+Done. Committed on main (4afed858); with the operator's consent the app was quit normally (pid 24817) and restarted through `startAgentWorkplace` (pid 43190), which logged `agent-workplace: loaded` from the build that wires `reviews:states`. The rendered Reviews tab in his own window was not observed by me.
 
 - Reader `reviewStates` (id and state, organization-scoped) beside `reviewQueue`, sharing `scopeClause`; exposed as `reviews.states` through backend, IPC and preload.
 - Badge: `web/workplace-review-updates.ts`, seen states in localStorage, first run records a baseline.
@@ -26,4 +26,4 @@ Built and verified; awaiting commit and relaunch.
 
 ## Outcome
 
-Pending.
+Reviews is a Workplace app of its own: review cards, a header with actions, a progress line, evidence tabs, analytics cards and a capture dialog, with a rail badge counting reviews whose state changed since last seen. Code has no review queue; its inline review threads open the review in Reviews. Git and Reviews share one in-app dialog.
