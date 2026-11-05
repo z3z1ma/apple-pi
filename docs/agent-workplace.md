@@ -117,7 +117,11 @@ A pull request comment, approval, or change request; a Jira comment or move; and
 
 Reading a Slack channel or thread changes nothing in Slack. **Mark read** marks the channel (or, under a thread, that thread) read in Slack as you, up to its newest message; the button is the choice, so it asks no confirmation, and the channel's townsperson leaves the square. A channel opened at a message found by search shows the messages around it; when newer ones follow, it says so, and Mark read waits until **Show the newest** reads the channel as usual. Searching changes nothing in Slack.
 
-Every write you send (a Mark read too), whether the service accepted it or not, is logged in the chatbox and appended to your local record, `~/.pi/agent/state/agent-workplace-outside-writes.jsonl` (mode `0600`): one JSON line per write with its time, kind, what, where, the text, its link, and whether it succeeded or why not. Agent Workplace never removes or rewrites lines in it.
+### Agents' Slack messages as you
+
+Agents send Slack messages with the Slack MCP server's `slack_send_message` and `slack_schedule_message` tools, and Slack marks each such message *Sent using* the app. With **Send agents' Slack messages as me** on (in Settings > Connections > Slack; off by default), every Pi session sends them through your signed-in Slack session instead, as `chat.postMessage` or `chat.scheduleMessage` with the agent's Markdown in `markdown_text`, so they look like messages you wrote. Agents do not ask first; tell an agent when a message needs your check. The setting is read at each send. When the Slack session is signed out or expired, or the setting is off, the MCP tool sends as before; a message that deletes a draft (`draft_id`) also goes through the MCP tool. Every message sent this way, accepted or not, is listed under **Sent as you** in the same section, with who sent it, where, the full text and a link.
+
+Every write you send (a Mark read too), whether the service accepted it or not, is logged in the chatbox and appended to your local record, `~/.pi/agent/state/agent-workplace-outside-writes.jsonl` (mode `0600`): one JSON line per write with its time, kind, what, where, the text, its link, and whether it succeeded or why not. Agents' Slack messages sent as you are appended to the same record, with the sending session's name. Agent Workplace never removes or rewrites lines in it.
 
 ## What Agent Workplace keeps
 

@@ -48,6 +48,7 @@ export function wireIntegrations(options: {
 		return signingIn;
 	});
 	handle("sign-out-slack", () => integrations.signOutSlack());
+	handle("set-slack-send-as-me", (on) => integrations.setSlackSendAsMe(on));
 
 	handle("pull-requests", () => integrations.pullRequests());
 	handle("pull-request", (repo, number) => integrations.pullRequest(repo, number));

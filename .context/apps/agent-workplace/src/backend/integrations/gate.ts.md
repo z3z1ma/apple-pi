@@ -1,3 +1,8 @@
+## symbol:recordOutsideWrite
+
+The one writer of `agent-workplace-outside-writes.jsonl`, also called from Pi sessions for agents' Slack messages sent as the operator (`slack-sending.ts`). Lines are appended, never rewritten, so the app and sessions can append to it at once.
+Coupled: apps/agent-workplace/src/slack-sending.ts
+
 ## symbol:openGate
 
 `write` sends only when `token` is one `describe` issued for the same intent (compared as key-sorted JSON), unexpired (15 minutes), and unused; the token is spent before sending, so a second confirm of it sends nothing. Every sent write, failed or not, appends one JSON line to `agent-workplace-outside-writes.jsonl` (0600) and is announced to `onWrite` listeners (the chatbox).

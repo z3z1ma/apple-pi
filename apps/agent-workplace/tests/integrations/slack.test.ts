@@ -232,7 +232,26 @@ test("a captured session is checked with auth.test and kept; the status names on
 	expect(await api.storeSlackSession({ token: TOKEN, cookie: "xoxd-wrong" })).toMatchObject({ ok: false });
 	expect(api.credentialStatus().slack).toBeNull();
 	expect(await api.storeSlackSession({ token: TOKEN, cookie: COOKIE })).toEqual({ ok: true, team: "Acme" });
-	expect(api.credentialStatus().slack).toEqual({ team: "Acme", url: "https://acme.slack.com/", user: "operator" });
+	expect(api.credentialStatus().slack).toEqual({
+		team: "Acme",
+		url: "https://acme.slack.com/",
+		user: "operator",
+		sendAsMe: false,
+	});
+});
+
+test("sending agents' messages as the operator starts off, survives a new sign-in and ends with sign-out", async () => {
+	expect(api.credentialStatus().slack?.sendAsMe).toBe(false);
+	expect(await api.setSlackSendAsMe(true)).toEqual({ ok: true });
+	expect(await api.storeSlackSession({ token: TOKEN, cookie: COOKIE })).toEqual({ ok: true, team: "Acme" });
+	expect(api.credentialStatus().slack?.sendAsMe).toBe(true);
+	expect(await api.setSlackSendAsMe(false)).toEqual({ ok: true });
+	expect(api.credentialStatus().slack?.sendAsMe).toBe(false);
+	await api.setSlackSendAsMe(true);
+	await api.signOutSlack();
+	expect(await api.setSlackSendAsMe(true)).toMatchObject({ ok: false, signIn: "slack" });
+	expect(await api.storeSlackSession({ token: TOKEN, cookie: COOKIE })).toEqual({ ok: true, team: "Acme" });
+	expect(api.credentialStatus().slack?.sendAsMe).toBe(false);
 });
 
 test("the square lists channels with unread messages, most pressing first, counting a bounded number", async () => {

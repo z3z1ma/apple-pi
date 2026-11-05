@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { CliStatus, CredentialStatus, Outcome } from "../src/integrations.js";
+import type { CliStatus, CredentialStatus, Outcome, OutsideWriteEntry } from "../src/integrations.js";
 import { Select } from "./workplace-fields.js";
 import { CONNECTIONS_CHANGED, type IssuesSource, useIssuesSource } from "./workplace-issues-source.js";
 import "./workplace-connections.css";
@@ -97,6 +97,64 @@ function CliAccount({ status, command }: { status: CliStatus | undefined; comman
 					</p>
 				</>
 			)}
+		</>
+	);
+}
+
+function SentAsYou({ refresh }: { refresh: number }) {
+	const [entries, setEntries] = useState<OutsideWriteEntry[]>();
+	const [error, setError] = useState("");
+	// biome-ignore lint/correctness/useExhaustiveDependencies: Refresh connections rereads the record
+	useEffect(() => {
+		let current = true;
+		void window.agentWorkplace
+			.outsideWrites()
+			.then((all) => {
+				if (current) setEntries(all.filter((entry) => entry.kind === "slack-message").reverse());
+			})
+			.catch((error) => {
+				if (current) setError(failure(error));
+			});
+		return () => {
+			current = false;
+		};
+	}, [refresh]);
+	if (!entries) return error ? <p role="alert">{error}</p> : <p role="status">Reading sent messages...</p>;
+	if (!entries.length) return <p>Agents have not sent a Slack message as you yet.</p>;
+	return (
+		<>
+			{error && <p role="alert">{error}</p>}
+			<ul className="wp-connections-sent" aria-label="Slack messages agents sent as you">
+				{entries.map((entry) => (
+					<li key={`${entry.at}-${entry.where}`} data-failed={!entry.ok || undefined}>
+						<header>
+							<strong>{entry.where}</strong>
+							<span>
+								{entry.by ? `${entry.by}, ` : ""}
+								{new Date(entry.at).toLocaleString()}
+							</span>
+							{entry.url && (
+								<button
+									type="button"
+									onClick={() => {
+										const url = entry.url as string;
+										void window.agentWorkplace
+											.openLink(url)
+											.then((result) => {
+												if (!result.ok) setError(result.reason);
+											})
+											.catch((error) => setError(failure(error)));
+									}}
+								>
+									Open in Slack
+								</button>
+							)}
+						</header>
+						<p>{entry.text}</p>
+						{!entry.ok && <p role="alert">Not sent: {entry.reason}</p>}
+					</li>
+				))}
+			</ul>
 		</>
 	);
 }
@@ -238,6 +296,28 @@ export function Connections() {
 						>
 							{busy === "slack" ? "Waiting for Slack..." : credentials.slack ? "Sign out of Slack" : "Sign in to Slack"}
 						</button>
+						{credentials.slack && (
+							<>
+								<label className="wp-connections-option">
+									<input
+										type="checkbox"
+										checked={credentials.slack.sendAsMe}
+										disabled={!!busy}
+										onChange={(event) => {
+											const on = event.target.checked;
+											void act("slack-send", () => window.agentWorkplace.setSlackSendAsMe(on));
+										}}
+									/>
+									Send agents' Slack messages as me
+								</label>
+								<p>
+									Agents' messages go out through your own Slack session instead of the Slack app, without its “Sent
+									using” line. Every message they send is listed here.
+								</p>
+								<h4>Sent as you</h4>
+								<SentAsYou refresh={refresh} />
+							</>
+						)}
 					</>
 				)}
 			</section>

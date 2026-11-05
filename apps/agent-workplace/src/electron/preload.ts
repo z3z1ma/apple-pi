@@ -256,6 +256,7 @@ function places(): IntegrationsApi {
 		signOutAtlassian: call<"signOutAtlassian">("sign-out-atlassian"),
 		signInSlack: call<"signInSlack">("sign-in-slack"),
 		signOutSlack: call<"signOutSlack">("sign-out-slack"),
+		setSlackSendAsMe: call<"setSlackSendAsMe">("set-slack-send-as-me"),
 		pullRequests: call<"pullRequests">("pull-requests"),
 		pullRequest: call<"pullRequest">("pull-request"),
 		jiraAssigned: call<"jiraAssigned">("jira-assigned"),

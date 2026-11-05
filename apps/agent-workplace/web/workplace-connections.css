@@ -48,3 +48,59 @@
 	color: var(--wp-muted);
 	line-height: 1.5;
 }
+.wp-connections-option {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--wp-text);
+	font-weight: 600;
+}
+.wp-connections h4 {
+	margin: 4px 0 0;
+	color: var(--wp-text);
+}
+.wp-connections-sent {
+	display: grid;
+	gap: 8px;
+	max-height: 420px;
+	margin: 0;
+	padding: 0;
+	overflow-y: auto;
+	list-style: none;
+}
+.wp-connections-sent > li {
+	display: grid;
+	gap: 6px;
+	padding: 10px 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+	background: var(--wp-bg);
+}
+.wp-connections-sent > li[data-failed] {
+	border-color: var(--wp-danger);
+}
+.wp-connections-sent header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 10px;
+}
+.wp-connections-sent header span {
+	color: var(--wp-muted);
+	font-size: 12px;
+}
+.wp-connections-sent header button {
+	margin-left: auto;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--wp-accent);
+	font: inherit;
+	font-size: 12px;
+	text-decoration: underline;
+	cursor: pointer;
+}
+.wp-connections-sent li > p:not([role]) {
+	color: var(--wp-text);
+	white-space: pre-wrap;
+}

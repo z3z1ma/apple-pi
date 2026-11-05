@@ -40,6 +40,7 @@ async function openIssues(signedIn = true, source?: "jira" | "github") {
 				localStorage.setItem("workplace-issues-source", source);
 			let signedIn = authenticated;
 			let slackConnected = false;
+			let sendAsMe = false;
 			let progressed = false;
 			const receipts = new Set<(receipt: Receipt) => void>();
 			const now = Date.now();
@@ -152,7 +153,7 @@ async function openIssues(signedIn = true, source?: "jira" | "github") {
 					return {
 						atlassian: signedIn ? { site: "https://fixture.atlassian.net", email: "operator@example.test" } : null,
 						slack: slackConnected
-							? { team: "Fixture team", user: "fixture-user", url: "https://fixture.slack.com" }
+							? { team: "Fixture team", user: "fixture-user", url: "https://fixture.slack.com", sendAsMe }
 							: null,
 					};
 				},
@@ -179,6 +180,33 @@ async function openIssues(signedIn = true, source?: "jira" | "github") {
 					w.issueCalls.slackSignOuts++;
 					return { ok: true };
 				},
+				setSlackSendAsMe: async (on: boolean) => {
+					sendAsMe = on;
+					return { ok: true };
+				},
+				outsideWrites: async () => [
+					{
+						at: now,
+						kind: "slack-message",
+						by: "Ada",
+						what: "Send Slack message",
+						where: "#releases",
+						text: "**Release** is out",
+						url: "https://fixture.slack.com/archives/C1/p1",
+						ok: true,
+						line: "You sent in #releases",
+					},
+					{
+						at: now,
+						kind: "jira-comment",
+						what: "Comment on Jira issue",
+						where: "DATA-1",
+						text: "Not a Slack message",
+						url: null,
+						ok: true,
+						line: "You commented on DATA-1",
+					},
+				],
 				githubAssigned: async () => {
 					w.issueCalls.githubAssigned++;
 					return {
@@ -716,6 +744,20 @@ test("Settings connections sign in/out and source selection persists while provi
 		const slack = page.getByRole("region", { name: "Slack connection", exact: true });
 		await slack.getByRole("button", { name: "Sign in to Slack", exact: true }).click();
 		await slack.getByText("Signed in to Fixture team as fixture-user", { exact: true }).waitFor();
+		const sendAsMe = slack.getByRole("checkbox", { name: "Send agents' Slack messages as me", exact: true });
+		expect(await sendAsMe.isChecked()).toBe(false);
+		await sendAsMe.check();
+		await expect.poll(() => sendAsMe.isChecked()).toBe(true);
+		const sent = slack.getByRole("list", { name: "Slack messages agents sent as you", exact: true });
+		await sent.getByText("**Release** is out", { exact: true }).waitFor();
+		expect(await sent.getByRole("listitem").count()).toBe(1);
+		await sent.getByText("#releases", { exact: true }).waitFor();
+		await sent.getByRole("button", { name: "Open in Slack", exact: true }).click();
+		await expect
+			.poll(() => page.evaluate(() => (window as any).issueCalls.links))
+			.toContain("https://fixture.slack.com/archives/C1/p1");
+		await slack.scrollIntoViewIfNeeded();
+		await shot(page, "connections-slack-send-as-me");
 		await slack.getByRole("button", { name: "Sign out of Slack", exact: true }).click();
 		await slack.getByRole("button", { name: "Sign in to Slack", exact: true }).waitFor();
 		const atlassian = page.getByRole("region", { name: "Atlassian connection", exact: true });

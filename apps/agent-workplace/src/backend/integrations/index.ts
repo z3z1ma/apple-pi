@@ -16,7 +16,7 @@ import { type Gate, openGate } from "./gate.js";
 import { type GitHub, openGitHub, validPullRequest } from "./github.js";
 import { googleStatus } from "./google.js";
 import { issueKey, type Jira, openJira } from "./jira.js";
-import { openSlack, type Slack } from "./slack.js";
+import { NOT_SIGNED_IN, openSlack, type Slack } from "./slack.js";
 
 export interface IntegrationOptions {
 	stateDir: string;
@@ -180,17 +180,25 @@ export function openIntegrations(options: IntegrationOptions) {
 				return { ok: false, reason: "Slack's sign-in did not finish." };
 			const checked = await slack.check(session);
 			if (!checked.ok) return { ok: false, reason: "Slack did not accept the captured session." };
+			const sendAsMe = credentials.read().slack?.sendAsMe === true;
 			credentials.set("slack", {
 				token: session.token,
 				cookie: session.cookie,
 				team: checked.team,
 				url: checked.url,
 				user: checked.user,
+				...(sendAsMe ? { sendAsMe } : {}),
 			});
 			return { ok: true, team: checked.team };
 		},
 		async signOutSlack(): Promise<Outcome<object>> {
 			credentials.set("slack", undefined);
+			return { ok: true };
+		},
+		async setSlackSendAsMe(on: unknown): Promise<Outcome<object>> {
+			const slack = credentials.read().slack;
+			if (!slack) return NOT_SIGNED_IN;
+			credentials.set("slack", { ...slack, sendAsMe: on === true });
 			return { ok: true };
 		},
 

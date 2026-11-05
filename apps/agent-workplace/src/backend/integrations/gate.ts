@@ -117,17 +117,21 @@ export interface Gate {
 	onWrite(listener: (entry: OutsideWriteEntry) => void): () => void;
 }
 
+export function recordOutsideWrite(recordFile: string, entry: OutsideWriteEntry): void {
+	mkdirSync(dirname(recordFile), { recursive: true, mode: 0o700 });
+	const fresh = !existsSync(recordFile);
+	appendFileSync(recordFile, `${JSON.stringify({ ...entry, at: new Date(entry.at).toISOString() })}\n`, {
+		mode: 0o600,
+	});
+	if (fresh) chmodSync(recordFile, 0o600);
+}
+
 export function openGate(recordFile: string, adapters: GateAdapters, now: () => number = Date.now): Gate {
 	const waiting = new Map<string, { key: string; description: WriteDescription; until: number }>();
 	const listeners = new Set<(entry: OutsideWriteEntry) => void>();
 
 	const record = (entry: OutsideWriteEntry) => {
-		mkdirSync(dirname(recordFile), { recursive: true, mode: 0o700 });
-		const fresh = !existsSync(recordFile);
-		appendFileSync(recordFile, `${JSON.stringify({ ...entry, at: new Date(entry.at).toISOString() })}\n`, {
-			mode: 0o600,
-		});
-		if (fresh) chmodSync(recordFile, 0o600);
+		recordOutsideWrite(recordFile, entry);
 		for (const listener of listeners) listener(entry);
 	};
 

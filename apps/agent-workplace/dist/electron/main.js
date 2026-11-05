@@ -11102,7 +11102,8 @@ function openCredentials(file) {
 				slack: slack ? {
 					team: slack.team ?? null,
 					url: slack.url ?? null,
-					user: slack.user ?? null
+					user: slack.user ?? null,
+					sendAsMe: slack.sendAsMe === true
 				} : null
 			};
 		}
@@ -11376,20 +11377,23 @@ function writeLine(intent, description, failed) {
 	}
 }
 var UNCONFIRMED = /* @__PURE__ */ new Set(["slack-mark-read"]);
+function recordOutsideWrite(recordFile, entry) {
+	mkdirSync(dirname(recordFile), {
+		recursive: true,
+		mode: 448
+	});
+	const fresh = !existsSync(recordFile);
+	appendFileSync(recordFile, `${JSON.stringify({
+		...entry,
+		at: new Date(entry.at).toISOString()
+	})}\n`, { mode: 384 });
+	if (fresh) chmodSync(recordFile, 384);
+}
 function openGate(recordFile, adapters, now = Date.now) {
 	const waiting = /* @__PURE__ */ new Map();
 	const listeners = /* @__PURE__ */ new Set();
 	const record = (entry) => {
-		mkdirSync(dirname(recordFile), {
-			recursive: true,
-			mode: 448
-		});
-		const fresh = !existsSync(recordFile);
-		appendFileSync(recordFile, `${JSON.stringify({
-			...entry,
-			at: new Date(entry.at).toISOString()
-		})}\n`, { mode: 384 });
-		if (fresh) chmodSync(recordFile, 384);
+		recordOutsideWrite(recordFile, entry);
 		for (const listener of listeners) listener(entry);
 	};
 	const send = async (intent, description) => {
@@ -12754,6 +12758,36 @@ function openSlack(credentials, options = {}) {
 				url: ts ? `${slackLink(teamUrl(), channel, ts)}?thread_ts=${threadTs}&cid=${channel}` : null
 			};
 		},
+		async send(message) {
+			if (!ID.test(message.channel) || message.threadTs !== void 0 && !TS.test(message.threadTs)) return badChannel;
+			let channel = message.channel;
+			if (/^[UW]/.test(channel)) {
+				const opened = await call("conversations.open", { users: channel });
+				if (!opened.ok) return opened;
+				const id = opened.json.channel?.id;
+				if (typeof id !== "string") return badChannel;
+				channel = id;
+			}
+			const scheduled = message.postAt !== void 0;
+			const sent = await call(scheduled ? "chat.scheduleMessage" : "chat.postMessage", {
+				channel,
+				markdown_text: message.markdown,
+				...message.threadTs ? { thread_ts: message.threadTs } : {},
+				...message.broadcast ? { reply_broadcast: "true" } : {},
+				...message.unfurl ? { unfurl_links: "true" } : {},
+				...scheduled ? { post_at: String(message.postAt) } : {}
+			});
+			if (!sent.ok) return sent;
+			const name = await slack.channelName(channel);
+			const where = /^[CG]/.test(channel) ? `#${name}` : name;
+			const ts = !scheduled && typeof sent.json.ts === "string" ? sent.json.ts : void 0;
+			const link = slackLink(teamUrl(), channel, ts);
+			return {
+				ok: true,
+				where,
+				url: link && ts && message.threadTs ? `${link}?thread_ts=${message.threadTs}&cid=${channel}` : link
+			};
+		},
 		async markRead(channel, ts, threadTs) {
 			if (!ID.test(channel) || !TS.test(ts) || threadTs !== void 0 && !TS.test(threadTs)) return badChannel;
 			const marked = threadTs ? await call("subscriptions.thread.mark", {
@@ -12965,12 +12999,14 @@ function openIntegrations(options) {
 				ok: false,
 				reason: "Slack did not accept the captured session."
 			};
+			const sendAsMe = credentials.read().slack?.sendAsMe === true;
 			credentials.set("slack", {
 				token: session.token,
 				cookie: session.cookie,
 				team: checked.team,
 				url: checked.url,
-				user: checked.user
+				user: checked.user,
+				...sendAsMe ? { sendAsMe } : {}
 			});
 			return {
 				ok: true,
@@ -12979,6 +13015,15 @@ function openIntegrations(options) {
 		},
 		async signOutSlack() {
 			credentials.set("slack", void 0);
+			return { ok: true };
+		},
+		async setSlackSendAsMe(on) {
+			const slack = credentials.read().slack;
+			if (!slack) return NOT_SIGNED_IN;
+			credentials.set("slack", {
+				...slack,
+				sendAsMe: on === true
+			});
 			return { ok: true };
 		},
 		pullRequests: () => github.pullRequests(characters()),
@@ -13110,6 +13155,7 @@ function wireIntegrations(options) {
 		return signingIn;
 	});
 	handle("sign-out-slack", () => integrations.signOutSlack());
+	handle("set-slack-send-as-me", (on) => integrations.setSlackSendAsMe(on));
 	handle("pull-requests", () => integrations.pullRequests());
 	handle("pull-request", (repo, number) => integrations.pullRequest(repo, number));
 	handle("jira-assigned", () => integrations.jiraAssigned());

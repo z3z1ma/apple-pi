@@ -34,6 +34,11 @@ A channel or thread reads with `lastRead`, the newest message the operator has r
 Why: ticket 05 of `.ledger/202610191114-agent-world-alive/` (the operator decided Slack is marked read only by an explicit button). wee-slack reads the same fields (`slack/slack_conversation.py`: `last_read` from `conversations.info`; `slack/slack_message.py`: "Only subscribed threads have the last_read property").
 Verify: apps/agent-workplace/tests/integrations/slack.test.ts
 
+`send` posts (or, with `postAt`, schedules) a message as the operator with `markdown_text`, opening the direct message first when the channel is a person's id (`conversations.open`), and answers where it went and its link. Only `slack-sending.ts` calls it, for agents' messages.
+Why: `markdown_text` takes standard Markdown, which agents write, and docs.slack.dev says not to combine it with `text` or `blocks`.
+Coupled: apps/agent-workplace/src/slack-sending.ts
+Verify: apps/agent-workplace/tests/slack-sending.test.ts
+
 `markRead` is Mark read, with the web client's calls for an `xoxc` session: a channel through `conversations.mark` (`channel`, `ts` of its newest message), a thread through `subscriptions.thread.mark` (`channel`, `thread_ts`, `ts` of its newest reply, `read=1`; undocumented, the web client's method). Only the gate calls it, through `act`, which needs no confirmation.
 Why: docs.slack.dev/reference/methods/conversations.mark documents the channel call; the Web API has no documented call for a thread's read state. wee-slack, which signs in with the same `xoxc` token and `d` cookie, calls both exactly so (`slack/slack_api.py`: `conversations_mark`, `subscriptions_thread_mark`; read 2026-10-19 from github.com/wee-slack/wee-slack).
 Coupled: apps/agent-workplace/src/backend/integrations/gate.ts, apps/agent-workplace/src/backend/integrations/index.ts

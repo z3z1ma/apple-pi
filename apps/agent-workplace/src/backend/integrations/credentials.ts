@@ -25,6 +25,7 @@ export interface SlackCredentials {
 	team: string | null;
 	url: string | null;
 	user: string | null;
+	sendAsMe?: boolean;
 }
 
 export interface StoredCredentials {
@@ -91,7 +92,14 @@ export function openCredentials(file: string): CredentialStore {
 			const { atlassian, slack } = read();
 			return {
 				atlassian: atlassian ? { site: atlassian.site, email: atlassian.email } : null,
-				slack: slack ? { team: slack.team ?? null, url: slack.url ?? null, user: slack.user ?? null } : null,
+				slack: slack
+					? {
+							team: slack.team ?? null,
+							url: slack.url ?? null,
+							user: slack.user ?? null,
+							sendAsMe: slack.sendAsMe === true,
+						}
+					: null,
 			};
 		},
 	};

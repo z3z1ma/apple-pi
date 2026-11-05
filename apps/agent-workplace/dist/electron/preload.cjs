@@ -154,6 +154,7 @@ function places() {
 		signOutAtlassian: call("sign-out-atlassian"),
 		signInSlack: call("sign-in-slack"),
 		signOutSlack: call("sign-out-slack"),
+		setSlackSendAsMe: call("set-slack-send-as-me"),
 		pullRequests: call("pull-requests"),
 		pullRequest: call("pull-request"),
 		jiraAssigned: call("jira-assigned"),

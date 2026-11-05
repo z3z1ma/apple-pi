@@ -8,7 +8,7 @@ export type Outcome<T> = ({ ok: true } & T) | Refusal;
 
 export interface CredentialStatus {
 	atlassian: { site: string; email: string } | null;
-	slack: { team: string | null; url: string | null; user: string | null } | null;
+	slack: { team: string | null; url: string | null; user: string | null; sendAsMe: boolean } | null;
 }
 
 export type CliStatus = Outcome<{ account: string | null }>;
@@ -196,7 +196,8 @@ export type DescribedWrite = Outcome<{ token: string; description: WriteDescript
 
 export interface OutsideWriteEntry {
 	at: number;
-	kind: OutsideWriteIntent["kind"];
+	kind: OutsideWriteIntent["kind"] | "slack-message";
+	by?: string;
 	what: string;
 	where: string;
 	text: string;
@@ -235,6 +236,7 @@ export interface IntegrationsApi {
 	githubIssue(key: string): Promise<Outcome<{ detail: IssueDetail }>>;
 	signInSlack(): Promise<Outcome<{ team: string | null }>>;
 	signOutSlack(): Promise<Outcome<object>>;
+	setSlackSendAsMe(on: boolean): Promise<Outcome<object>>;
 
 	pullRequests(): Promise<Outcome<{ pullRequests: PullRequest[] }>>;
 	pullRequest(repo: string, number: number): Promise<Outcome<{ detail: PullRequestDetail }>>;

@@ -84,6 +84,16 @@ export interface Slack {
 	channelName(id: string): Promise<string>;
 	reply(channel: string, threadTs: string, text: string): Promise<Outcome<{ url: string | null }>>;
 	markRead(channel: string, ts: string, threadTs?: string): Promise<Outcome<{ url: string | null }>>;
+	send(post: SlackPost): Promise<Outcome<{ where: string; url: string | null }>>;
+}
+
+export interface SlackPost {
+	channel: string;
+	markdown: string;
+	threadTs?: string;
+	broadcast?: boolean;
+	unfurl?: boolean;
+	postAt?: number;
 }
 
 const ID = /^[A-Z0-9]+$/;
@@ -552,6 +562,35 @@ export function openSlack(
 			if (!posted.ok) return posted;
 			const ts = typeof posted.json.ts === "string" ? posted.json.ts : undefined;
 			return { ok: true, url: ts ? `${slackLink(teamUrl(), channel, ts)}?thread_ts=${threadTs}&cid=${channel}` : null };
+		},
+
+		async send(message) {
+			if (!ID.test(message.channel) || (message.threadTs !== undefined && !TS.test(message.threadTs)))
+				return badChannel;
+			let channel = message.channel;
+			if (/^[UW]/.test(channel)) {
+				const opened = await call("conversations.open", { users: channel });
+				if (!opened.ok) return opened;
+				const id = (opened.json.channel as { id?: unknown } | undefined)?.id;
+				if (typeof id !== "string") return badChannel;
+				channel = id;
+			}
+			const scheduled = message.postAt !== undefined;
+			const sent = await call(scheduled ? "chat.scheduleMessage" : "chat.postMessage", {
+				channel,
+				markdown_text: message.markdown,
+				...(message.threadTs ? { thread_ts: message.threadTs } : {}),
+				...(message.broadcast ? { reply_broadcast: "true" } : {}),
+				...(message.unfurl ? { unfurl_links: "true" } : {}),
+				...(scheduled ? { post_at: String(message.postAt) } : {}),
+			});
+			if (!sent.ok) return sent;
+			const name = await slack.channelName(channel);
+			const where = /^[CG]/.test(channel) ? `#${name}` : name;
+			const ts = !scheduled && typeof sent.json.ts === "string" ? sent.json.ts : undefined;
+			const link = slackLink(teamUrl(), channel, ts);
+			const url = link && ts && message.threadTs ? `${link}?thread_ts=${message.threadTs}&cid=${channel}` : link;
+			return { ok: true, where, url };
 		},
 
 		async markRead(channel, ts, threadTs) {

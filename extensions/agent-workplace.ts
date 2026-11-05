@@ -7,6 +7,7 @@ import {
 	installedElectron,
 	startAgentWorkplace,
 } from "../apps/agent-workplace/src/launch.js";
+import { installSlackSending } from "../apps/agent-workplace/src/slack-sending.js";
 
 const STATUS = "agent-workplace";
 
@@ -17,6 +18,7 @@ function stepText(step: InstallStep): string {
 }
 
 export default function agentWorkplace(pi: ExtensionAPI) {
+	installSlackSending(pi);
 	let installing: Promise<string> | undefined;
 	pi.registerCommand("workplace", {
 		description:
