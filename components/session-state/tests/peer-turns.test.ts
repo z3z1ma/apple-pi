@@ -5,6 +5,8 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { fauxSession, type Reply } from "../../../tests/helpers/faux-session.js";
+import { reportToolSchema } from "../../code-review/src/contracts.js";
+import { normalizeOutputSchema } from "../../shared/src/structured-output.js";
 import { sendCommand } from "../src/client.js";
 import bridge from "../src/index.js";
 import { close, query, runtimePid, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
@@ -113,6 +115,44 @@ test("post-hook typed results are validated, with the return tool hidden between
 			);
 			expect(run.session.getActiveToolNames()).not.toContain("pi_exec_return");
 		}
+	} finally {
+		await close(run);
+	}
+}, 20000);
+
+test("a reviewer that invents a coverage question is refused inside its turn and can correct it", async () => {
+	const answer = { state: "completed", evidence: ["caller releases the resource"] };
+	const report = { summary: "The resource is released.", findings: [], limitations: [], extraPasses: [] };
+	const run = await fauxSession(
+		[bridge],
+		[
+			fauxAssistantMessage(
+				[
+					fauxToolCall("pi_exec_return", {
+						...report,
+						coverage: { cleanup: answer, "Applicable standards and captured intent": answer },
+					}),
+				],
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage([fauxToolCall("pi_exec_return", { ...report, coverage: { cleanup: answer } })], {
+				stopReason: "toolUse",
+			}),
+		],
+		[],
+	);
+	try {
+		const id = run.session.sessionManager.getSessionId();
+		await seen(id);
+		const schema = reportToolSchema({
+			questions: [{ id: "cleanup", question: "Are resources released?", verification: "Trace release." }],
+		});
+		expect(
+			await sendCommand(id, { kind: "run_turn", task: "Inspect cleanup", outputSchema: normalizeOutputSchema(schema) }),
+		).toMatchObject({ stage: "applied", result: { status: "completed", value: { coverage: { cleanup: answer } } } });
+		expect(
+			run.session.messages.filter((message) => message.role === "toolResult").map((message) => message.isError),
+		).toEqual([true, false]);
 	} finally {
 		await close(run);
 	}
