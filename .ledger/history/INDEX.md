@@ -187,3 +187,5 @@
 - `.ledger/history/202610150034-code-context-evaluation/task.md` — cancelled — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
 
 - `.ledger/history/202611041856-workplace-git-tab/task.md` — done — Workplace Git tab: a GitKraken-like first-class tab — Split Git out of the Code tab into its own Workplace tab: commit graph, branches, remotes, tags, stashes, worktrees, staging, commit, fetch/pull/push and branch operations over the machine's git; rail overflow for the growing number of tabs. Code review tab follows later.
+
+- `.ledger/history/202611041937-workplace-reviews-tab/task.md` — done — Workplace Reviews tab: code review as its own app with an updates badge — Move captured code reviews out of the Code tab into a first-class, more beautiful Reviews app; the rail badge counts reviews whose state changed since the operator last saw them.
