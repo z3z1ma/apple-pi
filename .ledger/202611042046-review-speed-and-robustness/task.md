@@ -19,7 +19,9 @@ Operator, 2026-11-04: the captured code review fails at random, often ends incom
 
 ## Current State
 
-Implemented and tested; awaiting commit and the operator's consent to restart the session-state runtime, which runs the new review code.
+Implemented (9480a9f5), activated with the operator's consent (runtime pid 6361, Workplace relaunched), exercised by one live review of itself, and corrected from that review (fa877d66, not yet activated: the runtime still runs 9480a9f5).
+
+Live review `review-2b3746d1-3241-47a1-bb1d-e2e2ce9b98dd` of 9480a9f5: completed in 12.5 minutes (planner 1.9 minutes at medium thinking, slowest pass 10 minutes, linking 0.4 minutes; no per-report validation). 13 findings, 3 linked as duplicates, 10 distinct; all 10 answered fixed-claimed in fa877d66 with regressions where practical (owner reassignment during recovery and failed program opening with retained cleanup are fixed from source reading, not reproduced). It also exposed that storing only the links crashed every Pi session started before the change when it read that review; the merge now stores the whole assessment.
 
 - Result tools: `planToolSchema`, `reportToolSchema`, `duplicateToolSchema` with `*FromTool` converters (`components/code-review/src/contracts.ts`). This applies the operator's suggestion through the existing per-turn structured result tool (`pi_exec_return`, registered per request with the attempt's schema): Pi validates arguments in the turn and returns errors to the model, so no new extension or environment flag was needed. Separate incremental tools (one call per finding or answer) were considered and not built: the exact schema already removes the bookkeeping that failed, and the recorded failures were all identity mismatches, not oversized results.
 - Pipeline (`components/session-state/src/review-jobs.ts`): retry once, `ReviewStop` for unretriable failures, per-pass failure kept local, merge only for two or more findings, reasons listed per cause, unavailable answers reported, automatic resume after restart, planner at medium thinking.
