@@ -185,3 +185,5 @@
 - `.ledger/history/202610030109-context-ablation-experiment/task.md` — cancelled — Measure a learning's value by removing it from a fresh agent's context — Proposed experiment: run a fresh agent on a known-answer task with one curated learning removed, compare effort with a full-context baseline, and use the difference to keep or prune the learning.
 
 - `.ledger/history/202610150034-code-context-evaluation/task.md` — cancelled — Evaluate code context sidecars on replayed failure tasks — Phase 5 of code-context sidecars: replay 3–5 historical failure tasks under Baseline, Read-only injection, and Full v1 (gate) and compare pre-edit constraint awareness, plan changes after blocks, violation rates, and token overhead.
+
+- `.ledger/history/202611041856-workplace-git-tab/task.md` — done — Workplace Git tab: a GitKraken-like first-class tab — Split Git out of the Code tab into its own Workplace tab: commit graph, branches, remotes, tags, stashes, worktrees, staging, commit, fetch/pull/push and branch operations over the machine's git; rail overflow for the growing number of tabs. Code review tab follows later.
