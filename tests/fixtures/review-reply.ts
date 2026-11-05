@@ -20,6 +20,7 @@ export interface ReviewSettings {
 	passId?: string;
 	finding?: boolean;
 	duplicate?: boolean;
+	failLinking?: boolean;
 }
 
 export function reviewReply(input: ReviewInput, settings: ReviewSettings = {}): unknown {
@@ -127,6 +128,7 @@ export function reviewReply(input: ReviewInput, settings: ReviewSettings = {}): 
 			limitations: [],
 			extraPasses: [],
 		};
+	if (settings.failLinking) return { summary };
 	const [first, ...rest] = input.findings;
 	return {
 		summary,

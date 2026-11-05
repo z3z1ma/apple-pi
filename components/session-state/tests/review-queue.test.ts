@@ -24,6 +24,7 @@ import type { FindingResponse } from "../../code-review/src/decisions.js";
 import type { ReviewTarget } from "../../code-review/src/types.js";
 import { loadRoles } from "../../organization/src/roles.js";
 import { sendCommand } from "../src/client.js";
+import { reviewLimits } from "../src/review-decisions.js";
 import {
 	readReview,
 	readReviewFreshness,
@@ -1331,6 +1332,70 @@ test("evidence this machine cannot produce completes the review as a stated limi
 	}
 }, 30000);
 
+test("failed duplicate linking leaves findings standing and stays a visible limit of a completed review", async () => {
+	writeFileSync(
+		join(state.agentDir, "peer-control.json"),
+		JSON.stringify({ review: { finding: true, duplicate: true, failLinking: true } }),
+	);
+	const job = await enqueue();
+	await settled(job.id, "completed");
+	expect(
+		query(state.dbPath, "select state from review_attempts where review_id = ? and kind = 'validation'", job.id),
+	).toEqual([{ state: "failed" }, { state: "failed" }]);
+	const outcome = query<{ body: string }>(
+		state.dbPath,
+		"select body from thread_messages where thread_id = ? order by at desc, rowid desc limit 1",
+		`review:${job.id}`,
+	)[0]!.body;
+	expect(outcome).toContain("completed: 2 findings");
+	expect(outcome).not.toContain("Why it is incomplete");
+	expect(outcome).toContain("Also note:\n- Duplicate findings were not linked:");
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		expect(reviewLimits(reviewAssessment(db, "owner", job.id))).toContainEqual(
+			expect.stringContaining("Duplicate findings were not linked"),
+		);
+	} finally {
+		db.close();
+	}
+}, 30000);
+
+test("a role that cannot be resolved after planning stops the review without retrying a paid reviewer", async () => {
+	const rolePath = join(state.agentDir, "roles", "code-review-specialist.md");
+	const original = readFileSync(rolePath, "utf8");
+	const gate = join(state.agentDir, "cleanup-gates");
+	mkdirSync(gate);
+	writeFileSync(
+		join(state.agentDir, "peer-control.json"),
+		JSON.stringify({ review: true, cleanupGate: gate, cleanupPasses: ["planner"] }),
+	);
+	const job = await enqueue();
+	const planner = () =>
+		query<{ person: string; output: string | null }>(
+			state.dbPath,
+			"select person, output from review_attempts where review_id = ? and kind = 'planner'",
+			job.id,
+		)[0];
+	try {
+		await vi.waitFor(
+			() => expect(!!planner()?.output && existsSync(join(gate, `${planner()!.person}.waiting`))).toBe(true),
+			{ timeout: 15000 },
+		);
+		writeFileSync(rolePath, original.replace("writes: false", "writes: true"));
+		writeFileSync(join(gate, `${planner()!.person}.release`), "continue");
+		await settled(job.id, "failed");
+		expect(query(state.dbPath, "select reason from review_jobs where id = ?", job.id)).toEqual([
+			{ reason: "Unavailable advisory review role: code-review-specialist" },
+		]);
+		expect(
+			query(state.dbPath, "select id from review_attempts where review_id = ? and kind != 'planner'", job.id),
+		).toEqual([]);
+		expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
+	} finally {
+		writeFileSync(rolePath, original);
+	}
+}, 30000);
+
 test.each(["role", "profile", "selection", "catalog"])(
 	"resume replans under changed %s policy instead of reusing the earlier assessment",
 	async (change) => {
@@ -2080,6 +2145,26 @@ test("restart resumes a verified target by itself and leaves a damaged one inter
 		{ timeout: 10000 },
 	);
 	expect(query(state.dbPath, "select state, reason from review_jobs")).toEqual([{ state: "running", reason: null }]);
+	await stop();
+	const stopped = new DatabaseSync(state.dbPath);
+	try {
+		stopped
+			.prepare("update review_jobs set state = 'interrupted', reason = ?")
+			.run(
+				"The runtime restarted; this review resumes by itself once its reviewer cleanup finishes and its captured source verifies.",
+			);
+	} finally {
+		stopped.close();
+	}
+	const pending = query<{ generation: number }>(state.dbPath, "select generation from review_jobs")[0]!.generation;
+	await startRuntime(state.socketPath);
+	await vi.waitFor(
+		() =>
+			expect(
+				query<{ generation: number }>(state.dbPath, "select generation from review_jobs")[0]!.generation,
+			).toBeGreaterThan(pending + 1),
+		{ timeout: 10000 },
+	);
 	await stop();
 	writeFileSync(join(repository, "value.ts"), "export const value = 3;\n");
 	writeFileSync(join(artifact.source, "value.ts"), "export const value = 99;\n");

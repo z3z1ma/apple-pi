@@ -4,6 +4,7 @@ import {
 	assessFindings,
 	duplicateToolSchema,
 	findingKey,
+	linksFromTool,
 	planFromTool,
 	planPasses,
 	planToolSchema,
@@ -15,6 +16,7 @@ import {
 	validatePlan,
 	validateReport,
 } from "../src/contracts.js";
+import { INSPECT_REVIEW } from "../src/prompts.js";
 import type { ChangeRegion } from "../src/types.js";
 
 const regions: ChangeRegion[] = [
@@ -194,6 +196,32 @@ test("the inspection tool takes one answer per planned question, so a reviewer c
 	expect(stored.findings.map((entry) => entry.id)).toEqual(["roster", "roster-2"]);
 });
 
+test("repeated finding IDs get fresh identities that never collide with supplied ones", () => {
+	const pass = planPasses(plan(), regions)[0]!;
+	const ids = (supplied: string[]) =>
+		(
+			reportFromTool(
+				{
+					summary: "s",
+					coverage: { consent: { state: "completed", evidence: ["e"] } },
+					findings: supplied.map((id) => finding(id)),
+					limitations: [],
+					extraPasses: [],
+				},
+				"captured-target",
+				pass,
+			) as ReviewReport
+		).findings.map((entry) => entry.id);
+	expect(ids(["bug", "bug", "bug-2"])).toEqual(["bug", "bug-3", "bug-2"]);
+	expect(ids(["bug", "bug-2", "bug"])).toEqual(["bug", "bug-2", "bug-3"]);
+	expect(ids(["bug", "bug", "bug"])).toEqual(["bug", "bug-2", "bug-3"]);
+});
+
+test("inspectors are told that evidence unavailable here is an unavailable answer", () => {
+	expect(INSPECT_REVIEW).toContain("answer unavailable");
+	expect(INSPECT_REVIEW).not.toMatch(/unavailable[^.]*belongs in incomplete/i);
+});
+
 test("the planner chooses only supplied roles and never repeats the artifact", () => {
 	const { artifact: _, ...reply } = plan();
 	const schema = planToolSchema([...roles]);
@@ -233,6 +261,17 @@ test("findings stand as reported, hypotheses stay unresolved, and only sound dup
 		"confirmed",
 		"unresolved",
 	]);
+	const toHypothesis = linksFromTool(
+		{ summary: "One pair.", duplicates: [{ finding: keys[0]!, duplicateOf: keys[2]!, reason: "Same defect." }] },
+		"captured-target",
+		[first],
+	) as ReturnType<typeof assessFindings>;
+	expect(toHypothesis.findings.map((entry) => [entry.disposition, entry.duplicateOf])).toEqual([
+		["confirmed", null],
+		["confirmed", null],
+		["duplicate", keys[0]],
+	]);
+	expect(toHypothesis).toMatchObject({ artifact: "captured-target", summary: "One pair." });
 });
 
 test("the runtime maps scope paths to regions, keeps unscoped regions for integration and refuses empty scopes", () => {

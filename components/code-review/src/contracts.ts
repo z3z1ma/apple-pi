@@ -169,7 +169,14 @@ export function reportFromTool(value: unknown, artifact: string, pass: Pick<Plan
 	const tool = value as Omit<ReviewReport, "artifact" | "pass" | "coverage"> & {
 		coverage: Record<string, ToolAnswer>;
 	};
-	const seen = new Map<string, number>();
+	const taken = new Set(tool.findings.map((entry) => entry.id));
+	const used = new Set<string>();
+	const identity = (id: string) => {
+		let next = id;
+		for (let n = 2; used.has(next) || (next !== id && taken.has(next)); n++) next = `${id}-${n}`;
+		used.add(next);
+		return next;
+	};
 	return {
 		artifact,
 		pass: pass.id,
@@ -180,11 +187,7 @@ export function reportFromTool(value: unknown, artifact: string, pass: Pick<Plan
 				? { question: entry.id, state: reply.state, evidence: reply.evidence, reason: "" }
 				: { question: entry.id, state: reply.state, evidence: [], reason: reply.reason };
 		}),
-		findings: tool.findings.map((entry) => {
-			const repeats = seen.get(entry.id) ?? 0;
-			seen.set(entry.id, repeats + 1);
-			return repeats ? { ...entry, id: `${entry.id}-${repeats + 1}` } : entry;
-		}),
+		findings: tool.findings.map((entry) => ({ ...entry, id: identity(entry.id) })),
 		limitations: tool.limitations,
 		extraPasses: tool.extraPasses,
 	};
@@ -336,14 +339,15 @@ export function duplicateToolSchema(keys: readonly string[]) {
 	);
 }
 
-export function linksFromTool(value: unknown, artifact: string): unknown {
-	return { ...(value as object), artifact };
+export function linksFromTool(value: unknown, artifact: string, reports: ReviewReport[]): unknown {
+	const links = checkShape(DuplicateLinksSchema, { ...(value as object), artifact });
+	return assessFindings(artifact, reports, links);
 }
 
-export function validateLinks(value: unknown, artifact: string): DuplicateLinks {
-	const links = checkShape(DuplicateLinksSchema, value);
-	if (links.artifact !== artifact) throw new Error("Duplicate links name a different artifact");
-	return links;
+export function validateAssessment(value: unknown, artifact: string): FindingValidation {
+	const assessment = checkShape(FindingValidationSchema, value);
+	if (assessment.artifact !== artifact) throw new Error("The assessment names a different artifact");
+	return assessment;
 }
 
 export function assessFindings(
@@ -358,8 +362,8 @@ export function assessFindings(
 			reason:
 				entry.certainty === "hypothesis"
 					? `Pass ${report.pass} reported this as a hypothesis without a reproduction.`
-					: `Pass ${report.pass} reported this with ${entry.certainty} certainty and the evidence below; no separate validator re-ran it.`,
-			evidence: entry.evidence.map((item) => `${item.kind}: ${item.detail} (${item.provenance})`),
+					: `Pass ${report.pass} reported this with ${entry.certainty} certainty; no separate validator re-ran it.`,
+			evidence: [`The finding's own evidence: ${entry.evidence.map((item) => item.kind).join(", ")}.`],
 			duplicateOf: null as string | null,
 		})),
 	);
@@ -373,11 +377,25 @@ export function assessFindings(
 		}
 		return false;
 	};
+	const root = (key: string) => {
+		const visited = new Set<string>();
+		let next = key;
+		while (byKey.get(next)?.duplicateOf && !visited.has(next)) {
+			visited.add(next);
+			next = byKey.get(next)!.duplicateOf!;
+		}
+		return next;
+	};
 	for (const link of links?.duplicates ?? []) {
-		const entry = byKey.get(link.finding);
-		if (!entry || !byKey.has(link.duplicateOf) || entry.disposition === "duplicate") continue;
-		if (reaches(link.duplicateOf, link.finding)) continue;
-		Object.assign(entry, { disposition: "duplicate", duplicateOf: link.duplicateOf, reason: link.reason });
+		if (!byKey.has(link.finding) || !byKey.has(link.duplicateOf)) continue;
+		const inverted =
+			byKey.get(link.finding)!.disposition === "confirmed" &&
+			byKey.get(root(link.duplicateOf))!.disposition === "unresolved";
+		const duplicate = inverted ? root(link.duplicateOf) : link.finding;
+		const original = inverted ? link.finding : link.duplicateOf;
+		const entry = byKey.get(duplicate)!;
+		if (entry.disposition === "duplicate" || reaches(original, duplicate)) continue;
+		Object.assign(entry, { disposition: "duplicate", duplicateOf: original, reason: link.reason });
 	}
 	return { artifact, summary: links?.summary ?? "", coverageGaps: [], findings, limitations: [] };
 }

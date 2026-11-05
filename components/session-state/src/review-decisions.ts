@@ -19,6 +19,7 @@ export function reviewLimits(assessment: ReviewAssessment): string[] {
 	const { job, passes, validation, findings } = assessment;
 	const limits: string[] = [];
 	if (job.state !== "completed") limits.push(`Review execution is ${job.state}: ${job.reason ?? "not completed"}`);
+	else if (job.reason) limits.push(job.reason);
 	if (!job.artifact?.intent) limits.push("Approved intent was not supplied; intent compliance is unassessed.");
 	if (!job.artifact?.configuration)
 		limits.push(

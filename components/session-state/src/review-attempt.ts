@@ -54,7 +54,8 @@ export async function runReviewAttempt(
 	if (!artifact) throw new Error("Review execution requires an admitted artifact");
 	await verified(pass.kind === "planner" ? verifyArtifact : verifyCapturedSource, artifact, signal);
 	signal.throwIfAborted();
-	const policy = reviewRolePolicy(artifact.source, pass.role, pass.depth);
+	const resolve = () => rolePolicy(artifact.source, pass.role, pass.depth);
+	const policy = resolve();
 	if (reviewPolicyFingerprint(policy) !== pass.policyFingerprint)
 		throw new ReviewStop(
 			`The review policy for ${pass.role} differs from the planned catalog; resume to plan under current policy`,
@@ -153,7 +154,7 @@ export async function runReviewAttempt(
 		).run(observed.model, pass.thinking ?? observed.thinking, observed.file, id);
 		if (observed.role !== pass.role || !candidates.some((candidate) => candidate.model === observed.model))
 			throw new ReviewStop("The reviewer did not select its recorded role/model policy; no review turn was sent");
-		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role, pass.depth)) !== JSON.stringify(policy))
+		if (JSON.stringify(resolve()) !== JSON.stringify(policy))
 			throw new ReviewStop("The review policy changed during startup; no review turn was sent");
 		const receipt = await program.command(
 			person,
@@ -163,7 +164,7 @@ export async function runReviewAttempt(
 		if (receipt.stage !== "applied" || receipt.result?.status !== "completed")
 			throw new Error(receipt.reason ?? receipt.result?.error ?? "The review turn did not complete");
 		await verified(verifyCapturedSource, artifact, signal);
-		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role, pass.depth)) !== JSON.stringify(policy))
+		if (JSON.stringify(resolve()) !== JSON.stringify(policy))
 			throw new ReviewStop("The review policy changed during the turn; resume to obtain current-policy evidence");
 		output = pass.validate(pass.fromTool ? pass.fromTool(receipt.result.value) : receipt.result.value);
 		storeOutput(db, job, id, output);
@@ -180,7 +181,10 @@ export async function runReviewAttempt(
 	}
 	if (!db.isOpen) throw failure ?? new Error("The runtime stopped before the attempt settled");
 	cleaned = cleaned && !db.prepare("select 1 from program_scopes where id = ?").get(programId);
-	if (!cleaned && !failure) failure = new ReviewStop("The attempt still owns resources; inspect its pending cleanup");
+	if (!cleaned)
+		failure = new ReviewStop(
+			`${failure ? `${message(failure)}; ` : ""}The attempt still owns resources; inspect its pending cleanup`,
+		);
 	const eligible = current(db, job) && !signal.aborted;
 	if (!failure && signal.aborted) cancelled = true;
 	if (!eligible && !failure) failure = new ReviewStop("The attempt was interrupted or superseded");
@@ -212,6 +216,14 @@ function current(db: DatabaseSync, job: ReviewJob): boolean {
 		)
 	);
 }
+function rolePolicy(source: string, role: string, depth: ReviewDepth | undefined) {
+	try {
+		return reviewRolePolicy(source, role, depth);
+	} catch (error) {
+		throw new ReviewStop(message(error));
+	}
+}
+
 async function setThinking(
 	program: PeerProgram,
 	person: string,

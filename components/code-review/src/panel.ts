@@ -350,7 +350,7 @@ export class ReviewPanel implements Component {
 				"Proposed correction",
 				"Evidence",
 				"Counterevidence",
-				"Status reason",
+				"Status evidence",
 				"Owner response evidence",
 			].includes(text)
 		)

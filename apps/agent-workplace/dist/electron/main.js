@@ -4887,7 +4887,7 @@ Use only supplied advisory role names. Preserve requested lens labels as actual 
 var INSPECT_REVIEW = `Perform your assigned first inspection independently. ${source}
 Start from the assigned questions and form your own causal trace before consulting other review reports or opinions. Your brief contains source, intent, scope and questions rather than the author's narrative or colleagues' conclusions. Record any outside conclusions you encounter as a limitation on that independence.
 Answer every assigned question under its own key; the result tool lists them. Apply the repository's standards and the captured intent within those answers, and note in limitations when intent is absent. A completed answer names its evidence. When the evidence cannot be produced here (a live service, hardware, credentials or a tool this machine lacks), answer unavailable with what would settle it. When it could be produced but you did not settle it, answer incomplete with the reason. Report defects with a triggering case, violated invariant, causal trace, user impact, captured location and counterevidence considered. Distinguish a source inference from an executed reproduction or a hypothesis. A severity is a judgment, not calibrated probability. Follow guards, callers and reconciliation before alleging a local omission.
-An additional pass request must name a concrete uncertainty, why more work is justified and what would settle it. Known unavailable evidence belongs in incomplete coverage rather than repeated broad review. Preserve limitations even when no defects are found. Return the report through the structured result tool.`;
+An additional pass request must name a concrete uncertainty, why more work is justified and what would settle it. Evidence you know is unavailable here is an unavailable answer, not a request for more review. Preserve limitations even when no defects are found. Return the report through the structured result tool.`;
 var LINK_DUPLICATES = `Link duplicate findings across independently validated reports. The bound context lists every finding with its validation; do not re-investigate the source.
 Two findings are duplicates only when they share the same trigger, violated invariant and cause; similar titles or the same file do not make a duplicate. For each duplicate, name the finding it duplicates (prefer the one with the clearest evidence) and why, using the finding keys the result tool lists. Summarize the combined outcome in a few sentences. Return the links through the structured result tool.`;
 //#endregion
@@ -5738,8 +5738,8 @@ function assessFindings(artifact, reports, links) {
 	const findings = reports.flatMap((report) => report.findings.map((entry) => ({
 		finding: findingKey(report.pass, entry.id),
 		disposition: entry.certainty === "hypothesis" ? "unresolved" : "confirmed",
-		reason: entry.certainty === "hypothesis" ? `Pass ${report.pass} reported this as a hypothesis without a reproduction.` : `Pass ${report.pass} reported this with ${entry.certainty} certainty and the evidence below; no separate validator re-ran it.`,
-		evidence: entry.evidence.map((item) => `${item.kind}: ${item.detail} (${item.provenance})`),
+		reason: entry.certainty === "hypothesis" ? `Pass ${report.pass} reported this as a hypothesis without a reproduction.` : `Pass ${report.pass} reported this with ${entry.certainty} certainty; no separate validator re-ran it.`,
+		evidence: [`The finding's own evidence: ${entry.evidence.map((item) => item.kind).join(", ")}.`],
 		duplicateOf: null
 	})));
 	const byKey = new Map(findings.map((entry) => [entry.finding, entry]));
@@ -5752,13 +5752,25 @@ function assessFindings(artifact, reports, links) {
 		}
 		return false;
 	};
+	const root = (key) => {
+		const visited = /* @__PURE__ */ new Set();
+		let next = key;
+		while (byKey.get(next)?.duplicateOf && !visited.has(next)) {
+			visited.add(next);
+			next = byKey.get(next).duplicateOf;
+		}
+		return next;
+	};
 	for (const link of links?.duplicates ?? []) {
-		const entry = byKey.get(link.finding);
-		if (!entry || !byKey.has(link.duplicateOf) || entry.disposition === "duplicate") continue;
-		if (reaches(link.duplicateOf, link.finding)) continue;
+		if (!byKey.has(link.finding) || !byKey.has(link.duplicateOf)) continue;
+		const inverted = byKey.get(link.finding).disposition === "confirmed" && byKey.get(root(link.duplicateOf)).disposition === "unresolved";
+		const duplicate = inverted ? root(link.duplicateOf) : link.finding;
+		const original = inverted ? link.finding : link.duplicateOf;
+		const entry = byKey.get(duplicate);
+		if (entry.disposition === "duplicate" || reaches(original, duplicate)) continue;
 		Object.assign(entry, {
 			disposition: "duplicate",
-			duplicateOf: link.duplicateOf,
+			duplicateOf: original,
 			reason: link.reason
 		});
 	}
@@ -6532,6 +6544,7 @@ function reviewLimits(assessment) {
 	const { job, passes, validation, findings } = assessment;
 	const limits = [];
 	if (job.state !== "completed") limits.push(`Review execution is ${job.state}: ${job.reason ?? "not completed"}`);
+	else if (job.reason) limits.push(job.reason);
 	if (!job.artifact?.intent) limits.push("Approved intent was not supplied; intent compliance is unassessed.");
 	if (!job.artifact?.configuration) limits.push("Capture-time review instructions/configured references were not recorded; inspect retained attempt inputs.");
 	else if (job.artifact.configuration.catalogIssues) limits.push(`${job.artifact.configuration.catalogIssues} role-catalog issues; captured configured references may be partial.`);

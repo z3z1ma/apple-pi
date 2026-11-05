@@ -6,7 +6,6 @@ import { captureReview, verifyArtifact } from "../../code-review/src/capture.js"
 import {
 	assessFindings,
 	checkShape,
-	type DuplicateLinks,
 	duplicateToolSchema,
 	type FindingValidation,
 	findingKey,
@@ -20,7 +19,7 @@ import {
 	reportFromTool,
 	reportToolSchema,
 	unscopedRegions,
-	validateLinks,
+	validateAssessment,
 	validatePlan,
 	validateReport,
 } from "../../code-review/src/contracts.js";
@@ -57,6 +56,8 @@ function reviewSource(artifact: ReviewArtifact) {
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const PLANNER_THINKING = "medium";
+const RESUMING =
+	"The runtime restarted; this review resumes by itself once its reviewer cleanup finishes and its captured source verifies.";
 
 export type ReviewNotify = (notice: {
 	review: string;
@@ -73,6 +74,7 @@ function outcomeNotice(
 	reports: ReviewReport[],
 	validation: FindingValidation,
 	reasons: string[],
+	notes: string[],
 ): string {
 	const findings = new Map(
 		reports.flatMap((report) =>
@@ -95,6 +97,7 @@ function outcomeNotice(
 				: `- ${entry.finding}`;
 		}),
 		...(reasons.length ? ["", "Why it is incomplete:", ...reasons.map((reason) => `- ${reason}`)] : []),
+		...(notes.length ? ["", "Also note:", ...notes.map((note) => `- ${note}`)] : []),
 		...(unavailable.length ? ["", "Could not be checked on this machine:", ...unavailable] : []),
 		...(validation.summary ? ["", validation.summary] : []),
 		"",
@@ -180,14 +183,14 @@ export class ReviewJobs {
 				"update review_attempts set state = 'interrupted', reason = 'The runtime restarted before this attempt completed', finished_at = ? where state in ('starting', 'running', 'cleaning')",
 			)
 			.run(Date.now());
-		const resumable = this.db
-			.prepare("select id from review_jobs where state in ('queued', 'running') and artifact is not null")
-			.all() as { id: string }[];
 		this.db
 			.prepare(
-				`update review_jobs set state = 'interrupted', reason = 'The runtime restarted. Inspect the retained work and explicitly resume a verified target.', updated_at = ? where state in ('capturing', 'queued', 'running', 'cancelling')`,
+				`update review_jobs set state = 'interrupted', reason = case when artifact is not null and state in ('queued', 'running') then ? else 'The runtime restarted. Inspect the retained work and explicitly resume a verified target.' end, updated_at = ? where state in ('capturing', 'queued', 'running', 'cancelling')`,
 			)
-			.run(Date.now());
+			.run(RESUMING, Date.now());
+		const resumable = this.db
+			.prepare("select id from review_jobs where state = 'interrupted' and reason = ?")
+			.all(RESUMING) as { id: string }[];
 		if (resumable.length) void this.resumeAfterRestart(resumable.map(({ id }) => id));
 	}
 
@@ -195,24 +198,28 @@ export class ReviewJobs {
 		for (const id of ids) {
 			try {
 				const job = readReview(this.db, "operator", id);
-				if (job.state !== "interrupted" || !job.artifact) continue;
+				if (job.state !== "interrupted" || job.reason !== RESUMING || !job.artifact) continue;
 				this.availableOwner(job.owner);
 				await this.waitCleanup(id);
 				await verifyArtifact(job.artifact);
 				this.live();
-				this.db
+				const queued = this.db
 					.prepare(
-						"update review_jobs set state = 'queued', generation = generation + 1, revision = revision + 1, reason = null, updated_at = ? where id = ? and state = 'interrupted' and generation = ? and revision = ?",
+						"update review_jobs set state = 'queued', generation = generation + 1, revision = revision + 1, reason = null, updated_at = ? where id = ? and state = 'interrupted' and reason = ? and generation = ? and revision = ? and owner = ?",
 					)
-					.run(Date.now(), id, job.generation, job.revision);
+					.run(Date.now(), id, RESUMING, job.generation, job.revision, job.owner);
+				if (!queued.changes) throw new Error("the review changed while its target was verified");
 			} catch (error) {
 				if (this.stopped) return;
 				this.db
-					.prepare("update review_jobs set reason = ?, updated_at = ? where id = ? and state = 'interrupted'")
+					.prepare(
+						"update review_jobs set reason = ?, updated_at = ? where id = ? and state = 'interrupted' and reason = ?",
+					)
 					.run(
 						`The runtime restarted and could not resume this review: ${message(error)}. Resume it explicitly once the cause is fixed.`,
 						Date.now(),
 						id,
+						RESUMING,
 					);
 			}
 		}
@@ -569,8 +576,8 @@ export class ReviewJobs {
 			const findings = reports.flatMap((report) =>
 				report.findings.map((finding) => ({ key: findingKey(report.pass, finding.id), report, finding })),
 			);
-			let links: DuplicateLinks | null = null;
-			let unlinked = "";
+			let validation = assessFindings(artifact.digest, reports, null);
+			const notes: string[] = [];
 			if (findings.length > 1) {
 				try {
 					const merged = await this.attempt(
@@ -589,25 +596,26 @@ export class ReviewJobs {
 									key,
 									title: finding.title,
 									location: `${finding.path}:${finding.line}`,
+									certainty: finding.certainty,
+									evidence: finding.evidence.map((item) => item.kind),
 									trigger: finding.trigger,
 									invariant: finding.invariant,
 									cause: finding.cause,
 								})),
 							},
-							fromTool: (value) => linksFromTool(value, artifact.digest),
-							validate: (value) => validateLinks(value, artifact.digest),
+							fromTool: (value) => linksFromTool(value, artifact.digest, reports),
+							validate: (value) => validateAssessment(value, artifact.digest),
 						},
 						signal,
 					);
 					job.selectedAttempts = { ...job.selectedAttempts, validator: merged.attempt };
 					this.storeSelection(job);
-					links = merged.output as DuplicateLinks;
+					validation = merged.output as FindingValidation;
 				} catch (error) {
 					if (signal.aborted || this.stopped || error instanceof ReviewStop) throw error;
-					unlinked = `Duplicate findings were not linked: ${message(error)}`;
+					notes.push(`Duplicate findings were not linked: ${message(error)}`);
 				}
 			}
-			const validation = assessFindings(artifact.digest, reports, links);
 			this.live();
 			signal.throwIfAborted();
 			if (JSON.stringify(reviewRoleCatalog(artifact.source)) !== JSON.stringify(roles))
@@ -627,12 +635,8 @@ export class ReviewJobs {
 				.prepare(
 					"update review_jobs set state = ?, reason = ?, revision = revision + 1, updated_at = ? where id = ? and generation = ? and state = 'running'",
 				)
-				.run(state, reasons.length ? reasons.join("\n") : null, Date.now(), id, job.generation);
-			this.notice(
-				job,
-				"outcome",
-				outcomeNotice(job.id, state, reports, validation, [...reasons, ...(unlinked ? [unlinked] : [])]),
-			);
+				.run(state, [...reasons, ...notes].join("\n") || null, Date.now(), id, job.generation);
+			this.notice(job, "outcome", outcomeNotice(job.id, state, reports, validation, reasons, notes));
 		} catch (error) {
 			if (this.stopped) return;
 			const reason = message(error);
