@@ -58,6 +58,13 @@
       "reason": "Full-suite runs need an explicit operator request and overload this machine. Run the test files relevant to the change with --maxWorkers=1.",
       "fires": "npm test",
       "passes": "npx vitest run components/repo-rules --maxWorkers=1"
+    },
+    {
+      "id": "github-writes",
+      "pattern": "\\bgit\\s+push\\b|\\bgh\\s+(pr|issue)\\s+(comment|close|reopen|merge|review|edit|create)\\b",
+      "reason": "The gh account on this machine is an Enterprise Managed User with pull-only access to this repository: pushes, comments and pull request changes fail. Leave pushes to the operator, and write a comment or closing note to a file for him to post.",
+      "fires": "gh pr comment 3 --body-file /tmp/comment.md",
+      "passes": "gh pr view 3 --json title"
     }
   ]
 }
