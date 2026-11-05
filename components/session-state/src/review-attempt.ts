@@ -2,7 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import type { TSchema } from "typebox";
 import { verifyArtifact, verifyCapturedSource } from "../../code-review/src/capture.js";
+import { checkShape } from "../../code-review/src/contracts.js";
 import type { ReviewJob } from "../../code-review/src/operations.js";
 import { type ReviewDepth, reviewPolicyFingerprint, reviewRolePolicy } from "../../code-review/src/policy.js";
 import { normalizeOutputSchema } from "../../shared/src/structured-output.js";
@@ -166,7 +168,8 @@ export async function runReviewAttempt(
 		await verified(verifyCapturedSource, artifact, signal);
 		if (JSON.stringify(resolve()) !== JSON.stringify(policy))
 			throw new ReviewStop("The review policy changed during the turn; resume to obtain current-policy evidence");
-		output = pass.validate(pass.fromTool ? pass.fromTool(receipt.result.value) : receipt.result.value);
+		const value = receipt.result.value;
+		output = pass.validate(pass.fromTool ? pass.fromTool(checkShape(pass.schema as TSchema, value)) : value);
 		storeOutput(db, job, id, output);
 	} catch (error) {
 		failure = error;

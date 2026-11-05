@@ -5743,34 +5743,20 @@ function assessFindings(artifact, reports, links) {
 		duplicateOf: null
 	})));
 	const byKey = new Map(findings.map((entry) => [entry.finding, entry]));
-	const reaches = (from, target) => {
-		const visited = /* @__PURE__ */ new Set();
-		for (let next = from; next; next = byKey.get(next)?.duplicateOf ?? null) {
-			if (next === target) return true;
-			if (visited.has(next)) return false;
-			visited.add(next);
-		}
-		return false;
-	};
 	const root = (key) => {
-		const visited = /* @__PURE__ */ new Set();
 		let next = key;
-		while (byKey.get(next)?.duplicateOf && !visited.has(next)) {
-			visited.add(next);
-			next = byKey.get(next).duplicateOf;
-		}
+		while (byKey.get(next).duplicateOf) next = byKey.get(next).duplicateOf;
 		return next;
 	};
 	for (const link of links?.duplicates ?? []) {
 		if (!byKey.has(link.finding) || !byKey.has(link.duplicateOf)) continue;
-		const inverted = byKey.get(link.finding).disposition === "confirmed" && byKey.get(root(link.duplicateOf)).disposition === "unresolved";
-		const duplicate = inverted ? root(link.duplicateOf) : link.finding;
-		const original = inverted ? link.finding : link.duplicateOf;
-		const entry = byKey.get(duplicate);
-		if (entry.disposition === "duplicate" || reaches(original, duplicate)) continue;
-		Object.assign(entry, {
+		const first = root(link.finding);
+		const second = root(link.duplicateOf);
+		if (first === second) continue;
+		const inverted = byKey.get(first).disposition === "confirmed" && byKey.get(second).disposition === "unresolved";
+		Object.assign(byKey.get(inverted ? second : first), {
 			disposition: "duplicate",
-			duplicateOf: original,
+			duplicateOf: inverted ? first : second,
 			reason: link.reason
 		});
 	}
@@ -5850,9 +5836,20 @@ function reviewAssessment(db, actor, id) {
 		});
 		const validator = selected("validator", "validation");
 		const stored = validator?.output;
+		const shards = Object.keys(job.selectedAttempts).filter((key) => key.startsWith("validator:")).map((key) => selected(key, "validation").output);
+		const derived = () => {
+			const assessment = assessFindings(job.artifact.digest, passes.flatMap(({ report }) => report ? [report] : []), stored ?? null);
+			const legacy = new Map(shards.flatMap((shard) => shard.findings.map((entry) => [entry.finding, entry])));
+			return {
+				...assessment,
+				findings: assessment.findings.map((entry) => legacy.get(entry.finding) ?? entry),
+				coverageGaps: shards.flatMap((shard) => shard.coverageGaps),
+				limitations: shards.flatMap((shard) => shard.limitations)
+			};
+		};
 		const validation = job.plan && job.artifact ? {
 			attempt: validator,
-			report: stored && "findings" in stored ? stored : assessFindings(job.artifact.digest, passes.flatMap(({ report }) => report ? [report] : []), stored ?? null)
+			report: stored && "findings" in stored ? stored : derived()
 		} : null;
 		const decisions = db.prepare("select id, review_id as review, digest, revision, actor, kind, finding, data, created_at as createdAt from review_decisions where review_id = ? order by created_at, rowid").all(job.id).map((row) => ({
 			...row,

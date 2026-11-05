@@ -71,8 +71,39 @@ export function planToolSchema(roles: readonly string[]) {
 	);
 }
 
+function distinct(ids: readonly string[], reserved: readonly string[] = []): string[] {
+	const supplied = new Set(ids);
+	const used = new Set(reserved);
+	return ids.map((id) => {
+		let next = id;
+		for (let n = 2; used.has(next) || (next !== id && supplied.has(next)); n++) next = `${id}-${n}`;
+		used.add(next);
+		return next;
+	});
+}
+
 export function planFromTool(value: unknown, artifact: string): unknown {
-	return { ...(value as object), artifact };
+	const tool = value as Omit<ReviewPlan, "artifact">;
+	const questions = (entries: ReviewPlan["integration"]["questions"]) => {
+		const ids = distinct(entries.map((entry) => entry.id));
+		return entries.map((entry, index) => ({ ...entry, id: ids[index]! }));
+	};
+	const chunkIds = distinct(tool.chunks.map((chunk) => chunk.id));
+	const passIds = distinct(
+		tool.chunks.flatMap((chunk) => chunk.passes.map((entry) => entry.id.replace(/^validator:/, "validator-"))),
+		["planner", "validator", "integration"],
+	);
+	let next = 0;
+	return {
+		...tool,
+		artifact,
+		chunks: tool.chunks.map((chunk, index) => ({
+			...chunk,
+			id: chunkIds[index]!,
+			passes: chunk.passes.map((entry) => ({ ...entry, id: passIds[next++]!, questions: questions(entry.questions) })),
+		})),
+		integration: { ...tool.integration, questions: questions(tool.integration.questions) },
+	};
 }
 type LegacyPlan = { chunks: { regions?: string[] }[]; gaps?: { region: string; reason: string }[] };
 export type ReviewPlan = Static<typeof ReviewPlanSchema> & LegacyPlan;
@@ -169,14 +200,7 @@ export function reportFromTool(value: unknown, artifact: string, pass: Pick<Plan
 	const tool = value as Omit<ReviewReport, "artifact" | "pass" | "coverage"> & {
 		coverage: Record<string, ToolAnswer>;
 	};
-	const taken = new Set(tool.findings.map((entry) => entry.id));
-	const used = new Set<string>();
-	const identity = (id: string) => {
-		let next = id;
-		for (let n = 2; used.has(next) || (next !== id && taken.has(next)); n++) next = `${id}-${n}`;
-		used.add(next);
-		return next;
-	};
+	const ids = distinct(tool.findings.map((entry) => entry.id));
 	return {
 		artifact,
 		pass: pass.id,
@@ -187,7 +211,7 @@ export function reportFromTool(value: unknown, artifact: string, pass: Pick<Plan
 				? { question: entry.id, state: reply.state, evidence: reply.evidence, reason: "" }
 				: { question: entry.id, state: reply.state, evidence: [], reason: reply.reason };
 		}),
-		findings: tool.findings.map((entry) => ({ ...entry, id: identity(entry.id) })),
+		findings: tool.findings.map((entry, index) => ({ ...entry, id: ids[index]! })),
 		limitations: tool.limitations,
 		extraPasses: tool.extraPasses,
 	};
@@ -368,34 +392,22 @@ export function assessFindings(
 		})),
 	);
 	const byKey = new Map<string, FindingValidation["findings"][number]>(findings.map((entry) => [entry.finding, entry]));
-	const reaches = (from: string, target: string) => {
-		const visited = new Set<string>();
-		for (let next: string | null = from; next; next = byKey.get(next)?.duplicateOf ?? null) {
-			if (next === target) return true;
-			if (visited.has(next)) return false;
-			visited.add(next);
-		}
-		return false;
-	};
 	const root = (key: string) => {
-		const visited = new Set<string>();
 		let next = key;
-		while (byKey.get(next)?.duplicateOf && !visited.has(next)) {
-			visited.add(next);
-			next = byKey.get(next)!.duplicateOf!;
-		}
+		while (byKey.get(next)!.duplicateOf) next = byKey.get(next)!.duplicateOf!;
 		return next;
 	};
 	for (const link of links?.duplicates ?? []) {
 		if (!byKey.has(link.finding) || !byKey.has(link.duplicateOf)) continue;
-		const inverted =
-			byKey.get(link.finding)!.disposition === "confirmed" &&
-			byKey.get(root(link.duplicateOf))!.disposition === "unresolved";
-		const duplicate = inverted ? root(link.duplicateOf) : link.finding;
-		const original = inverted ? link.finding : link.duplicateOf;
-		const entry = byKey.get(duplicate)!;
-		if (entry.disposition === "duplicate" || reaches(original, duplicate)) continue;
-		Object.assign(entry, { disposition: "duplicate", duplicateOf: original, reason: link.reason });
+		const first = root(link.finding);
+		const second = root(link.duplicateOf);
+		if (first === second) continue;
+		const inverted = byKey.get(first)!.disposition === "confirmed" && byKey.get(second)!.disposition === "unresolved";
+		Object.assign(byKey.get(inverted ? second : first)!, {
+			disposition: "duplicate",
+			duplicateOf: inverted ? first : second,
+			reason: link.reason,
+		});
 	}
 	return { artifact, summary: links?.summary ?? "", coverageGaps: [], findings, limitations: [] };
 }

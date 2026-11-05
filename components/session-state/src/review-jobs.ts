@@ -191,39 +191,37 @@ export class ReviewJobs {
 		const resumable = this.db
 			.prepare("select id from review_jobs where state = 'interrupted' and reason = ?")
 			.all(RESUMING) as { id: string }[];
-		if (resumable.length) void this.resumeAfterRestart(resumable.map(({ id }) => id));
+		for (const { id } of resumable) void this.resumeAfterRestart(id);
 	}
 
-	private async resumeAfterRestart(ids: string[]): Promise<void> {
-		for (const id of ids) {
-			try {
-				const job = readReview(this.db, "operator", id);
-				if (job.state !== "interrupted" || job.reason !== RESUMING || !job.artifact) continue;
-				this.availableOwner(job.owner);
-				await this.waitCleanup(id);
-				await verifyArtifact(job.artifact);
-				this.live();
-				const queued = this.db
-					.prepare(
-						"update review_jobs set state = 'queued', generation = generation + 1, revision = revision + 1, reason = null, updated_at = ? where id = ? and state = 'interrupted' and reason = ? and generation = ? and revision = ? and owner = ?",
-					)
-					.run(Date.now(), id, RESUMING, job.generation, job.revision, job.owner);
-				if (!queued.changes) throw new Error("the review changed while its target was verified");
-			} catch (error) {
-				if (this.stopped) return;
-				this.db
-					.prepare(
-						"update review_jobs set reason = ?, updated_at = ? where id = ? and state = 'interrupted' and reason = ?",
-					)
-					.run(
-						`The runtime restarted and could not resume this review: ${message(error)}. Resume it explicitly once the cause is fixed.`,
-						Date.now(),
-						id,
-						RESUMING,
-					);
-			}
+	private async resumeAfterRestart(id: string): Promise<void> {
+		try {
+			const job = readReview(this.db, "operator", id);
+			if (job.state !== "interrupted" || job.reason !== RESUMING || !job.artifact) return;
+			this.availableOwner(job.owner);
+			await this.waitCleanup(id);
+			await verifyArtifact(job.artifact);
+			this.live();
+			const queued = this.db
+				.prepare(
+					"update review_jobs set state = 'queued', generation = generation + 1, revision = revision + 1, reason = null, updated_at = ? where id = ? and state = 'interrupted' and reason = ? and generation = ? and revision = ? and owner = ?",
+				)
+				.run(Date.now(), id, RESUMING, job.generation, job.revision, job.owner);
+			if (!queued.changes) throw new Error("the review changed while its target was verified");
+			this.wake();
+		} catch (error) {
+			if (this.stopped) return;
+			this.db
+				.prepare(
+					"update review_jobs set reason = ?, updated_at = ? where id = ? and state = 'interrupted' and reason = ?",
+				)
+				.run(
+					`The runtime restarted and could not resume this review: ${message(error)}. Resume it explicitly once the cause is fixed.`,
+					Date.now(),
+					id,
+					RESUMING,
+				);
 		}
-		this.wake();
 	}
 
 	stop(): void {

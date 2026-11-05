@@ -130,19 +130,26 @@ export function reviewAssessment(db: DatabaseSync, actor: string, id: string): R
 		});
 		const validator = selected("validator", "validation");
 		const stored = validator?.output as FindingValidation | DuplicateLinks | undefined;
+		const shards = Object.keys(job.selectedAttempts)
+			.filter((key) => key.startsWith("validator:"))
+			.map((key) => selected(key, "validation")!.output as FindingValidation);
+		const derived = (): FindingValidation => {
+			const assessment = assessFindings(
+				job.artifact!.digest,
+				passes.flatMap(({ report }) => (report ? [report] : [])),
+				(stored as DuplicateLinks | undefined) ?? null,
+			);
+			const legacy = new Map(shards.flatMap((shard) => shard.findings.map((entry) => [entry.finding, entry])));
+			return {
+				...assessment,
+				findings: assessment.findings.map((entry) => legacy.get(entry.finding) ?? entry),
+				coverageGaps: shards.flatMap((shard) => shard.coverageGaps),
+				limitations: shards.flatMap((shard) => shard.limitations),
+			};
+		};
 		const validation =
 			job.plan && job.artifact
-				? {
-						attempt: validator,
-						report:
-							stored && "findings" in stored
-								? stored
-								: assessFindings(
-										job.artifact.digest,
-										passes.flatMap(({ report }) => (report ? [report] : [])),
-										stored ?? null,
-									),
-					}
+				? { attempt: validator, report: stored && "findings" in stored ? stored : derived() }
 				: null;
 		const decisions = db
 			.prepare(

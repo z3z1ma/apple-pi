@@ -217,6 +217,24 @@ test("repeated finding IDs get fresh identities that never collide with supplied
 	expect(ids(["bug", "bug", "bug"])).toEqual(["bug", "bug-2", "bug-3"]);
 });
 
+test("planner identities are made distinct by the harness instead of failing after the turn", () => {
+	const { artifact: _, ...reply } = plan();
+	const repeated = structuredClone(reply);
+	repeated.chunks[1]!.id = "request";
+	repeated.chunks[0]!.passes[0]!.id = "validator";
+	repeated.chunks[1]!.passes[0]!.id = "validator";
+	repeated.chunks[1]!.passes.push({ ...repeated.chunks[1]!.passes[0]!, id: "validator:release" });
+	repeated.integration.questions.push({ ...repeated.integration.questions[0]! });
+	const stored = validatePlan(planFromTool(repeated, "captured-target"), "captured-target", regions, roles);
+	expect(stored.chunks.map((chunk) => chunk.id)).toEqual(["request", "request-2"]);
+	expect(stored.chunks.flatMap((chunk) => chunk.passes.map((entry) => entry.id))).toEqual([
+		"validator-2",
+		"validator-3",
+		"validator-release",
+	]);
+	expect(stored.integration.questions.map((entry) => entry.id)).toEqual(["journey", "journey-2"]);
+});
+
 test("inspectors are told that evidence unavailable here is an unavailable answer", () => {
 	expect(INSPECT_REVIEW).toContain("answer unavailable");
 	expect(INSPECT_REVIEW).not.toMatch(/unavailable[^.]*belongs in incomplete/i);
@@ -272,6 +290,16 @@ test("findings stand as reported, hypotheses stay unresolved, and only sound dup
 		["duplicate", keys[0]],
 	]);
 	expect(toHypothesis).toMatchObject({ artifact: "captured-target", summary: "One pair." });
+	const chained = assessFindings("captured-target", [first], {
+		artifact: "captured-target",
+		summary: "One group.",
+		duplicates: [
+			{ finding: keys[0]!, duplicateOf: keys[2]!, reason: "Same defect." },
+			{ finding: keys[2]!, duplicateOf: keys[1]!, reason: "Same defect." },
+		],
+	});
+	expect(chained.findings.filter((entry) => entry.disposition !== "duplicate")).toHaveLength(1);
+	expect(chained.findings.find((entry) => entry.disposition !== "duplicate")!.disposition).toBe("confirmed");
 });
 
 test("the runtime maps scope paths to regions, keeps unscoped regions for integration and refuses empty scopes", () => {

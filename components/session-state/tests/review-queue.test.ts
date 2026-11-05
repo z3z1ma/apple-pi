@@ -1360,6 +1360,56 @@ test("failed duplicate linking leaves findings standing and stays a visible limi
 	}
 }, 30000);
 
+test("an older review stopped between its per-report validators and the merge keeps their dispositions and challenges", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { finding: true } }));
+	const job = await enqueue();
+	await settled(job.id, "completed");
+	const row = query<{ generation: number; plan_revision: number; selected_attempts: string; digest: string }>(
+		state.dbPath,
+		"select generation, plan_revision, selected_attempts, json_extract(artifact, '$.digest') as digest from review_jobs where id = ?",
+		job.id,
+	)[0]!;
+	const shard = {
+		artifact: row.digest,
+		summary: "Legacy shard.",
+		coverageGaps: [{ pass: "value-correctness", question: "value", reason: "The trace skipped the consumer." }],
+		findings: [
+			{
+				finding: "value-correctness:mismatch",
+				disposition: "rejected",
+				reason: "Counterevidence.",
+				evidence: ["The consumer reads the new value."],
+				duplicateOf: null,
+			},
+		],
+		limitations: [],
+	};
+	const writable = new DatabaseSync(state.dbPath);
+	try {
+		writable
+			.prepare(
+				"insert into review_attempts (id, review_id, generation, plan_revision, pass_id, kind, program_id, person, role, policy, input, input_key, state, output, created_at) values ('legacy-shard', ?, ?, ?, 'validator:value-correctness', 'validation', 'legacy-program', 'legacy-person', 'code-review-specialist', '{}', '{}', 'legacy', 'completed', ?, 1)",
+			)
+			.run(job.id, row.generation, row.plan_revision, JSON.stringify(shard));
+		writable
+			.prepare("update review_jobs set selected_attempts = ? where id = ?")
+			.run(
+				JSON.stringify({ ...JSON.parse(row.selected_attempts), "validator:value-correctness": "legacy-shard" }),
+				job.id,
+			);
+	} finally {
+		writable.close();
+	}
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		const assessment = reviewAssessment(db, "owner", job.id);
+		expect(assessment.findings[0]!.validation).toMatchObject({ disposition: "rejected" });
+		expect(assessment.validation?.report.coverageGaps).toEqual(shard.coverageGaps);
+	} finally {
+		db.close();
+	}
+}, 30000);
+
 test("a role that cannot be resolved after planning stops the review without retrying a paid reviewer", async () => {
 	const rolePath = join(state.agentDir, "roles", "code-review-specialist.md");
 	const original = readFileSync(rolePath, "utf8");
