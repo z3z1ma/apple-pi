@@ -26,13 +26,13 @@ Operator, 2026-11-04: split the Git view out of the Code tab into its own first-
 
 ## Current State
 
-Built and committed on main; awaiting the live relaunch with the operator's consent.
+Done. Committed on main (7d233ca4) and relaunched in the operator's app with his consent: normal Quit of pid 86742, started through `startAgentWorkplace`, new pid 24817 logged `agent-workplace: loaded` from the build that contains the `git:*` IPC.
 
 - Backend `src/backend/git.ts` over the shared `git()`; typed API and IPC guards in `src/git.ts`; `git:*` IPC and preload. The workspace API lost `gitStatus`/`gitDiff`.
 - UI `web/workplace-git.tsx` (graph, sidebar, working changes, commit form, commit detail), `workplace-git-graph.ts` (lanes), `workplace-git-diff.tsx` (numbered diff). Code has no Git pane. The rail's `RailApps` moves apps that do not fit under More.
 - Checks run: `git-backend.test.ts` 11/11 (all 24 action kinds against real temporary repositories with a bare remote, including conflicted merge and rebase continued and aborted); `world-git.test.ts` 5/5 with light and dark screenshots looked at; `world-code`, `world-terminal`, `world-file-links`, `world-navigation`, `workspace-backend`, `build` pass; typecheck, Biome on changed files, context lint pass; the isolated real-Electron check (`scripts/workplace-electron-check.mjs`, whose stale runtime path was fixed) passes, including `git.overview` through the real preload.
-- Not verified: the operator's real app; SSH or HTTPS credential behaviour on a real remote (tests use a local bare remote); very large histories beyond one 300-commit page per load.
+- Not verified: the rendered Git tab inside the operator's own window (seen only in headless Chrome and the isolated Electron check); SSH or HTTPS credential behaviour on a real remote (tests use a local bare remote); very large histories beyond one 300-commit page per load.
 
 ## Outcome
 
-Pending.
+Git is its own Workplace app with a commit graph, branches, remotes, tags, stashes, worktrees, working changes, commit form, commit detail and numbered diffs, driving every listed Git action over the machine's `git`. Code no longer has a Git view. The rail moves apps that do not fit under More.
