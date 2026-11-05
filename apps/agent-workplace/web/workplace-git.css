@@ -1,170 +1,878 @@
-.wp-git {
+.wp-gitx {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-size: 13px;
+}
+.wp-gitx button,
+.wp-gitx input,
+.wp-gitx textarea {
+	font: inherit;
+}
+.wp-gitx-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 10px 14px;
+	border-bottom: 1px solid var(--wp-border);
+	background: var(--wp-panel);
+	min-width: 0;
+}
+.wp-gitx-where {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+.wp-gitx-where .wp-select {
+	min-width: 140px;
+	max-width: 240px;
+}
+.wp-gitx-where form {
+	flex: 1 1 140px;
+	min-width: 80px;
+	max-width: 260px;
+}
+.wp-gitx-where input,
+.wp-gitx-filter,
+.wp-gitx-summary input,
+.wp-gitx-commit textarea,
+.wp-gitx-dialog input {
+	width: 100%;
+	padding: 6px 9px;
+	border: 1px solid var(--wp-border);
+	border-radius: 7px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+}
+.wp-gitx-head {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	padding: 5px 11px 5px 9px;
+	border: 1px solid var(--wp-border);
+	border-radius: 999px;
+	background: var(--wp-bg);
+	white-space: nowrap;
+	min-width: 0;
+}
+.wp-gitx-head .wp-icon {
+	width: 16px;
+	height: 16px;
+	color: var(--wp-accent);
+}
+.wp-gitx-head strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 240px;
+}
+.wp-gitx-track {
+	display: inline-flex;
+	gap: 5px;
+	color: var(--wp-muted);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+.wp-gitx-actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex: none;
+}
+.wp-gitx-actions > button {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	min-width: 48px;
+	padding: 4px 6px;
+	border-radius: 8px;
+	color: var(--wp-muted);
+	font-size: 11px;
+}
+.wp-gitx-actions > button .wp-icon {
+	width: 19px;
+	height: 19px;
+}
+.wp-gitx-actions > button:hover:not(:disabled) {
+	background: var(--wp-hover);
+	color: var(--wp-text);
+}
+.wp-gitx-actions > button b {
+	position: absolute;
+	top: 0;
+	right: 6px;
+	min-width: 16px;
+	padding: 0 4px;
+	border-radius: 8px;
+	background: var(--wp-accent);
+	color: var(--wp-on-accent);
+	font-size: 10px;
+	line-height: 15px;
+}
+.wp-gitx-actions .wp-gitx-refresh {
+	min-width: 36px;
+}
+.wp-gitx-divider {
+	width: 1px;
+	height: 30px;
+	margin: 0 6px;
+	background: var(--wp-border);
+}
+.wp-gitx-state,
+.wp-gitx-error {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 16px;
+	border-bottom: 1px solid var(--wp-border);
+	background: color-mix(in srgb, var(--wp-warning) 12%, var(--wp-panel));
+}
+.wp-gitx-state span {
+	flex: 1;
+	color: var(--wp-muted);
+}
+.wp-gitx-state button,
+.wp-gitx-dialog-actions button {
+	padding: 5px 12px;
+	border: 1px solid var(--wp-border);
+	border-radius: 7px;
+	background: var(--wp-bg);
+}
+.wp-gitx-error {
+	background: var(--wp-danger-bg);
+	color: var(--wp-danger);
+}
+.wp-gitx .is-danger {
+	border-color: var(--wp-danger);
+	background: var(--wp-danger);
+	color: var(--wp-on-accent);
+}
+.wp-gitx .is-primary {
+	border-color: var(--wp-accent);
+	background: var(--wp-accent);
+	color: var(--wp-on-accent);
+}
+.wp-gitx-body {
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	grid-template-columns: var(--wp-gitx-sidebar, 230px) 6px minmax(0, 1fr) 6px var(--wp-gitx-panel, 360px);
+}
+.wp-gitx-sidebar {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+	overflow: auto;
+	padding: 10px 8px 16px;
+	background: var(--wp-panel);
+	border-right: 1px solid var(--wp-border);
+}
+.wp-gitx-filter {
+	margin: 0 2px 6px;
+	width: auto;
+}
+.wp-gitx-section-head {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	width: 100%;
+	padding: 5px 6px;
+	border-radius: 6px;
+	color: var(--wp-muted);
+	font-size: 11px;
+	font-weight: 650;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+.wp-gitx-section-head .wp-icon {
+	width: 14px;
+	height: 14px;
+}
+.wp-gitx-section-head span {
+	flex: 1;
+	text-align: left;
+}
+.wp-gitx-section-head:hover {
+	background: var(--wp-hover);
+}
+.wp-gitx-refs {
+	list-style: none;
+	margin: 0 0 6px;
+	padding: 0;
+}
+.wp-gitx-refs button {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	width: 100%;
+	padding: 4px 8px 4px 22px;
+	border-radius: 6px;
+	text-align: left;
+	min-width: 0;
+}
+.wp-gitx-refs button:hover:not(:disabled) {
+	background: var(--wp-hover);
+}
+.wp-gitx-refs button.is-current {
+	background: color-mix(in srgb, var(--wp-accent) 16%, transparent);
+	font-weight: 650;
+}
+.wp-gitx-refs .wp-icon {
+	width: 14px;
+	height: 14px;
+	color: var(--wp-accent);
+}
+.wp-gitx-refs small {
+	color: var(--wp-muted);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.wp-gitx-refs .wp-gitx-gone {
+	color: var(--wp-danger);
+}
+.wp-gitx-dot {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	margin: 0 4px;
+	border-radius: 50%;
+	background: var(--wp-border);
+}
+.wp-gitx-ref-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-gitx-main {
+	position: relative;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--wp-bg);
+}
+.wp-gitx-graph {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 6px 0 24px;
+}
+.wp-gitx-row {
+	display: grid;
+	grid-template-columns: var(--wp-gitx-graph) minmax(0, 1fr) minmax(90px, 170px) 74px 66px;
+	align-items: center;
+	gap: 10px;
+	height: 30px;
+	padding-right: 14px;
+	cursor: default;
+	outline: none;
+}
+.wp-gitx-row:hover {
+	background: var(--wp-hover);
+}
+.wp-gitx-row[aria-selected="true"] {
+	background: var(--wp-selected);
+}
+.wp-gitx-row:focus-visible {
+	box-shadow: inset 2px 0 0 var(--wp-accent);
+}
+.wp-gitx-lanes {
+	display: block;
+	overflow: visible;
+	stroke-width: 2;
+}
+.wp-gitx-wip-node {
+	fill: var(--wp-bg);
+	stroke: var(--wp-muted);
+	stroke-width: 2;
+	stroke-dasharray: 3 2;
+}
+.wp-gitx-subject {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	overflow: hidden;
+}
+.wp-gitx-message {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-gitx-row.is-merge .wp-gitx-message {
+	color: var(--wp-muted);
+}
+.wp-gitx-row.is-wip em {
+	font-style: normal;
+	font-weight: 650;
+}
+.wp-gitx-wip-count {
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: var(--wp-hover);
+	color: var(--wp-muted);
+	font-size: 11px;
+}
+.wp-gitx-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	flex: none;
+	max-width: 180px;
+	padding: 1px 7px 1px 5px;
+	border-radius: 5px;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	border: 1px solid transparent;
+}
+.wp-gitx-badge .wp-icon {
+	width: 12px;
+	height: 12px;
+}
+.wp-gitx-badge.is-head {
+	background: var(--wp-accent);
+	color: var(--wp-on-accent);
+}
+.wp-gitx-badge.is-local {
+	background: color-mix(in srgb, var(--wp-accent) 16%, transparent);
+	color: var(--wp-accent);
+}
+.wp-gitx-badge.is-remote {
+	border-color: var(--wp-border);
+	color: var(--wp-muted);
+}
+.wp-gitx-badge.is-tag {
+	background: color-mix(in srgb, var(--wp-warning) 15%, transparent);
+	color: var(--wp-warning);
+}
+.wp-gitx-author {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	color: var(--wp-muted);
+}
+.wp-gitx-author > span:last-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-gitx-avatar {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: hsl(var(--wp-gitx-hue) 45% 82%);
+	color: hsl(var(--wp-gitx-hue) 45% 26%);
+	font-size: 9px;
+	font-weight: 700;
+}
+.wp-app[data-appearance="dark"] .wp-gitx-avatar {
+	background: hsl(var(--wp-gitx-hue) 30% 32%);
+	color: hsl(var(--wp-gitx-hue) 50% 86%);
+}
+.wp-gitx-date,
+.wp-gitx-sha {
+	color: var(--wp-muted);
+	font-size: 12px;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+.wp-gitx-sha {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 11px;
+}
+.wp-gitx-more {
+	display: block;
+	margin: 12px auto;
+	padding: 6px 14px;
+	border: 1px solid var(--wp-border);
+	border-radius: 7px;
+	color: var(--wp-muted);
+}
+.wp-gitx-empty,
+.wp-gitx-quiet {
+	padding: 22px;
+	color: var(--wp-muted);
+}
+.wp-gitx-quiet {
+	padding: 4px 14px 10px;
+	font-size: 12px;
+}
+.wp-gitx-panel {
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
 	min-height: 0;
-	height: 100%;
-	color: var(--wp-text);
-	background: var(--wp-bg);
-	font-size: 13px;
+	background: var(--wp-panel);
+	border-left: 1px solid var(--wp-border);
 }
-.wp-git-header {
+.wp-gitx-panel-head {
 	display: flex;
-	flex: none;
-	align-items: center;
-	justify-content: space-between;
+	align-items: baseline;
 	gap: 8px;
-	padding: 10px 12px;
+	padding: 14px 16px 10px;
 	border-bottom: 1px solid var(--wp-border);
 }
-.wp-git-header > div {
-	min-width: 0;
+.wp-gitx-panel-head h2 {
+	font-size: 15px;
 }
-.wp-git-title {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px;
-}
-.wp-git-title > span {
+.wp-gitx-panel-head > span {
 	color: var(--wp-muted);
-	font-size: 10px;
-	white-space: nowrap;
 }
-.wp-git h2 {
-	margin: 0;
-	font-size: 13px;
-}
-.wp-git-header > button {
-	flex: none;
-	white-space: nowrap;
-}
-.wp-git-header p {
-	margin: 5px 0 0;
-	color: var(--wp-muted);
-	font-size: 11px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.wp-git button:disabled {
-	opacity: 0.55;
-	cursor: default;
-}
-.wp-git button:focus-visible,
-.wp-git-diff-text:focus-visible {
-	outline: 2px solid var(--wp-accent);
-	outline-offset: 2px;
-}
-.wp-git-notice {
-	margin: 0;
-	padding: 10px 16px;
-	color: var(--wp-muted);
-	font-size: 12px;
-}
-.wp-git [role="alert"] {
-	color: var(--wp-danger);
-}
-.wp-git-files {
+.wp-gitx-panel-scroll {
 	flex: 1;
-	min-width: 0;
 	min-height: 0;
 	overflow: auto;
-	background: var(--wp-panel);
+	padding-bottom: 8px;
 }
-.wp-git-files h3 {
-	display: flex;
-	justify-content: space-between;
-	margin: 0;
-	padding: 10px 10px 4px;
-	font-size: 11px;
-}
-.wp-git-files h3 span {
-	color: var(--wp-muted);
-	font-weight: 400;
-}
-.wp-git-files ul {
-	margin: 0;
-	padding: 0 6px 4px;
-	list-style: none;
-}
-.wp-git-files li {
+.wp-gitx-changes header {
 	display: flex;
 	align-items: center;
-	height: 30px;
-	gap: 4px;
-	border-radius: 4px;
+	justify-content: space-between;
+	padding: 12px 14px 6px;
 }
-.wp-git-files li:hover {
+.wp-gitx-changes h3 {
+	margin: 0;
+	font-size: 11px;
+	font-weight: 650;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--wp-muted);
+}
+.wp-gitx-changes h3 span {
+	margin-left: 4px;
+	padding: 0 6px;
+	border-radius: 8px;
 	background: var(--wp-hover);
 }
-.wp-git-files li[data-selected="true"] {
-	background: var(--wp-selected);
+.wp-gitx-text-button {
+	color: var(--wp-link);
+	font-size: 12px;
 }
-.wp-git-badge {
-	flex: none;
-	width: 16px;
-	color: var(--wp-accent);
-	text-align: center;
-	font-family: ui-monospace, monospace;
-	font-weight: 700;
+.wp-gitx-changes ul {
+	list-style: none;
+	margin: 0;
+	padding: 0 6px;
 }
-.wp-git-file-name {
+.wp-gitx-changes li {
+	position: relative;
+	display: flex;
+	align-items: center;
+	border-radius: 6px;
+}
+.wp-gitx-changes li:hover,
+.wp-gitx-changes li[data-selected="true"] {
+	background: var(--wp-hover);
+}
+.wp-gitx-file {
+	display: flex;
+	align-items: center;
+	gap: 8px;
 	flex: 1;
+	min-width: 0;
+	padding: 5px 8px;
+	text-align: left;
+}
+.wp-gitx-file-name {
+	white-space: nowrap;
+}
+.wp-gitx-file-dir {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-.wp-git-file-name small {
 	color: var(--wp-muted);
-	font-size: inherit;
-}
-.wp-git-file-name .wp-git-dir {
-	margin-left: 6px;
-	font-size: 11px;
-}
-.wp-git .wp-git-view {
-	display: flex;
-	align-items: center;
-	flex: 1;
-	min-width: 0;
-	height: 100%;
-	gap: 5px;
-	padding: 0 4px;
-	border: 0;
-	background: transparent;
-	color: var(--wp-text);
-	text-align: left;
 	font-size: 12px;
 }
-.wp-git-diff-empty {
-	margin: 0;
-	padding: 18px;
+.wp-gitx-code {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 18px;
+	height: 18px;
+	border-radius: 4px;
+	font-size: 10px;
+	font-weight: 750;
+	color: var(--wp-on-accent);
+	background: var(--wp-muted);
+}
+.wp-gitx-code.is-m {
+	background: var(--wp-warning);
+}
+.wp-gitx-code.is-a,
+.wp-gitx-code.is-untracked {
+	background: var(--wp-green);
+	color: var(--wp-on-green);
+}
+.wp-gitx-code.is-d,
+.wp-gitx-code.is-u {
+	background: var(--wp-danger);
+}
+.wp-gitx-code.is-r,
+.wp-gitx-code.is-c {
+	background: var(--wp-link);
+}
+.wp-gitx-row-actions {
+	display: flex;
+	gap: 2px;
+	padding-right: 4px;
+	opacity: 0;
+}
+.wp-gitx-changes li:hover .wp-gitx-row-actions,
+.wp-gitx-changes li:focus-within .wp-gitx-row-actions {
+	opacity: 1;
+}
+.wp-gitx-mini {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 5px;
 	color: var(--wp-muted);
-	line-height: 1.6;
-	overflow-wrap: anywhere;
 }
-.wp-git-diff-text {
-	flex: 1;
+.wp-gitx-mini:hover {
+	background: var(--wp-selected);
+	color: var(--wp-text);
+}
+.wp-gitx-mini .wp-icon {
+	width: 15px;
+	height: 15px;
+}
+.wp-gitx-commit {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 14px 14px;
+	border-top: 1px solid var(--wp-border);
+}
+.wp-gitx-summary {
+	position: relative;
+}
+.wp-gitx-summary input {
+	padding-right: 36px;
+	font-weight: 600;
+}
+.wp-gitx-summary small {
+	position: absolute;
+	top: 7px;
+	right: 9px;
+	color: var(--wp-muted);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.wp-gitx-summary small[data-long] {
+	color: var(--wp-danger);
+}
+.wp-gitx-amend {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	color: var(--wp-muted);
+	font-size: 12px;
+}
+.wp-gitx-commit-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	padding: 8px 12px;
+	border-radius: 8px;
+	background: var(--wp-green);
+	color: var(--wp-on-green);
+	font-weight: 650;
+}
+.wp-gitx-commit-button .wp-icon {
+	width: 17px;
+	height: 17px;
+}
+.wp-gitx-commit-detail {
+	padding: 14px 16px 6px;
+}
+.wp-gitx-commit-detail h3 {
+	margin: 0 0 8px;
+	font-size: 15px;
+	line-height: 1.35;
+}
+.wp-gitx-body-text {
+	margin: 0 0 12px;
+	white-space: pre-wrap;
+	color: var(--wp-muted);
+	line-height: 1.45;
+}
+.wp-gitx-who {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 6px 0 10px;
+}
+.wp-gitx-who .wp-gitx-avatar {
+	width: 32px;
+	height: 32px;
+	font-size: 12px;
+}
+.wp-gitx-who div {
+	display: flex;
+	flex-direction: column;
 	min-width: 0;
+}
+.wp-gitx-who span {
+	color: var(--wp-muted);
+	font-size: 12px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.wp-gitx-parents {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--wp-muted);
+	font-size: 12px;
+}
+.wp-gitx-parents button,
+.wp-gitx-sha-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 1px 6px;
+	border: 1px solid var(--wp-border);
+	border-radius: 5px;
+	color: var(--wp-link);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 11px;
+}
+.wp-gitx-sha-button {
+	margin-left: auto;
+}
+.wp-gitx-sha-button .wp-icon {
+	width: 12px;
+	height: 12px;
+}
+.wp-gitx-diff {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
 	min-height: 0;
-	margin: 0;
-	padding: 16px;
+}
+.wp-gitx-diff > header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 14px;
+	border-bottom: 1px solid var(--wp-border);
+	background: var(--wp-panel);
+}
+.wp-gitx-back {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 4px 10px 4px 6px;
+	border: 1px solid var(--wp-border);
+	border-radius: 7px;
+}
+.wp-gitx-back .wp-icon {
+	width: 16px;
+	height: 16px;
+}
+.wp-gitx-diff-title {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	flex: 1;
+}
+.wp-gitx-diff-title strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wp-gitx-diff-title span {
+	color: var(--wp-muted);
+	font-size: 12px;
+}
+.wp-gitx-diff-stat {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 12px;
+}
+.wp-gitx-added {
+	color: var(--wp-positive);
+}
+.wp-gitx-removed {
+	color: var(--wp-danger);
+}
+.wp-gitx-diff-body {
+	flex: 1;
+	min-height: 0;
 	overflow: auto;
-	background: var(--wp-code);
-	font:
-		12px / 1.6 ui-monospace,
-		SFMono-Regular,
-		Consolas,
-		monospace;
-	tab-size: 4;
+	padding: 6px 0 20px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 12px;
+	line-height: 19px;
 }
-.wp-git-line-added {
-	color: var(--wp-text);
-	background: var(--wp-you-bg);
+.wp-gitx-line {
+	display: grid;
+	grid-template-columns: 46px 46px 18px max-content;
+	min-width: 100%;
+	width: max-content;
 }
-.wp-git-line-removed {
-	color: var(--wp-text);
-	background: var(--wp-danger-bg);
+.wp-gitx-line code {
+	padding-right: 20px;
+	white-space: pre;
+	font: inherit;
+}
+.wp-gitx-number {
+	padding-right: 8px;
+	text-align: right;
+	color: var(--wp-muted);
+	opacity: 0.7;
+	user-select: none;
+}
+.wp-gitx-sign {
+	color: var(--wp-muted);
+	user-select: none;
+}
+.wp-gitx-line.is-added {
+	background: color-mix(in srgb, var(--wp-positive) 15%, transparent);
+}
+.wp-gitx-line.is-added .wp-gitx-sign {
+	color: var(--wp-positive);
+}
+.wp-gitx-line.is-removed {
+	background: color-mix(in srgb, var(--wp-danger) 15%, transparent);
+}
+.wp-gitx-line.is-removed .wp-gitx-sign {
+	color: var(--wp-danger);
+}
+.wp-gitx-line.is-hunk {
+	margin: 6px 0 2px;
+	background: color-mix(in srgb, var(--wp-link) 10%, transparent);
+	color: var(--wp-link);
+}
+.wp-gitx-line.is-meta,
+.wp-gitx-line.is-note {
+	color: var(--wp-muted);
+}
+.wp-gitx-busy,
+.wp-gitx-toast {
+	position: absolute;
+	right: 18px;
+	bottom: 18px;
+	z-index: 20;
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	max-width: min(520px, 70%);
+	padding: 10px 12px 10px 14px;
+	border: 1px solid var(--wp-border);
+	border-radius: 10px;
+	background: var(--wp-panel);
+	box-shadow: var(--wp-shadow);
+}
+.wp-gitx-busy {
+	align-items: center;
+}
+.wp-gitx-toast {
+	flex-wrap: wrap;
+	border-left: 4px solid var(--wp-positive);
+}
+.wp-gitx-toast.is-failed {
+	border-left-color: var(--wp-danger);
+}
+.wp-gitx-toast strong {
+	flex: 1;
+}
+.wp-gitx-toast pre {
+	order: 3;
+	flex-basis: 100%;
+	max-height: 160px;
+	margin: 0;
+	overflow: auto;
+	color: var(--wp-muted);
+	font-size: 11px;
+	white-space: pre-wrap;
+}
+.wp-gitx-spinner {
+	width: 14px;
+	height: 14px;
+	border: 2px solid var(--wp-border);
+	border-top-color: var(--wp-accent);
+	border-radius: 50%;
+	animation: wp-gitx-spin 0.8s linear infinite;
+}
+@keyframes wp-gitx-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+.wp-gitx-scrim {
+	position: absolute;
+	inset: 0;
+	z-index: 30;
+	display: grid;
+	place-items: center;
+	background: color-mix(in srgb, var(--wp-bg) 55%, transparent);
+}
+.wp-gitx-dialog {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	width: min(420px, 90%);
+	padding: 20px;
+	border: 1px solid var(--wp-border);
+	border-radius: 12px;
+	background: var(--wp-panel);
+	box-shadow: var(--wp-shadow);
+}
+.wp-gitx-dialog h2 {
+	font-size: 16px;
+}
+.wp-gitx-dialog p {
+	margin: 0;
+	color: var(--wp-muted);
+	line-height: 1.45;
+}
+.wp-gitx-dialog label {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	color: var(--wp-muted);
+	font-size: 12px;
+}
+.wp-gitx-dialog-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+@media (max-width: 1100px) {
+	.wp-gitx-body {
+		grid-template-columns: var(--wp-gitx-sidebar, 190px) 6px minmax(0, 1fr) 6px var(--wp-gitx-panel, 300px);
+	}
+	.wp-gitx-row {
+		grid-template-columns: var(--wp-gitx-graph) minmax(0, 1fr) 28px 60px;
+	}
+	.wp-gitx-author > span:last-child,
+	.wp-gitx-sha {
+		display: none;
+	}
+	.wp-gitx-actions > button span {
+		display: none;
+	}
+	.wp-gitx-actions > button {
+		min-width: 34px;
+	}
 }

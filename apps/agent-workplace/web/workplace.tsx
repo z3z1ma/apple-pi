@@ -28,6 +28,7 @@ import {
 	useActivitySeen,
 	useSections,
 } from "./workplace-desk.js";
+import { WorkplaceGit } from "./workplace-git.js";
 import { Icon } from "./workplace-icon.js";
 import { WorkplaceIssues } from "./workplace-issues.js";
 import { muted } from "./workplace-later.js";
@@ -157,6 +158,83 @@ function useSystemDark(): boolean {
 	return dark;
 }
 
+type RailApp = {
+	id: string;
+	label: string;
+	icon: Parameters<typeof Icon>[0]["name"];
+	badge?: number;
+	description?: string;
+};
+
+function RailApps({ apps, view, onSelect }: { apps: RailApp[]; view: string; onSelect(id: string): void }) {
+	const box = useRef<HTMLDivElement>(null);
+	const itemHeight = useRef(0);
+	const [fit, setFit] = useState(apps.length);
+	const openMenu = useWorkplaceMenu();
+	useEffect(() => {
+		const node = box.current;
+		if (!node) return;
+		const measure = () => {
+			const first = node.firstElementChild as HTMLElement | null;
+			if (first?.offsetHeight) itemHeight.current = first.offsetHeight;
+			if (!itemHeight.current) return;
+			const gap = Number.parseFloat(getComputedStyle(node).rowGap) || 0;
+			const capacity = Math.floor((node.clientHeight + gap) / (itemHeight.current + gap));
+			setFit(capacity >= apps.length ? apps.length : Math.max(0, capacity - 1));
+		};
+		const observer = new ResizeObserver(measure);
+		observer.observe(node);
+		measure();
+		return () => observer.disconnect();
+	}, [apps.length]);
+	const hidden = apps.slice(fit);
+	const hiddenBadges = hidden.reduce((sum, app) => sum + (app.badge ?? 0), 0);
+	return (
+		<div className="wp-rail-apps" ref={box}>
+			{apps.slice(0, fit).map((app) => (
+				<button
+					key={app.id}
+					type="button"
+					aria-label={app.label}
+					aria-description={app.description}
+					aria-pressed={view === app.id}
+					onClick={() => onSelect(app.id)}
+				>
+					<span className="wp-rail-icon">
+						<Icon name={app.icon} />
+					</span>
+					{app.label}
+					{!!app.badge && <b aria-hidden="true">{app.badge}</b>}
+				</button>
+			))}
+			{hidden.length > 0 && (
+				<button
+					type="button"
+					className="wp-rail-more"
+					aria-label="More apps"
+					aria-description={hidden.map((app) => app.label).join(", ")}
+					aria-pressed={hidden.some((app) => app.id === view)}
+					onClick={(event) =>
+						openMenu(
+							event,
+							hidden.map((app) => ({
+								label: `${view === app.id ? "\u2713 " : ""}${app.label}${app.badge ? ` (${app.badge})` : ""}`,
+								onSelect: () => onSelect(app.id),
+							})),
+						)
+					}
+				>
+					<span className="wp-rail-icon">
+						<Icon name={hidden.find((app) => app.id === view)?.icon ?? "more"} />
+					</span>
+					{hidden.find((app) => app.id === view)?.label ?? "More"}
+					{hiddenBadges > 0 && <b aria-hidden="true">{hiddenBadges}</b>}
+				</button>
+			)}
+		</div>
+	);
+}
+
 function Workplace() {
 	const world = useSyncExternalStore(store.subscribe, store.get);
 	const [mode, setModeState] = useState<AppearanceMode>(() => {
@@ -186,12 +264,13 @@ function Workplace() {
 	);
 	const initialView = new URLSearchParams(location.search).get("workplace");
 	const [view, setView] = useState(
-		["org", "mail", "code", "issues", "world", "settings"].includes(initialView ?? "")
+		["org", "mail", "code", "git", "issues", "world", "settings"].includes(initialView ?? "")
 			? (initialView ?? "chat")
 			: "chat",
 	);
 	const [orgVisited, setOrgVisited] = useState(initialView === "org");
 	const [codeVisited, setCodeVisited] = useState(initialView === "code");
+	const [gitVisited, setGitVisited] = useState(initialView === "git");
 	const [issuesVisited, setIssuesVisited] = useState(initialView === "issues");
 	const [worldVisited, setWorldVisited] = useState(initialView === "world");
 	const [codeDirty, setCodeDirty] = useState(false);
@@ -253,7 +332,7 @@ function Workplace() {
 		: 0;
 	return (
 		<div
-			className={`wp-app wp-${["org", "code", "issues"].includes(view) ? `${view}-view` : view}`}
+			className={`wp-app wp-${["org", "code", "git", "issues"].includes(view) ? `${view}-view` : view}`}
 			data-appearance={dark ? "dark" : "light"}
 			data-theme={theme.id}
 			style={themeStyle}
@@ -262,81 +341,31 @@ function Workplace() {
 				<span className="wp-brand" aria-hidden="true">
 					pi
 				</span>
-				<button
-					type="button"
-					aria-label="Chat"
-					aria-description={`${unreadChat} unread conversations`}
-					aria-pressed={view === "chat"}
-					onClick={() => {
-						setView("chat");
-						history.replaceState(null, "", "?workplace=chat");
+				<RailApps
+					view={view}
+					apps={[
+						{
+							id: "chat",
+							label: "Chat",
+							icon: "chat",
+							badge: unreadChat,
+							description: `${unreadChat} unread conversations`,
+						},
+						{ id: "mail", label: "Mail", icon: "mail", badge: unread, description: `${unread} unread messages` },
+						{ id: "org", label: "Org", icon: "org" },
+						{ id: "code", label: "Code", icon: "code" },
+						{ id: "git", label: "Git", icon: "git" },
+						{ id: "issues", label: "Issues", icon: "issues" },
+					]}
+					onSelect={(id) => {
+						if (id === "org") setOrgVisited(true);
+						if (id === "code") setCodeVisited(true);
+						if (id === "git") setGitVisited(true);
+						if (id === "issues") setIssuesVisited(true);
+						setView(id);
+						history.replaceState(null, "", `?workplace=${id}`);
 					}}
-				>
-					<span className="wp-rail-icon">
-						<Icon name="chat" />
-					</span>
-					Chat{unreadChat > 0 && <b aria-hidden="true">{unreadChat}</b>}
-				</button>
-				<button
-					type="button"
-					aria-label="Mail"
-					aria-description={`${unread} unread messages`}
-					aria-pressed={view === "mail"}
-					onClick={() => {
-						setView("mail");
-						history.replaceState(null, "", "?workplace=mail");
-					}}
-				>
-					<span className="wp-rail-icon">
-						<Icon name="mail" />
-					</span>
-					Mail{unread > 0 && <b>{unread}</b>}
-				</button>
-				<button
-					type="button"
-					aria-label="Org"
-					aria-pressed={view === "org"}
-					onClick={() => {
-						setOrgVisited(true);
-						setView("org");
-						history.replaceState(null, "", "?workplace=org");
-					}}
-				>
-					<span className="wp-rail-icon">
-						<Icon name="org" />
-					</span>
-					Org
-				</button>
-				<button
-					type="button"
-					aria-label="Code"
-					aria-pressed={view === "code"}
-					onClick={() => {
-						setCodeVisited(true);
-						setView("code");
-						history.replaceState(null, "", "?workplace=code");
-					}}
-				>
-					<span className="wp-rail-icon">
-						<Icon name="code" />
-					</span>
-					Code
-				</button>
-				<button
-					type="button"
-					aria-label="Issues"
-					aria-pressed={view === "issues"}
-					onClick={() => {
-						setIssuesVisited(true);
-						setView("issues");
-						history.replaceState(null, "", "?workplace=issues");
-					}}
-				>
-					<span className="wp-rail-icon">
-						<Icon name="issues" />
-					</span>
-					Issues
-				</button>
+				/>
 				<button
 					type="button"
 					className="wp-appearance-toggle"
@@ -399,13 +428,15 @@ function Workplace() {
 									? "Organizations"
 									: view === "code"
 										? "Code"
-										: view === "issues"
-											? "Issues"
-											: view === "world"
-												? "World"
-												: view === "settings"
-													? "Settings"
-													: "Mail"}
+										: view === "git"
+											? "Git"
+											: view === "issues"
+												? "Issues"
+												: view === "world"
+													? "World"
+													: view === "settings"
+														? "Settings"
+														: "Mail"}
 						</span>
 					</strong>
 					<button
@@ -462,6 +493,11 @@ function Workplace() {
 											onDirtyChange={setCodeDirty}
 											onTerminalCountChange={setTerminalCount}
 										/>
+									</div>
+								)}
+								{gitVisited && (
+									<div hidden={view !== "git"}>
+										<WorkplaceGit active={view === "git"} />
 									</div>
 								)}
 								{issuesVisited && (

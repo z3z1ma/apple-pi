@@ -6,7 +6,6 @@ import type { FileReferenceTarget } from "./file-reference-paths.js";
 import { useCodeAsks } from "./workplace-code-asks.js";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { Select } from "./workplace-fields.js";
-import { GitDiffText, type GitDiffView, GitPane } from "./workplace-git.js";
 import { Icon } from "./workplace-icon.js";
 import { QuickOpen } from "./workplace-quick-open.js";
 import { usePaneResize } from "./workplace-resize.js";
@@ -164,7 +163,6 @@ export function WorkplaceCode({
 	const [notice, setNotice] = useState<string>();
 	const [busy, setBusy] = useState(false);
 	const [saving, setSaving] = useState(false);
-	const [showGit, setShowGit] = useState(true);
 	const [showFiles, setShowFiles] = useState(true);
 	const panes = useRef<HTMLDivElement>(null);
 	const files = usePaneResize({
@@ -173,30 +171,9 @@ export function WorkplaceCode({
 		axis: "x",
 		direction: 1,
 		min: 150,
-		max: (): number => {
-			const node = git.pane.current;
-			const available = (panes.current?.clientWidth ?? 0) - 160 - 6;
-			const side =
-				showGit && node && getComputedStyle(node).gridColumnEnd !== "-1"
-					? Math.min(node.offsetWidth + 6, Math.max(0, available - 150))
-					: 0;
-			return available - side;
-		},
+		max: (): number => (panes.current?.clientWidth ?? 0) - 160 - 6,
 		enabled: showFiles,
 	});
-	const git = usePaneResize({
-		label: "Source control width",
-		variable: "--wp-git-width",
-		axis: "x",
-		direction: -1,
-		min: 180,
-		max: () => {
-			const available = (panes.current?.clientWidth ?? 0) - 160 - 12;
-			return available - Math.min(filesPane.current?.offsetWidth ?? 0, Math.max(0, available - 180));
-		},
-		enabled: showGit,
-	});
-	const [diff, setDiff] = useState<GitDiffView>();
 	const buffers = useRef(new Map<string, Buffer>());
 	const [, redraw] = useState(0);
 	const [loaded, setLoaded] = useState<MonacoModule>();
@@ -212,7 +189,7 @@ export function WorkplaceCode({
 	const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor>();
 	const asks = useCodeAsks({
 		instance: editorInstance,
-		file: current && !diff ? { root: current.root, path: current.path } : undefined,
+		file: current ? { root: current.root, path: current.path } : undefined,
 		world,
 		visible: active,
 		onOpenReviews: () => setShowReviews(true),
@@ -461,7 +438,6 @@ export function WorkplaceCode({
 		setExpanded(new Set());
 		setQuickOpen(false);
 		setSelected(undefined);
-		setDiff(undefined);
 		setError(undefined);
 		setNotice(undefined);
 		openRequest.current++;
@@ -498,7 +474,6 @@ export function WorkplaceCode({
 
 	const openFile = useCallback(
 		async (path: string) => {
-			setDiff(undefined);
 			const repository = root;
 			const request = ++openRequest.current;
 			const key = fileKey(repository, path);
@@ -584,7 +559,7 @@ export function WorkplaceCode({
 		}
 	};
 	saveRef.current = () => {
-		if (active && !diff) void save();
+		if (active) void save();
 	};
 	const switchRoot = (repository: string) => {
 		setRoots((before) => [...new Set([...before, repository])]);
@@ -592,7 +567,6 @@ export function WorkplaceCode({
 		setBusy(false);
 	};
 	const selectTab = (key: string) => {
-		setDiff(undefined);
 		openRequest.current++;
 		setBusy(false);
 		setSelected(key);
@@ -624,7 +598,6 @@ export function WorkplaceCode({
 		setBusy(false);
 		if (selectedKey && closing.has(selectedKey)) {
 			instance.current?.setModel(null);
-			setDiff(undefined);
 		}
 		for (const key of closing) {
 			const buffer = buffers.current.get(key)!;
@@ -754,9 +727,6 @@ export function WorkplaceCode({
 				<button type="button" aria-pressed={showFiles} onClick={() => setShowFiles(!showFiles)}>
 					Files
 				</button>
-				<button type="button" aria-pressed={showGit} onClick={() => setShowGit(!showGit)}>
-					Git
-				</button>
 			</header>
 			{changedElsewhere > 0 && (
 				<div className="wp-code-notice">
@@ -779,8 +749,8 @@ export function WorkplaceCode({
 			<div
 				hidden={showReviews}
 				ref={panes}
-				style={{ ...files.style, ...git.style }}
-				className={`wp-code-panes ${showGit ? "with-git" : ""} ${showFiles ? "" : "without-files"}`}
+				style={files.style}
+				className={`wp-code-panes ${showFiles ? "" : "without-files"}`}
 			>
 				<aside
 					className="wp-code-files"
@@ -843,15 +813,11 @@ export function WorkplaceCode({
 				<main className="wp-code-editor-pane">
 					<div className="wp-code-tabs" role="tablist" aria-label="Open files">
 						{openBuffers.map(([key, buffer]) => (
-							<div
-								className={`wp-code-tab ${key === selected && !diff ? "is-selected" : ""}`}
-								key={key}
-								role="presentation"
-							>
+							<div className={`wp-code-tab ${key === selected ? "is-selected" : ""}`} key={key} role="presentation">
 								<button
 									type="button"
 									role="tab"
-									aria-selected={key === selected && !diff}
+									aria-selected={key === selected}
 									ref={(button) => {
 										if (button) tabButtons.current.set(key, button);
 										else tabButtons.current.delete(key);
@@ -884,21 +850,7 @@ export function WorkplaceCode({
 							</div>
 						))}
 					</div>
-					{diff && (
-						<section className="wp-code-diff" aria-label="Git diff">
-							<header className="wp-code-diff-header">
-								<div>
-									<strong title={diff.path}>{diff.path}</strong>
-									<span>{diff.staged ? "Staged changes" : "Working tree changes"} / Read-only</span>
-								</div>
-								<button type="button" onClick={() => setDiff(undefined)}>
-									Close diff
-								</button>
-							</header>
-							<GitDiffText text={diff.text} />
-						</section>
-					)}
-					<div className="wp-code-edit-view" hidden={!!diff}>
+					<div className="wp-code-edit-view">
 						<div className="wp-code-editor-toolbar">
 							<span title={current?.path}>{busy ? "Reading file..." : (current?.path ?? "No file selected")}</span>
 							<button
@@ -957,20 +909,6 @@ export function WorkplaceCode({
 					</div>
 					<WorkplaceTerminal root={root} active={active} onLiveCountChange={onTerminalCountChange} />
 				</main>
-				{git.separator}
-				<aside ref={git.ref} className="wp-code-git" hidden={!showGit} aria-label="Repository changes">
-					{root ? (
-						<GitPane
-							root={root}
-							onDiff={setDiff}
-							onOpenFile={(path) => {
-								void openFile(path);
-							}}
-						/>
-					) : (
-						<p className="wp-code-empty">Select a repository to see Git changes.</p>
-					)}
-				</aside>
 			</div>
 			{quickOpen && (
 				<QuickOpen

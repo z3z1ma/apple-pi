@@ -48,9 +48,14 @@ var api = {
 		resolvePaths: (request) => electron.ipcRenderer.invoke("workspace:resolve-paths", request),
 		tree: (request) => electron.ipcRenderer.invoke("workspace:tree", request),
 		readFile: (request) => electron.ipcRenderer.invoke("workspace:read-file", request),
-		saveFile: (request) => electron.ipcRenderer.invoke("workspace:save-file", request),
-		gitStatus: (request) => electron.ipcRenderer.invoke("workspace:git-status", request),
-		gitDiff: (request) => electron.ipcRenderer.invoke("workspace:git-diff", request)
+		saveFile: (request) => electron.ipcRenderer.invoke("workspace:save-file", request)
+	},
+	git: {
+		overview: (request) => electron.ipcRenderer.invoke("git:overview", request),
+		log: (request) => electron.ipcRenderer.invoke("git:log", request),
+		show: (request) => electron.ipcRenderer.invoke("git:show", request),
+		diff: (request) => electron.ipcRenderer.invoke("git:diff", request),
+		run: (request) => electron.ipcRenderer.invoke("git:run", request)
 	},
 	snapshot: () => electron.ipcRenderer.invoke("world:snapshot"),
 	onUpdate(listener) {

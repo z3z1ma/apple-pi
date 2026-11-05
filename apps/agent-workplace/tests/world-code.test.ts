@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
-import type { WorkspaceDiff, WorkspacePath, WorkspaceSave } from "../src/workspace.js";
+import type { WorkspacePath, WorkspaceSave } from "../src/workspace.js";
 import type { WorldSnapshot } from "../src/world.js";
 import { choose, chosen } from "./helpers/select.js";
 
@@ -62,8 +62,6 @@ async function openCode(options: { desk?: boolean } = {}) {
 				trees: [],
 				reads: [],
 				saves: [],
-				status: [],
-				diffs: [],
 				copied: [],
 			};
 			Object.defineProperty(navigator, "clipboard", {
@@ -147,27 +145,6 @@ async function openCode(options: { desk?: boolean } = {}) {
 						const hash = `saved-${w.workspaceCalls.saves.length}`;
 						w.workspaceDisk[request.path] = { text: request.text, hash };
 						return { ok: true, hash };
-					},
-					gitStatus: async (request: { root: string }) => {
-						w.workspaceCalls.status.push(structuredClone(request));
-						return {
-							ok: true,
-							branch: "feature/editor",
-							entries: [
-								{ path: "src/main.ts", index: "M", worktree: "M" },
-								{ path: "notes.txt", index: "?", worktree: "?" },
-								...(w.extraGitEntries ?? []),
-							],
-						};
-					},
-					gitDiff: async (request: WorkspaceDiff) => {
-						w.workspaceCalls.diffs.push(structuredClone(request));
-						const text =
-							request.path === "notes.txt"
-								? ""
-								: `diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1,2 +1,61 @@\n-old value\n+${request.staged ? "staged change" : "working change"}\n${Array.from({ length: 60 }, (_, i) => `+line ${i}: ${"long value ".repeat(20)}`).join("\n")}`;
-						w.lastGitDiff = text;
-						return { ok: true, text };
 					},
 				},
 			};
@@ -644,7 +621,7 @@ test("real Monaco retains dirty files across file and app switches, then saves e
 		const text = 'export const message = "operator draft";\n';
 		await replaceText(page, text);
 		await page.getByRole("img", { name: "Unsaved changes", exact: true }).waitFor();
-		for (const name of ["Refresh files", "Refresh Git", "Check for file changes", "Save"]) {
+		for (const name of ["Refresh files", "Check for file changes", "Save"]) {
 			const button = page.getByRole("button", { name, exact: true });
 			expect((await button.innerText()).trim()).toBe("");
 			expect(await button.locator("svg").count()).toBe(1);
@@ -678,16 +655,8 @@ test("real Monaco retains dirty files across file and app switches, then saves e
 		await vi.waitFor(async () => expect(await editorText(page)).toContain("operator draft"));
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
 		await shot(page, "dirty-retained");
-		await page.getByRole("button", { name: "View unstaged diff: src/main.ts", exact: true }).click();
-		const preview = page.getByRole("region", { name: "Git diff", exact: true });
-		await preview.waitFor();
-		expect(await editor(page).isVisible()).toBe(false);
-		await page.keyboard.press("Meta+S");
-		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
-		await shot(page, "dirty-diff-preview");
-		await preview.getByRole("button", { name: "Close diff", exact: true }).click();
-		await editor(page).waitFor();
-		await vi.waitFor(async () => expect(await editorText(page)).toContain("operator draft"));
+		expect(await page.getByRole("button", { name: "Git", exact: true }).count()).toBe(1);
+		expect(await page.locator(".wp-code").getByText("Source control").count()).toBe(0);
 		await page.getByRole("button", { name: "Save", exact: true }).click();
 		await page.getByText("Saved src/main.ts", { exact: true }).waitFor();
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([
@@ -709,7 +678,7 @@ test("real Monaco retains dirty files across file and app switches, then saves e
 	}
 }, 45_000);
 
-test("word wrap toggles from the editor's command palette, and Files and Git can each be hidden without losing the draft", async () => {
+test("word wrap toggles from the editor's command palette, and Files can be hidden without losing the draft", async () => {
 	const { page, errors } = await openCode();
 	try {
 		await openMain(page);
@@ -734,22 +703,17 @@ test("word wrap toggles from the editor's command palette, and Files and Git can
 		await page.keyboard.press("Escape");
 		const panes = page.locator(".wp-code-panes");
 		const files = page.getByRole("complementary", { name: "Files", exact: true });
-		const git = page.getByRole("complementary", { name: "Repository changes", exact: true });
 		const editorLeft = () => page.locator(".wp-code-editor-pane").evaluate((node) => node.getBoundingClientRect().left);
 		const panesLeft = await panes.evaluate((node) => node.getBoundingClientRect().left);
 		expect(await editorLeft()).toBeGreaterThan(panesLeft + 100);
 		await page.getByRole("button", { name: "Files", exact: true }).click();
 		await files.waitFor({ state: "hidden" });
 		expect(Math.abs((await editorLeft()) - panesLeft)).toBeLessThan(2);
-		await page.getByRole("button", { name: "Git", exact: true }).click();
-		await git.waitFor({ state: "hidden" });
 		const wide = await page.locator(".wp-code-editor-pane").evaluate((node) => node.getBoundingClientRect().width);
 		expect(wide).toBeGreaterThan((await panes.evaluate((node) => node.getBoundingClientRect().width)) - 2);
 		await shot(page, "panes-hidden");
 		await page.getByRole("button", { name: "Files", exact: true }).click();
-		await page.getByRole("button", { name: "Git", exact: true }).click();
 		await files.waitFor();
-		await git.waitFor();
 		expect(await editorText(page)).toContain("wrapped words");
 		await editor(page).click();
 		await toggleWrap();
@@ -982,61 +946,6 @@ test("conflict recovery preserves the draft, writes only after Save, and still r
 	}
 }, 45_000);
 
-test("Git distinguishes staged and working diffs without opening files or writing", async () => {
-	const { page, errors } = await openCode();
-	try {
-		const git = page.getByRole("region", { name: "Source control", exact: true });
-		const preview = page.getByRole("region", { name: "Git diff", exact: true });
-		await git
-			.getByRole("region", { name: "Staged", exact: true })
-			.getByRole("button", { name: "Open file: src/main.ts", exact: true })
-			.waitFor();
-		await git
-			.getByRole("region", { name: "Unstaged", exact: true })
-			.getByRole("button", { name: "Open file: src/main.ts", exact: true })
-			.waitFor();
-		await git.getByRole("button", { name: "View staged diff: src/main.ts", exact: true }).click();
-		await preview.getByText(/\+staged change/).waitFor();
-		await git.getByRole("button", { name: "View unstaged diff: src/main.ts", exact: true }).click();
-		await preview.getByText(/\+working change/).waitFor();
-		expect(await page.evaluate(() => (window as any).workspaceCalls.diffs)).toEqual([
-			{ root: ROOT, path: "src/main.ts", staged: true },
-			{ root: ROOT, path: "src/main.ts", staged: false },
-		]);
-		expect(await page.evaluate(() => (window as any).workspaceCalls.reads)).toEqual([]);
-		const previewBox = await preview.boundingBox();
-		const sidebarBox = await git.boundingBox();
-		expect(previewBox!.width).toBeGreaterThan(sidebarBox!.width);
-		expect(previewBox!.x + previewBox!.width).toBeLessThanOrEqual(sidebarBox!.x);
-		expect(previewBox!.y + previewBox!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
-		const diff = preview.locator("pre");
-		expect(await diff.textContent()).toBe(await page.evaluate(() => (window as any).lastGitDiff));
-		expect(await diff.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
-		await shot(page, "git-light-diff");
-		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
-		await diff.evaluate((node) => {
-			node.scrollLeft = node.scrollWidth;
-			node.scrollTop = node.scrollHeight;
-		});
-		expect(await diff.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
-		await shot(page, "git-dark-diff-scrolled");
-		await git.getByRole("button", { name: "View untracked diff: notes.txt", exact: true }).click();
-		await preview
-			.getByText("No text diff. Open the file to inspect untracked or binary content.", { exact: true })
-			.waitFor();
-		await shot(page, "git-readonly");
-		await git.getByRole("button", { name: "Open file: notes.txt", exact: true }).click();
-		await page.getByRole("tab", { name: "notes.txt", exact: true }).waitFor();
-		expect(await page.evaluate(() => (window as any).workspaceCalls.reads)).toEqual(
-			expect.arrayContaining([{ root: ROOT, path: "notes.txt" }]),
-		);
-		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
-		expect(errors).toEqual([]);
-	} finally {
-		await page.close();
-	}
-}, 45_000);
-
 test("Quick Open searches file paths locally and opens only the chosen file while preserving drafts", async () => {
 	const { page, errors } = await openCode();
 	try {
@@ -1193,64 +1102,6 @@ test("linked worktrees expose metadata and retain separate drafts without saving
 		await page.getByRole("tab", { name: /main\.ts/ }).click();
 		expect(await editorText(page)).toContain("linked-root draft");
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
-		expect(await page.evaluate(() => (window as any).workspaceCalls.diffs)).toEqual([]);
-		expect(errors).toEqual([]);
-	} finally {
-		await page.close();
-	}
-}, 45_000);
-
-test("compact Git rows keep long renamed paths readable by tooltip and the file action reachable", async () => {
-	const { page, errors } = await openCode();
-	try {
-		await page.setViewportSize({ width: 900, height: 800 });
-		const path = "packages/reporting workspace/src/reconciliation/monthly-output-with-detailed-ledger-labels.ts";
-		const previous = "packages/reporting workspace/src/legacy/monthly-output-before-rename.ts";
-		await page.evaluate(
-			([path, previous]) => {
-				(window as any).extraGitEntries = [{ path, previousPath: previous, index: "R", worktree: " " }];
-				(window as any).workspaceDisk[path!] = {
-					text: 'export const label = "long path file";\n',
-					hash: "long-path-hash",
-				};
-			},
-			[path, previous],
-		);
-		const git = page.getByRole("region", { name: "Source control", exact: true });
-		await git.getByRole("button", { name: "Refresh Git", exact: true }).click();
-		const row = git.getByRole("button", { name: `View staged diff: ${path}`, exact: true });
-		const open = git.getByRole("button", { name: `Open file: ${path}`, exact: true });
-		await row.waitFor();
-		expect(await row.getAttribute("title")).toBe(`${path} (from ${previous})`);
-		expect(await row.innerText()).not.toContain("View diff");
-		expect((await open.innerText()).trim()).toBe("");
-		expect(await open.locator("svg").count()).toBe(1);
-		const longBox = await row.boundingBox();
-		const shortBox = await git
-			.getByRole("button", { name: "View staged diff: src/main.ts", exact: true })
-			.boundingBox();
-		const iconBox = await open.boundingBox();
-		const paneBox = await git.boundingBox();
-		expect(longBox!.height).toBeCloseTo(shortBox!.height, 1);
-		expect(longBox!.height).toBeCloseTo(iconBox!.height, 1);
-		expect(longBox!.x + longBox!.width).toBeLessThanOrEqual(iconBox!.x);
-		expect(iconBox!.x + iconBox!.width).toBeLessThanOrEqual(paneBox!.x + paneBox!.width);
-		expect(paneBox!.x + paneBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
-		await shot(page, "git-long-path-light");
-		await row.click();
-		await page.getByRole("region", { name: "Git diff", exact: true }).waitFor();
-		expect(await page.evaluate(() => (window as any).workspaceCalls.diffs)).toEqual([
-			{ root: ROOT, path, staged: true },
-		]);
-		expect(await page.evaluate(() => (window as any).workspaceCalls.reads)).toEqual([]);
-		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
-		await shot(page, "git-long-path-dark");
-		await open.click();
-		await vi.waitFor(async () => expect(await editorText(page)).toContain("long path file"));
-		expect(await page.evaluate(() => (window as any).workspaceCalls.reads)).toEqual(
-			expect.arrayContaining([{ root: ROOT, path }]),
-		);
-		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
@@ -1330,7 +1181,11 @@ test.each(["Close all", "Close others"] as const)(
 			await page.evaluate(() => {
 				(window as any).holdReadPath = "notes.txt";
 			});
-			await page.getByRole("button", { name: "Open file: notes.txt", exact: true }).click();
+			await page.keyboard.press("Meta+P");
+			const quickOpen = page.getByRole("dialog", { name: "Quick open file", exact: true });
+			await quickOpen.getByRole("combobox", { name: "Find file by name or path", exact: true }).fill("notes.txt");
+			await quickOpen.getByRole("option").first().click();
+			await quickOpen.waitFor({ state: "hidden" });
 			await main.click({ button: "right" });
 			const menu = page.getByRole("menu", { name: "Actions", exact: true });
 			await menu.waitFor();

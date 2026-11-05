@@ -6,13 +6,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { openFileLink } from "../src/backend/links.js";
 import { openWorkspace } from "../src/backend/workspace.js";
-import {
-	isWorkspaceDiff,
-	isWorkspacePath,
-	isWorkspaceResolvePaths,
-	isWorkspaceRoot,
-	isWorkspaceSave,
-} from "../src/workspace.js";
+import { isWorkspacePath, isWorkspaceResolvePaths, isWorkspaceRoot, isWorkspaceSave } from "../src/workspace.js";
 import type { WorldSnapshot } from "../src/world.js";
 
 vi.mock("node:fs", async (importOriginal) => {
@@ -213,40 +207,11 @@ test("classified canonical non-text targets retain the existing system-opener ex
 	expect(revealed).toEqual([fs.realpathSync(join(root, "script.sh")), fs.realpathSync(join(root, "executable"))]);
 });
 
-test("Git reads staged, unstaged, untracked and renamed paths literally without changing index", async () => {
-	git("mv", "hello.ts", "renamed [file].ts");
-	fs.writeFileSync(join(root, "renamed [file].ts"), "worktree change\n");
-	fs.writeFileSync(join(root, "untracked.ts"), "untracked\n");
-	const index = fs.readFileSync(join(root, ".git/index"));
-	const status = await workspace.gitStatus({ root });
-	expect(status).toMatchObject({
-		ok: true,
-		branch: "main",
-		entries: [
-			{ path: "renamed [file].ts", previousPath: "hello.ts", index: "R", worktree: "M" },
-			{ path: "untracked.ts", index: "?", worktree: "?" },
-		],
-	});
-	const unstaged = await workspace.gitDiff({ root, path: "renamed [file].ts" });
-	expect(unstaged).toMatchObject({ ok: true, text: expect.stringContaining("+worktree change") });
-	const staged = await workspace.gitDiff({ root, path: "renamed [file].ts", staged: true });
-	expect(staged).toMatchObject({ ok: true, text: expect.stringContaining("export const value = 1") });
-	expect(await workspace.gitDiff({ root, path: "../private" })).toMatchObject({ ok: false });
-	expect(fs.readFileSync(join(root, ".git/index"))).toEqual(index);
-	git("checkout", "--detach");
-	expect(await workspace.gitStatus({ root })).toMatchObject({ ok: true, branch: null });
-});
-
-test("manual subdirectories remain browsable but Git names the required repository root", async () => {
+test("manual subdirectories remain browsable, and Git metadata is not", async () => {
 	const sub = join(root, "sub");
 	fs.mkdirSync(sub);
 	fs.writeFileSync(join(sub, "nested.txt"), "nested");
 	expect(await workspace.tree({ root: sub, path: "" })).toMatchObject({ ok: true, entries: [{ path: "nested.txt" }] });
-	expect(await workspace.gitStatus({ root: sub })).toMatchObject({
-		ok: false,
-		reason: expect.stringContaining("Open the repository root"),
-	});
-	expect(await workspace.gitDiff({ root: sub, path: "nested.txt" })).toMatchObject({ ok: false });
 	expect(await workspace.tree({ root: join(root, ".git"), path: "" })).toMatchObject({ ok: false });
 });
 
@@ -510,6 +475,4 @@ test("discovers real roots and validates renderer payloads", async () => {
 	expect(isWorkspacePath({ root, path: 2 })).toBe(false);
 	expect(isWorkspaceSave({ root, path: "x", text: "new" })).toBe(false);
 	expect(isWorkspaceSave({ root, path: "x", text: "new", baseHash: "abc" })).toBe(true);
-	expect(isWorkspaceDiff({ root, path: "x", staged: "yes" })).toBe(false);
-	expect(isWorkspaceDiff({ root, path: "x", staged: true })).toBe(true);
 });

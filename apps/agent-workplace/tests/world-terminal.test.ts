@@ -111,8 +111,6 @@ async function openCode(startupQuery = false) {
 					w.terminalCalls.saves.push(structuredClone(request));
 					return { ok: true, hash: "saved-hash" };
 				},
-				gitStatus: async () => ({ ok: true, branch: "fixture", entries: [] }),
-				gitDiff: async () => ({ ok: true, text: "" }),
 			};
 			w.agentWorkplace = {
 				snapshot: async () => snapshot,
@@ -340,7 +338,6 @@ test("resizable Code panes retain the dirty editor and terminal identity while t
 	const { page, errors } = await openCode();
 	try {
 		const files = page.getByRole("complementary", { name: "Files", exact: true });
-		const git = page.getByRole("region", { name: "Source control", exact: true });
 		await files.getByRole("button", { name: "main.ts", exact: true }).click();
 		const editor = page.locator(".monaco-editor");
 		await editor.waitFor();
@@ -358,7 +355,6 @@ test("resizable Code panes retain the dirty editor and terminal identity while t
 		const railBox = await rail.boundingBox();
 		for (const [name, target, axis, delta] of [
 			["Files width", files, "width", 65],
-			["Source control width", git, "width", -65],
 			["Terminal height", terminal, "height", -60],
 		] as const) {
 			const separator = page.getByRole("separator", { name, exact: true });
@@ -386,12 +382,7 @@ test("resizable Code panes retain the dirty editor and terminal identity while t
 			expect(await rail.boundingBox()).toEqual(railBox);
 		}
 		await nextLayout(page);
-		for (const bounds of [
-			await files.boundingBox(),
-			await git.boundingBox(),
-			await terminal.boundingBox(),
-			await editor.boundingBox(),
-		]) {
+		for (const bounds of [await files.boundingBox(), await terminal.boundingBox(), await editor.boundingBox()]) {
 			expect(bounds!.width).toBeGreaterThan(0);
 			expect(bounds!.height).toBeGreaterThan(0);
 			expect(bounds!.x).toBeGreaterThanOrEqual(railBox!.x + railBox!.width);
@@ -439,13 +430,11 @@ test("the terminal uses only central editor space, resizes while visible and rel
 	try {
 		expect(await unloadIsGuarded(page)).toBe(false);
 		const files = page.getByRole("complementary", { name: "Files", exact: true });
-		const git = page.getByRole("region", { name: "Source control", exact: true });
 		await files.getByRole("button", { name: "main.ts", exact: true }).click();
 		const editor = page.locator(".monaco-editor");
 		await editor.waitFor();
 		const before = {
 			files: await files.boundingBox(),
-			git: await git.boundingBox(),
 			editor: await editor.boundingBox(),
 		};
 		await page.getByRole("button", { name: "Show terminal", exact: true }).click();
@@ -453,12 +442,11 @@ test("the terminal uses only central editor space, resizes while visible and rel
 		await page.getByRole("tab", { name: `Terminal 1: ${ROOT}/canonical`, exact: true }).waitFor();
 		await vi.waitFor(async () => expect(await unloadIsGuarded(page)).toBe(true));
 		expect(await files.boundingBox()).toEqual(before.files);
-		expect(await git.boundingBox()).toEqual(before.git);
 		await vi.waitFor(async () => expect((await editor.boundingBox())!.height).toBeLessThan(before.editor!.height));
 		const pane = (await terminalPane(page).boundingBox())!;
 		const editorBox = (await editor.boundingBox())!;
 		expect(pane.x).toBeGreaterThanOrEqual(before.files!.x + before.files!.width);
-		expect(pane.x + pane.width).toBeLessThanOrEqual(before.git!.x);
+		expect(pane.x + pane.width).toBeLessThanOrEqual(before.editor!.x + before.editor!.width + 1);
 		expect(editorBox.y + editorBox.height).toBeLessThanOrEqual(pane.y + 1);
 		expect(pane.y + pane.height).toBeLessThanOrEqual(900);
 		await shot(page, "center-dock");

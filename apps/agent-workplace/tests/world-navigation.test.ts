@@ -225,7 +225,6 @@ async function openWorkplace() {
 					w.navigationCalls.saves.push(request);
 					return { ok: true, hash: "saved" };
 				},
-				gitStatus: async () => ({ ok: true, branch: "main", entries: [] }),
 			},
 		};
 	}, ROOT);

@@ -19,7 +19,6 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { pathToFileURL } from "node:url";
 import type {
 	WorkspaceApi,
-	WorkspaceGitEntry,
 	WorkspacePath,
 	WorkspaceResolvedPath,
 	WorkspaceResult,
@@ -29,7 +28,7 @@ import type {
 import type { WorldSnapshot } from "../world.js";
 
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
-const failure = (error: unknown) => ({
+export const failure = (error: unknown) => ({
 	ok: false as const,
 	reason: error instanceof Error ? error.message : String(error),
 });
@@ -37,12 +36,12 @@ function inside(root: string, path: string) {
 	const rel = relative(root, path);
 	return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`);
 }
-function within(root: string, path: string) {
+export function within(root: string, path: string) {
 	if (!inside(root, path)) throw new Error("The path is outside the workspace root.");
 	if (relative(root, path).split(sep).includes(".git"))
 		throw new Error("Git metadata is not available in the file editor.");
 }
-function directory(root: string) {
+export function directory(root: string) {
 	if (!isAbsolute(root)) throw new Error("Choose an absolute workspace directory.");
 	const canonical = realpathSync(root);
 	if (canonical.split(sep).includes(".git")) throw new Error("Git metadata is not available in the file editor.");
@@ -99,7 +98,7 @@ function textOf(bytes: Buffer) {
 		throw new NonTextFileError("This file is not valid UTF-8 text.");
 	}
 }
-async function attempt<T>(action: () => T | Promise<T>): Promise<WorkspaceResult<T>> {
+export async function attempt<T>(action: () => T | Promise<T>): Promise<WorkspaceResult<T>> {
 	try {
 		return { ok: true, ...(await action()) };
 	} catch (error) {
@@ -107,34 +106,54 @@ async function attempt<T>(action: () => T | Promise<T>): Promise<WorkspaceResult
 	}
 }
 
-function git(root: string, args: string[], allowDetached = false): Promise<string> {
+const KEPT_GIT_VARIABLES = ["GIT_OPTIONAL_LOCKS", "GIT_TERMINAL_PROMPT", "GIT_EDITOR", "GIT_SSH_COMMAND"];
+
+export function git(
+	root: string,
+	args: string[],
+	options: { input?: string; ok?: number[]; combined?: boolean } = {},
+): Promise<string> {
 	return new Promise((resolve, reject) => {
-		const env = { ...process.env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" };
+		const env = {
+			...process.env,
+			LC_ALL: "C",
+			GIT_OPTIONAL_LOCKS: "0",
+			GIT_TERMINAL_PROMPT: "0",
+			GIT_EDITOR: "true",
+			GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND ?? "ssh -o BatchMode=yes",
+		};
 		for (const key of Object.keys(env))
-			if (key.startsWith("GIT_") && !["GIT_OPTIONAL_LOCKS", "GIT_TERMINAL_PROMPT"].includes(key))
-				delete env[key as keyof typeof env];
+			if (key.startsWith("GIT_") && !KEPT_GIT_VARIABLES.includes(key)) delete env[key as keyof typeof env];
 		const child = spawn("git", ["--no-pager", "-c", "core.fsmonitor=false", "-C", root, ...args], {
 			env,
-			stdio: ["ignore", "pipe", "pipe"],
+			stdio: ["pipe", "pipe", "pipe"],
 		});
+		child.stdin.on("error", () => undefined);
+		child.stdin.end(options.input ?? "");
 		const out: Buffer[] = [],
 			err: Buffer[] = [];
 		child.stdout.on("data", (chunk: Buffer) => out.push(chunk));
 		child.stderr.on("data", (chunk: Buffer) => err.push(chunk));
 		child.on("error", reject);
 		child.on("close", (code) =>
-			code === 0 || (allowDetached && code === 1)
-				? resolve(Buffer.concat(out).toString("utf8"))
-				: reject(new Error(Buffer.concat(err).toString("utf8").trim() || `Git exited with ${code}.`)),
+			code === 0 || (code !== null && options.ok?.includes(code))
+				? resolve(Buffer.concat(options.combined ? [...out, ...err] : out).toString("utf8"))
+				: reject(
+						new Error(
+							Buffer.concat(err).toString("utf8").trim() ||
+								Buffer.concat(out).toString("utf8").trim() ||
+								`Git exited with ${code}.`,
+						),
+					),
 		);
 	});
 }
 
-async function gitRoot(root: string) {
+export async function gitRoot(root: string) {
 	return directory((await git(root, ["rev-parse", "--show-toplevel"])).replace(/\n$/, ""));
 }
 
-async function repositoryRoot(path: string) {
+export async function repositoryRoot(path: string) {
 	const root = directory(path);
 	const top = await gitRoot(root);
 	if (root !== top) throw new Error(`Open the repository root to view Git changes: ${top}`);
@@ -199,7 +218,7 @@ async function workspaceFiles(root: string): Promise<string[]> {
 	return [...new Set(paths.filter((path) => path && listedFile(root, path)))].sort();
 }
 
-function parseWorktrees(output: string, root: string): WorkspaceWorktree[] {
+export function parseWorktrees(output: string, root: string): WorkspaceWorktree[] {
 	return output
 		.split("\0\0")
 		.filter(Boolean)
@@ -348,38 +367,5 @@ export function openWorkspace(snapshot: () => WorldSnapshot): WorkspaceApi {
 			}
 		},
 		saveFile: async (request) => save(request),
-		gitStatus: (request) =>
-			attempt(async () => {
-				const root = await repositoryRoot(request.root);
-				const output = await git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
-				const records = output.split("\0");
-				const entries: WorkspaceGitEntry[] = [];
-				for (let i = 0; i < records.length; i++) {
-					const record = records[i];
-					if (!record) continue;
-					const entry: WorkspaceGitEntry = { path: record.slice(3), index: record[0], worktree: record[1] };
-					if (/[RC]/.test(record.slice(0, 2))) entry.previousPath = records[++i];
-					entries.push(entry);
-				}
-				const branch = (await git(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], true)).trim() || null;
-				return { entries, branch };
-			}),
-		gitDiff: (request) =>
-			attempt(async () => {
-				const root = await repositoryRoot(request.root);
-				if (isAbsolute(request.path) || !request.path || request.path.includes("\0"))
-					throw new Error("Choose a relative file path for the diff.");
-				within(root, resolve(root, request.path));
-				return {
-					text: await git(root, [
-						"diff",
-						"--no-ext-diff",
-						"--no-textconv",
-						...(request.staged ? ["--cached"] : []),
-						"--",
-						`:(literal)${request.path}`,
-					]),
-				};
-			}),
 	};
 }

@@ -82,7 +82,7 @@ try {
 		[
 			"--import",
 			join(root, "components/session-state/src/register.mjs"),
-			join(root, "components/session-state/src/runtime-main.ts"),
+			join(root, "components/session-state/src/runtime-main.runtime.ts"),
 		],
 		{ env, stdio: "ignore" },
 	);
@@ -291,7 +291,7 @@ try {
 		if (!read.ok) throw new Error(read.reason);
 		const stale = await api.saveFile({ root, path: "example.ts", text: "must not replace", baseHash: "stale" });
 		const outside = await api.readFile({ root, path: "../outside" });
-		const git = await api.gitStatus({ root });
+		const git = await window.agentWorkplace.git.overview({ root });
 		const resolved = await api.resolvePaths({
 			cwd: root,
 			paths: ["example.ts", `${root}/example.ts`, "missing.ts", "../outside"],

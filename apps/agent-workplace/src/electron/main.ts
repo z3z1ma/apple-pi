@@ -12,6 +12,7 @@ import { searchConversations } from "../backend/conversation-search.js";
 import { openConversations } from "../backend/conversations.js";
 import { openDepartures } from "../backend/departures.js";
 import { openEmbeddedTerminals } from "../backend/embedded-terminal.js";
+import { openGit } from "../backend/git.js";
 import { instruct } from "../backend/instructions.js";
 import { openLifecycle } from "../backend/lifecycle.js";
 import { openFileLink, openLink } from "../backend/links.js";
@@ -24,9 +25,9 @@ import { openWorkspace } from "../backend/workspace.js";
 import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js";
 import { isCallInRequest } from "../call-in.js";
 import { isRetirePeopleRequest } from "../departures.js";
+import { type GitApi, isGitDiff, isGitLog, isGitRoot, isGitRun, isGitShow } from "../git.js";
 import { isOrgMoveRequest, isOrgStartRequest } from "../org.js";
 import {
-	isWorkspaceDiff,
 	isWorkspacePath,
 	isWorkspaceResolvePaths,
 	isWorkspaceRoot,
@@ -91,17 +92,29 @@ function wireWorkspace(workspace: WorkspaceApi) {
 	ipcMain.handle("workspace:save-file", (_event, request: unknown) =>
 		isWorkspaceSave(request) ? workspace.saveFile(request) : invalid,
 	);
-	ipcMain.handle("workspace:git-status", (_event, request: unknown) =>
-		isWorkspaceRoot(request) ? workspace.gitStatus(request) : invalid,
+}
+
+function wireGit(git: GitApi) {
+	const invalid = { ok: false, reason: "A valid Git request is required." };
+	ipcMain.handle("git:overview", (_event, request: unknown) =>
+		isGitRoot(request) ? git.overview({ root: request.root }) : invalid,
 	);
-	ipcMain.handle("workspace:git-diff", (_event, request: unknown) =>
-		isWorkspaceDiff(request) ? workspace.gitDiff(request) : invalid,
+	ipcMain.handle("git:log", (_event, request: unknown) =>
+		isGitLog(request) ? git.log({ root: request.root, skip: request.skip, limit: request.limit }) : invalid,
+	);
+	ipcMain.handle("git:show", (_event, request: unknown) =>
+		isGitShow(request) ? git.show({ root: request.root, sha: request.sha }) : invalid,
+	);
+	ipcMain.handle("git:diff", (_event, request: unknown) => (isGitDiff(request) ? git.diff(request) : invalid));
+	ipcMain.handle("git:run", (_event, request: unknown) =>
+		isGitRun(request) ? git.run({ root: request.root, action: request.action }) : invalid,
 	);
 }
 
 function start() {
 	const world = openWorldBackend(statePaths());
 	wireWorkspace(openWorkspace(() => world.snapshot()));
+	wireGit(openGit());
 	const conversations = openConversations(statePaths().socket);
 	const commands = openCommands(statePaths().socket);
 	wireCommunications(openCommunications(statePaths().db, commands));
@@ -450,6 +463,7 @@ function start() {
 					"app://world/index.html?workplace=mail",
 					"app://world/index.html?workplace=org",
 					"app://world/index.html?workplace=code",
+					"app://world/index.html?workplace=git",
 					"app://world/index.html?workplace=issues",
 				].includes(url)
 			)

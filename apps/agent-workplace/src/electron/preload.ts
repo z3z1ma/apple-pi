@@ -134,10 +134,14 @@ const api: AgentWorkplaceApi = {
 			ipcRenderer.invoke("workspace:read-file", request) as ReturnType<AgentWorkplaceApi["workspace"]["readFile"]>,
 		saveFile: (request) =>
 			ipcRenderer.invoke("workspace:save-file", request) as ReturnType<AgentWorkplaceApi["workspace"]["saveFile"]>,
-		gitStatus: (request) =>
-			ipcRenderer.invoke("workspace:git-status", request) as ReturnType<AgentWorkplaceApi["workspace"]["gitStatus"]>,
-		gitDiff: (request) =>
-			ipcRenderer.invoke("workspace:git-diff", request) as ReturnType<AgentWorkplaceApi["workspace"]["gitDiff"]>,
+	},
+	git: {
+		overview: (request) =>
+			ipcRenderer.invoke("git:overview", request) as ReturnType<AgentWorkplaceApi["git"]["overview"]>,
+		log: (request) => ipcRenderer.invoke("git:log", request) as ReturnType<AgentWorkplaceApi["git"]["log"]>,
+		show: (request) => ipcRenderer.invoke("git:show", request) as ReturnType<AgentWorkplaceApi["git"]["show"]>,
+		diff: (request) => ipcRenderer.invoke("git:diff", request) as ReturnType<AgentWorkplaceApi["git"]["diff"]>,
+		run: (request) => ipcRenderer.invoke("git:run", request) as ReturnType<AgentWorkplaceApi["git"]["run"]>,
 	},
 	snapshot: () => ipcRenderer.invoke("world:snapshot") as Promise<WorldSnapshot>,
 	onUpdate(listener) {

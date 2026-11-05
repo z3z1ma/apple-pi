@@ -39,7 +39,7 @@ Why: a well-typed renderer object can still contain an unexpected command kind. 
 Coupled: apps/agent-workplace/src/org.ts, apps/agent-workplace/src/backend/org.ts, apps/agent-workplace/src/electron/preload.ts
 Verify: apps/agent-workplace/tests/org-api.test.ts, apps/agent-workplace/tests/org-backend.test.ts
 
-Internal view links need an explicit `will-navigate` exception; permit only the app's exact index, empty-query, ?world, Chat, Mail, Org, Code and Issues URLs while other renderer navigation and new windows stay blocked. Bare and empty-query entries open Workplace Chat; the standalone diagnostic World route is exactly ?world. The World rail control selects ?workplace=world within the existing Workplace document and mounts the same-origin ?world&embedded=1 iframe. The main frame is that parent Workplace document; selecting this tab needs no new main-frame navigation exception. Ordinary Electron startup loads the bare URL.
+Internal view links need an explicit `will-navigate` exception; permit only the app's exact index, empty-query, ?world, Chat, Mail, Org, Code, Git and Issues URLs while other renderer navigation and new windows stay blocked. Bare and empty-query entries open Workplace Chat; the standalone diagnostic World route is exactly ?world. The World rail control selects ?workplace=world within the existing Workplace document and mounts the same-origin ?world&embedded=1 iframe. The main frame is that parent Workplace document; selecting this tab needs no new main-frame navigation exception. Ordinary Electron startup loads the bare URL.
 Why: browser-fixture tests bypass Electron's navigation guard and can pass even when clicking the real launch link does nothing. Broadly allowing same-origin navigation would expand the renderer's navigation authority beyond these view links.
 The embedded entry reuses the parent's preload API before loading World. Validate that reuse in actual Electron: a child call must retain the parent's IPC identity while the existing main-frame guard remains unchanged. Browser fixtures replace the API and cannot prove this boundary.
 Coupled: apps/agent-workplace/web/entry.ts, apps/agent-workplace/web/workplace.tsx, apps/agent-workplace/web/workplace-world.tsx, apps/agent-workplace/src/electron/terminal-ipc.ts
@@ -53,8 +53,13 @@ workspace:resolve-paths validates the candidate list/source cwd and explicitly f
 Coupled: apps/agent-workplace/src/workspace.ts, apps/agent-workplace/src/backend/workspace.ts, apps/agent-workplace/src/electron/preload.ts
 Verify: apps/agent-workplace/tests/workspace-backend.test.ts
 
-Workspace IPC validates payload shapes before filesystem operations; it intentionally accepts manual directory roots for the operator's Code editor. This authority is separate from transcript link opening. Only save-file writes and requires an existing file plus its base hash; Git endpoints are read-only.
+Workspace IPC validates payload shapes before filesystem operations; it intentionally accepts manual directory roots for the operator's Code editor. This authority is separate from transcript link opening. Only save-file writes and requires an existing file plus its base hash.
 Why: editor-selected roots intentionally grant broader local filesystem access than links embedded in untrusted conversation content, so the two entry paths must retain separate validation rules.
+
+`git:*` (overview, log, show, diff, run) validates each request with the guards in src/git.ts before calling the Git backend; `git:run` accepts only the GitAction kinds and fields listed in its per-kind table and forwards the validated action, never renderer-supplied arguments. These endpoints write to repositories (commit, checkout, reset, push) with the operator's own Git credentials, like a Git GUI.
+Why: the renderer is untrusted; a free-form argument list would let any renderer bug run arbitrary Git subcommands and options.
+Coupled: apps/agent-workplace/src/git.ts, apps/agent-workplace/src/backend/git.ts, apps/agent-workplace/src/electron/preload.ts
+Verify: apps/agent-workplace/tests/git-backend.test.ts
 Coupled: apps/agent-workplace/src/workspace.ts, apps/agent-workplace/src/backend/workspace.ts, apps/agent-workplace/src/electron/preload.ts
 Verify: apps/agent-workplace/tests/workspace-backend.test.ts
 

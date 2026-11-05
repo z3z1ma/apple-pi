@@ -182,8 +182,6 @@ async function openWorkplace() {
 					w.fileLinkCalls.saves.push(structuredClone(request));
 					return { ok: true, hash: "saved" };
 				},
-				gitStatus: async () => ({ ok: true, branch: "main", entries: [] }),
-				gitDiff: async () => ({ ok: true, text: "" }),
 			};
 			w.agentWorkplace = {
 				snapshot: async () => world,

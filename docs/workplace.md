@@ -4,11 +4,11 @@ Workplace is Agent Workplace's interface for people, conversations, team setup, 
 
 ## Open Workplace
 
-Run `/workplace` in a root Pi session. The app opens in Workplace's **Chat** view. Use the persistent left rail to switch views, including **World** for the visual world and **Chat** to return to conversations. Opening the app while it is already running brings its window forward.
+Run `/workplace` in a root Pi session. The app opens in Workplace's **Chat** view. Use the persistent left rail to switch views, including **World** for the visual world and **Chat** to return to conversations. When the window is too short for every app, the ones that do not fit move under **More**, which shows the open app's icon when it is one of them. Opening the app while it is already running brings its window forward.
 
 The **Theme** switch selects light or dark appearance. It starts with your OS preference and remembers an explicit choice. This appearance choice is separate from the World view's art theme. Compact toolbar and tab icon buttons retain tooltips and accessible action names.
 
-Drag the visible dividers to resize content sidebars, profiles, Org details, Code's Files and Source control panes, and the terminal's height. The narrow icon navigation rail stays fixed. Focus a divider and use arrow keys to move it in that direction; Home and End select its current minimum and maximum. Escape cancels a drag. Sizes stay local to the app across view switches, with bounds that keep the adjacent content usable; stacked narrow layouts hide dividers that no longer apply.
+Drag the visible dividers to resize content sidebars, profiles, Org details, Code's Files pane, Git's branch and detail panes, and the terminal's height. The narrow icon navigation rail stays fixed. Focus a divider and use arrow keys to move it in that direction; Home and End select its current minimum and maximum. Escape cancels a drag. Sizes stay local to the app across view switches, with bounds that keep the adjacent content usable; stacked narrow layouts hide dividers that no longer apply.
 
 Closing the app leaves Pi sessions running. Switching views, including World, retains team plans, message drafts, open Code buffers, embedded terminals and per-issue delegation drafts. World stays loaded after its first visit, even while another tab is selected. Reloading or quitting discards this memory. Unsaved Code edits, retained team plans and live embedded terminals share one native leave confirmation; choosing to leave discards the drafts and hangs up those terminals. Cancelling preserves them. Already prepared people and their work remain real. Display-name and appearance preferences persist separately.
 
@@ -175,7 +175,7 @@ Use the file-search action or Cmd+P/Ctrl+P while Code is active for **Quick Open
 
 Use **Save** or Cmd+S/Ctrl+S to write the selected file. Saves compare the disk version with the version you read. If another process changed it, saving is blocked and your draft stays intact. **Review disk version** shows the competing content. **Keep my draft** accepts that reviewed disk version as the comparison base while retaining your text; it writes nothing. A later **Save** can replace that version, but still refuses any newer disk change. **Discard draft and use disk version** instead replaces the draft with the reviewed content. A refresh or focus check can load disk changes when the buffer is clean. Symlink/path checks keep access within the chosen workspace, and saving through a symlink is refused. The editor handles existing text files; its controls do not create or delete files.
 
-**Files** and **Git** in the toolbar show or hide the file tree and the changes panel. The editor's own command palette (F1) holds editor commands such as **View: Toggle Word Wrap** (Alt+Z; wrap starts off). It also holds four agent actions, which are on the right-click menu too:
+**Files** in the toolbar shows or hides the file tree. The editor's own command palette (F1) holds editor commands such as **View: Toggle Word Wrap** (Alt+Z; wrap starts off). It also holds four agent actions, which are on the right-click menu too:
 
 - **Agents: Ask the Desk** mails your question to the desk person.
 - **Agents: Ask Whoever Wrote This** mails the agent session that last edited or wrote the file and is still in the organization, found from recorded tool calls. A person at home reads it when called back in.
@@ -184,7 +184,6 @@ Use **Save** or Cmd+S/Ctrl+S to write the selected file. Saves compare the disk 
 
 Each action sends the file path and line range, plus the selected code when there is a selection. Its thread opens inline under those lines: replies (or the review's findings) appear there, you can reply in place, and the same thread is in Mail. Inline threads stay with their file while Workplace runs.
 
-The **Repository changes** panel is read-only Git status and diff inspection: staged, unstaged and untracked paths, with explicit refresh. Git inspection requires the repository's top-level directory. It does not stage, commit, discard, push or execute arbitrary commands.
 
 ### Captured reviews
 
@@ -202,7 +201,19 @@ Absolute paths and `~/` paths do not depend on Code's currently selected reposit
 
 Choose **New terminal** in Code to start a real local pseudo-terminal in the selected directory, using your configured interactive login shell. Opening Code or showing an empty terminal panel starts no shell. Sessions retain their own directories when you switch repositories, Workplace views or hide the panel; the selected directory is only the default for the next new terminal. The terminal viewport uses one high-contrast dark palette in both light and dark app appearances; its surrounding controls follow the app theme. These shells are not Pi people, do not attach to existing tmux sessions and are not restored after the app restarts.
 
-The close/trash action hangs up that terminal. Switching to World retains terminals just like the other tabs. Reloading the page or closing the app hangs them up only after you confirm leaving. A page crash also closes its terminals. Live sessions participate in the existing native leave warning, while exited tabs do not. Hangup follows ordinary terminal semantics: foreground work normally ends, but deliberately detached or `nohup` jobs may survive. Commands run with your local user permissions and can change files or other system state; the Git panel remains read-only.
+The close/trash action hangs up that terminal. Switching to World retains terminals just like the other tabs. Reloading the page or closing the app hangs them up only after you confirm leaving. A page crash also closes its terminals. Live sessions participate in the existing native leave warning, while exited tabs do not. Hangup follows ordinary terminal semantics: foreground work normally ends, but deliberately detached or `nohup` jobs may survive. Commands run with your local user permissions and can change files or other system state.
+
+## Git manages a repository
+
+Choose **Git** for one repository or worktree at a time: pick a known repository, a linked worktree, or enter an absolute path. Everything runs the machine's `git` as you, with your configuration, credentials and hooks. The view refreshes when it opens and when the window regains focus.
+
+- The **graph** lists commits newest first with lanes, merge curves and branch, remote and tag labels; **Load more history** pages further back. A **Working changes** row sits on top while anything is uncommitted.
+- The **sidebar** lists local branches with ahead/behind counts, each remote's branches, tags, stashes and worktrees, with a filter. Double-click a branch to check it out; checking out a remote branch creates a tracking branch. Right-click a branch to merge it, rebase onto it, branch from it or delete it (when Git refuses because of unmerged commits, a second confirmation offers a force delete); right-click a stash to apply, pop or drop it, and a tag to delete it.
+- Select **Working changes** to stage, unstage or discard files (discard asks first and removes untracked files) and to commit with a summary and description, optionally amending; Cmd+Enter commits. Select a commit to see its message, author, parents and files; a file opens its diff with old and new line numbers, and Escape returns to the graph.
+- Right-click a commit to check it out detached, branch or tag from it, cherry-pick, revert, copy its SHA, or reset the current branch to it (soft, mixed, or hard after confirmation).
+- The toolbar fetches, pulls and pushes (a branch without an upstream is pushed to `origin`, or the first remote, and tracks it), creates a branch, and stashes or pops. During a merge, rebase, cherry-pick or revert a banner offers **Continue** and **Abort**.
+
+Network commands use SSH in batch mode, so a key that needs a passphrase prompt fails with Git's message instead of waiting. Failures show Git's own output.
 
 ## Issues reads Jira or GitHub and delegates work
 
@@ -218,7 +229,7 @@ Recipient/goal drafts and in-flight receipt tracking remain when switching issue
 
 The session-state runtime remains the database's only writer. Agent Workplace's backend reads it query-only and sends commands over the existing socket. Pi transcripts own session history; runtime threads own mail/channel history and cursors; assignments and task files own work. Workplace adds no mirror database or parallel delivery engine.
 
-Code uses `web/workplace-code.tsx`, `web/workplace-monaco.ts` and the query/file boundary in `src/backend/workspace.ts`; its editor and language workers ship in the built assets, without a CDN download. Git inspection lives in `web/workplace-git.tsx`. Quick Open uses `web/workplace-quick-open.tsx`; the embedded terminal uses `web/workplace-terminal.tsx` and `src/backend/embedded-terminal.ts`. Ghostty's JavaScript and WASM ship in built renderer assets; `@lydell/node-pty` remains an external runtime npm dependency so its native platform addon resolves normally. Issues lives in `web/workplace-issues.tsx` and reuses the Jira/GitHub/sign-in/delegation APIs. Connections lives in `web/workplace-connections.tsx`; `web/workplace-issues-source.ts` shares its device-local source choice with the retained Issues readers. Local display names live in `web/workplace-names.ts`.
+Code uses `web/workplace-code.tsx`, `web/workplace-monaco.ts` and the query/file boundary in `src/backend/workspace.ts`; its editor and language workers ship in the built assets, without a CDN download. Git lives in `web/workplace-git.tsx` over `src/backend/git.ts`. Quick Open uses `web/workplace-quick-open.tsx`; the embedded terminal uses `web/workplace-terminal.tsx` and `src/backend/embedded-terminal.ts`. Ghostty's JavaScript and WASM ship in built renderer assets; `@lydell/node-pty` remains an external runtime npm dependency so its native platform addon resolves normally. Issues lives in `web/workplace-issues.tsx` and reuses the Jira/GitHub/sign-in/delegation APIs. Connections lives in `web/workplace-connections.tsx`; `web/workplace-issues-source.ts` shares its device-local source choice with the retained Issues readers. Local display names live in `web/workplace-names.ts`.
 
 The React entry is `apps/agent-workplace/web/entry.ts`; Workplace lives in `web/workplace.tsx` and `web/workplace.css`. Org's view lives in `web/workplace-org.tsx`, its team overview/hierarchy in `web/workplace-org-chart.tsx`, reporting confirmation in `web/workplace-org-confirm.tsx`, and immediate recruitment in `web/workplace-add-person.tsx`. `web/workplace-work-history.tsx` presents recorded work, while `web/workplace-org-search.tsx` searches snapshot metadata. Its query-only command controller is `src/backend/org.ts`, with public DTOs in `src/org.ts`. Profiles live in `web/workplace-people.tsx`; session rendering remains shared with World. All pages use the narrow typed preload API. Electron allows only the exact internal World/Workplace routes and delegates explicit external link opening through the existing policy.
 

@@ -1,12 +1,9 @@
 ## file
 
-Changed-file rows match the 30px `.wp-icon-button` height owned by workplace.css; keep the row and shared icon dimensions coordinated if that control changes. The primary diff action shrinks and ellipsizes its path, while the separate editor icon remains visible at rest. Full current/previous paths stay in the row tooltip; rename metadata remains inline rather than adding a second row. Empty groups are absent, and branch text truncates instead of expanding the header.
-Why: status scanning needs a steady row rhythm. Repeated View diff buttons and wrapped paths consumed the narrow sidebar without adding distinct choices. Shared icon affordances remain owned by Workplace's button styles rather than duplicated here.
+Every colour is a `--wp-*` variable so themes from Settings repaint the Git app; the workplace palette rule refuses literal colours here. Lane colours are the one exception and live in workplace-git.tsx (SVG strokes and fills), chosen to stay readable on both light and dark panels.
+Why: a literal colour in this sheet breaks every non-house theme.
 
-The source-control sidebar contains the changes list and status; the main Code area owns the diff viewer. Keep the sidebar list shrinkable and independently scrollable. GitDiffText's pre relies on the `.wp-code-diff` wrapper in workplace-code.css for available height and visibility; the pre owns keyboard and pointer scrolling within that space. WorkplaceCode owns mounting and tab state.
-Why: a bounded 340px sidebar could fit a diff technically while leaving the large editor area empty. Reading the patch in the main area uses the available width without discarding unsaved editor models.
-
-Diff text is escaped preformatted content with backend whitespace retained. Added/removed spans use theme-tinted backgrounds and the normal text foreground; neutral file headers keep the surrounding diff color. Inline spans retain original newline characters rather than adding block-level line breaks. The scroll area is keyboard-focusable. Palette variables belong to Workplace; diff-text selectors are independent of the sidebar because the component renders in the main Code area.
-Why: long unified-diff lines need horizontal scrolling without wrapping away structure. Block-level spans plus retained newlines would change visual spacing, and palette-aware normal text avoids relying on hue alone.
-Coupled: apps/agent-workplace/web/workplace-git.tsx, apps/agent-workplace/web/workplace-code.css, apps/agent-workplace/web/workplace.css
-Verify: apps/agent-workplace/tests/world-code.test.ts
+The layout is three columns (branches, graph or diff, details) with usePaneResize separators on the outer two. Each column scrolls on its own; the commit form stays pinned at the bottom of the details column. Commit rows are a fixed-height CSS grid whose first column width comes from `--wp-gitx-graph`, set from the widest lane count, so lane SVGs and text columns line up across rows. Below 1100px the author column keeps only its avatar and the SHA column and toolbar captions hide.
+Why: a fixed row height is what lets each row's SVG segment join its neighbours into continuous lanes.
+Coupled: apps/agent-workplace/web/workplace-git.tsx, apps/agent-workplace/web/workplace.css
+Verify: apps/agent-workplace/tests/world-git.test.ts

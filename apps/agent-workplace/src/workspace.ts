@@ -17,19 +17,10 @@ export interface WorkspaceSave extends WorkspacePath {
 	text: string;
 	baseHash: string;
 }
-export interface WorkspaceDiff extends WorkspacePath {
-	staged?: boolean;
-}
 export interface WorkspaceEntry {
 	name: string;
 	path: string;
 	kind: "directory" | "file" | "symlink" | "other";
-}
-export interface WorkspaceGitEntry {
-	path: string;
-	previousPath?: string;
-	index: string;
-	worktree: string;
 }
 export interface WorkspaceWorktree {
 	path: string;
@@ -49,10 +40,6 @@ export interface WorkspaceApi {
 	tree(request: WorkspacePath): Promise<WorkspaceResult<{ root: string; path: string; entries: WorkspaceEntry[] }>>;
 	readFile(request: WorkspacePath): Promise<WorkspaceReadResult>;
 	saveFile(request: WorkspaceSave): Promise<WorkspaceResult<{ hash: string }>>;
-	gitStatus(request: {
-		root: string;
-	}): Promise<WorkspaceResult<{ entries: WorkspaceGitEntry[]; branch: string | null }>>;
-	gitDiff(request: WorkspaceDiff): Promise<WorkspaceResult<{ text: string }>>;
 }
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 export const isWorkspaceResolvePaths = (value: unknown): value is WorkspaceResolvePaths =>
@@ -70,5 +57,3 @@ export const isWorkspaceSave = (value: unknown): value is WorkspaceSave =>
 	typeof value.text === "string" &&
 	"baseHash" in value &&
 	typeof value.baseHash === "string";
-export const isWorkspaceDiff = (value: unknown): value is WorkspaceDiff =>
-	isWorkspacePath(value) && (!("staged" in value) || value.staged === undefined || typeof value.staged === "boolean");

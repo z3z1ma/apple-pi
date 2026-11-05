@@ -574,7 +574,7 @@ function searchMessages(db, person, options) {
 //#endregion
 //#region apps/agent-workplace/src/backend/communications.ts
 var reasonOf$1 = (error) => error instanceof Error ? error.message : String(error);
-function text$6(value, label) {
+function text$7(value, label) {
 	if (typeof value !== "string" || !value.trim()) throw new Error(`${label} is required.`);
 	return value;
 }
@@ -611,7 +611,7 @@ function openCommunications(path, commands) {
 		let attempt = "";
 		let submitted = false;
 		try {
-			attempt = communicationAttemptId(OPERATOR$1, text$6(request?.attempt, "An attempt ID"));
+			attempt = communicationAttemptId(OPERATOR$1, text$7(request?.attempt, "An attempt ID"));
 			const { attempt: _invocation, ...arguments_ } = request;
 			const input = {
 				tool: `workplace.${tool}`,
@@ -653,8 +653,8 @@ function openCommunications(path, commands) {
 				threadKind: "mail",
 				to: people(request.to),
 				cc: people(request.cc),
-				subject: text$6(request.subject, "A subject"),
-				body: text$6(request.body, "A message")
+				subject: text$7(request.subject, "A subject"),
+				body: text$7(request.body, "A message")
 			}));
 		},
 		async findChannels(options) {
@@ -666,9 +666,9 @@ function openCommunications(path, commands) {
 		createChannel(request) {
 			return mutate(request, "createChannel", () => ({
 				action: "create_channel",
-				scopeHead: text$6(request.scopeHead, "An organization scope"),
-				name: text$6(request.name, "A channel name"),
-				purpose: text$6(request.purpose, "A channel purpose"),
+				scopeHead: text$7(request.scopeHead, "An organization scope"),
+				name: text$7(request.name, "A channel name"),
+				purpose: text$7(request.purpose, "A channel purpose"),
 				invite: people(request.invite)
 			}));
 		},
@@ -700,7 +700,7 @@ function openCommunications(path, commands) {
 				attempt: request?.attempt ?? ""
 			}, "readThread", () => ({
 				action: "read",
-				thread: text$6(request.thread, "A conversation"),
+				thread: text$7(request.thread, "A conversation"),
 				view: "catch_up",
 				limit: request.limit,
 				after: request.after,
@@ -721,34 +721,34 @@ function openCommunications(path, commands) {
 		post(request) {
 			return mutate(request, "post", () => ({
 				action: "post",
-				thread: text$6(request.thread, "A conversation"),
-				body: text$6(request.body, "A message"),
+				thread: text$7(request.thread, "A conversation"),
+				body: text$7(request.body, "A message"),
 				notify: people(request.notify)
 			}));
 		},
 		join(request) {
 			return mutate(request, "join", () => ({
 				action: "join",
-				thread: text$6(request.thread, "A channel")
+				thread: text$7(request.thread, "A channel")
 			}));
 		},
 		leave(request) {
 			return mutate(request, "leave", () => ({
 				action: "leave",
-				thread: text$6(request.thread, "A conversation")
+				thread: text$7(request.thread, "A conversation")
 			}));
 		},
 		invite(request) {
 			return mutate(request, "invite", () => ({
 				action: "invite",
-				thread: text$6(request.thread, "A conversation"),
+				thread: text$7(request.thread, "A conversation"),
 				people: people(request.people)
 			}));
 		},
 		removeInvitations(request) {
 			return mutate(request, "removeInvitations", () => ({
 				action: "remove",
-				thread: text$6(request.thread, "A conversation"),
+				thread: text$7(request.thread, "A conversation"),
 				people: people(request.people)
 			}));
 		},
@@ -783,7 +783,7 @@ function openCommunications(path, commands) {
 				if (!Number.isSafeInteger(request.seq) || request.seq < 1) throw new Error("A message sequence is required.");
 				return {
 					action: "pin",
-					thread: text$6(request.thread, "A conversation"),
+					thread: text$7(request.thread, "A conversation"),
 					seq: request.seq
 				};
 			});
@@ -791,23 +791,23 @@ function openCommunications(path, commands) {
 		archive(request) {
 			return mutate(request, "archive", () => ({
 				action: "archive",
-				thread: text$6(request.thread, "A conversation"),
-				body: text$6(request.summary, "A conclusion"),
+				thread: text$7(request.thread, "A conversation"),
+				body: text$7(request.summary, "A conclusion"),
 				notify: people(request.notify)
 			}));
 		},
 		reopen(request) {
 			return mutate(request, "reopen", () => ({
 				action: "reopen",
-				thread: text$6(request.thread, "A conversation"),
-				body: text$6(request.reason, "A reopening reason"),
+				thread: text$7(request.thread, "A conversation"),
+				body: text$7(request.reason, "A reopening reason"),
 				notify: people(request.notify)
 			}));
 		},
 		async status(request) {
 			let attempt = "";
 			try {
-				attempt = text$6(request?.attempt, "An attempt ID");
+				attempt = text$7(request?.attempt, "An attempt ID");
 				return read((db) => {
 					const direct = communicationAttempt(db, OPERATOR$1, attempt);
 					if (direct.outcome !== "not_recorded") return direct;
@@ -1617,6 +1617,855 @@ function openEmbeddedTerminals() {
 	};
 }
 //#endregion
+//#region apps/agent-workplace/src/backend/workspace.ts
+var hash$1 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+var failure = (error) => ({
+	ok: false,
+	reason: error instanceof Error ? error.message : String(error)
+});
+function inside(root, path) {
+	const rel = relative(root, path);
+	return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`);
+}
+function within$2(root, path) {
+	if (!inside(root, path)) throw new Error("The path is outside the workspace root.");
+	if (relative(root, path).split(sep).includes(".git")) throw new Error("Git metadata is not available in the file editor.");
+}
+function directory(root) {
+	if (!isAbsolute(root)) throw new Error("Choose an absolute workspace directory.");
+	const canonical = realpathSync(root);
+	if (canonical.split(sep).includes(".git")) throw new Error("Git metadata is not available in the file editor.");
+	if (!statSync(canonical).isDirectory()) throw new Error("The workspace root is not a directory.");
+	return canonical;
+}
+function locate$1(request) {
+	const root = directory(request.root);
+	if (isAbsolute(request.path) || request.path.includes("\0")) throw new Error("Use a relative file path.");
+	const named = resolve(root, request.path);
+	within$2(root, named);
+	const path = realpathSync(named);
+	within$2(root, path);
+	return {
+		root,
+		path,
+		named
+	};
+}
+function referenceRoot(named, parent, source) {
+	if (!source) return parent;
+	if (inside(source, parent)) return source;
+	for (let at = dirname(named);; at = dirname(at)) {
+		if (realpathSync(at) === source) return source;
+		if (dirname(at) === at) return parent;
+	}
+}
+function resolveReference(candidate, source) {
+	if (!candidate || candidate.includes("\0") || candidate.startsWith("~") && !candidate.startsWith("~/")) return;
+	const spelling = candidate.startsWith("~/") ? join(homedir(), candidate.slice(2)) : candidate;
+	let request;
+	if (isAbsolute(spelling)) {
+		const named = resolve(spelling);
+		const parent = directory(dirname(named));
+		const file = join(parent, basename(named));
+		const root = referenceRoot(named, parent, source);
+		request = {
+			root,
+			path: relative(root, file)
+		};
+	} else {
+		if (!source) return;
+		request = {
+			root: source,
+			path: spelling
+		};
+	}
+	const at = locate$1(request);
+	if (!statSync(at.path).isFile()) return;
+	return {
+		candidate,
+		root: at.root,
+		path: relative(at.root, at.path)
+	};
+}
+function bytesAt(path) {
+	if (!statSync(path).isFile()) throw new Error("Choose a regular file.");
+	return readFileSync(path);
+}
+var NonTextFileError = class extends Error {};
+function textOf(bytes) {
+	if (bytes.subarray(0, 5).equals(Buffer.from("%PDF-"))) throw new NonTextFileError("PDF documents cannot be edited here.");
+	if (bytes.includes(0)) throw new NonTextFileError("Binary files cannot be edited here.");
+	try {
+		return new TextDecoder("utf-8", {
+			fatal: true,
+			ignoreBOM: true
+		}).decode(bytes);
+	} catch {
+		throw new NonTextFileError("This file is not valid UTF-8 text.");
+	}
+}
+async function attempt(action) {
+	try {
+		return {
+			ok: true,
+			...await action()
+		};
+	} catch (error) {
+		return failure(error);
+	}
+}
+var KEPT_GIT_VARIABLES = [
+	"GIT_OPTIONAL_LOCKS",
+	"GIT_TERMINAL_PROMPT",
+	"GIT_EDITOR",
+	"GIT_SSH_COMMAND"
+];
+function git(root, args, options = {}) {
+	return new Promise((resolve, reject) => {
+		const env = {
+			...process.env,
+			LC_ALL: "C",
+			GIT_OPTIONAL_LOCKS: "0",
+			GIT_TERMINAL_PROMPT: "0",
+			GIT_EDITOR: "true",
+			GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND ?? "ssh -o BatchMode=yes"
+		};
+		for (const key of Object.keys(env)) if (key.startsWith("GIT_") && !KEPT_GIT_VARIABLES.includes(key)) delete env[key];
+		const child = spawn("git", [
+			"--no-pager",
+			"-c",
+			"core.fsmonitor=false",
+			"-C",
+			root,
+			...args
+		], {
+			env,
+			stdio: [
+				"pipe",
+				"pipe",
+				"pipe"
+			]
+		});
+		child.stdin.on("error", () => void 0);
+		child.stdin.end(options.input ?? "");
+		const out = [], err = [];
+		child.stdout.on("data", (chunk) => out.push(chunk));
+		child.stderr.on("data", (chunk) => err.push(chunk));
+		child.on("error", reject);
+		child.on("close", (code) => code === 0 || code !== null && options.ok?.includes(code) ? resolve(Buffer.concat(options.combined ? [...out, ...err] : out).toString("utf8")) : reject(new Error(Buffer.concat(err).toString("utf8").trim() || Buffer.concat(out).toString("utf8").trim() || `Git exited with ${code}.`)));
+	});
+}
+async function gitRoot(root) {
+	return directory((await git(root, ["rev-parse", "--show-toplevel"])).replace(/\n$/, ""));
+}
+async function repositoryRoot(path) {
+	const root = directory(path);
+	const top = await gitRoot(root);
+	if (root !== top) throw new Error(`Open the repository root to view Git changes: ${top}`);
+	return root;
+}
+function listedFile(root, path) {
+	const named = resolve(root, path);
+	try {
+		within$2(root, named);
+	} catch {
+		return false;
+	}
+	let canonical;
+	try {
+		if (!lstatSync(named).isFile()) return false;
+		canonical = realpathSync(named);
+	} catch (error) {
+		if (["ENOENT", "ENOTDIR"].includes(error.code ?? "")) return false;
+		throw error;
+	}
+	try {
+		within$2(root, canonical);
+		return true;
+	} catch {
+		return false;
+	}
+}
+function folderFiles(root) {
+	const folders = [root];
+	const paths = [];
+	while (folders.length) {
+		const folder = folders.pop();
+		if (!lstatSync(folder).isDirectory()) continue;
+		const canonical = realpathSync(folder);
+		try {
+			within$2(root, canonical);
+		} catch {
+			continue;
+		}
+		for (const entry of readdirSync(canonical, { withFileTypes: true })) {
+			if (entry.name === ".git") continue;
+			const path = join(canonical, entry.name);
+			if (entry.isDirectory()) folders.push(path);
+			else if (entry.isFile() && listedFile(root, path)) paths.push(relative(root, path));
+		}
+	}
+	return paths.sort();
+}
+async function workspaceFiles(root) {
+	let inside;
+	try {
+		inside = await git(root, ["rev-parse", "--is-inside-work-tree"]);
+	} catch (error) {
+		if (error instanceof Error && error.message.startsWith("fatal: not a git repository")) return folderFiles(root);
+		throw error;
+	}
+	if (inside.trim() !== "true") throw new Error("Choose a working directory, not a bare Git repository.");
+	const paths = (await git(root, [
+		"ls-files",
+		"--cached",
+		"--others",
+		"--exclude-standard",
+		"-z"
+	])).split("\0");
+	return [...new Set(paths.filter((path) => path && listedFile(root, path)))].sort();
+}
+function parseWorktrees(output, root) {
+	return output.split("\0\0").filter(Boolean).map((record) => {
+		const fields = record.split("\0");
+		const value = (key) => fields.find((field) => field === key || field.startsWith(`${key} `))?.slice(key.length + 1);
+		const path = value("worktree");
+		if (!path) throw new Error("Git returned a worktree without a path.");
+		const locked = value("locked"), prunable = value("prunable");
+		return {
+			path,
+			branch: value("branch")?.replace(/^refs\/heads\//, "") ?? null,
+			head: value("HEAD") ?? null,
+			detached: fields.includes("detached"),
+			bare: fields.includes("bare"),
+			current: path === root,
+			...locked !== void 0 ? { locked } : {},
+			...prunable !== void 0 ? { prunable } : {}
+		};
+	});
+}
+function save(request) {
+	let temporary;
+	try {
+		const at = locate$1(request);
+		if (lstatSync(at.named).isSymbolicLink()) throw new Error("Open the symlink target directly before saving.");
+		const before = statSync(at.path);
+		const bytes = bytesAt(at.path);
+		textOf(bytes);
+		if (hash$1(bytes) !== request.baseHash) return {
+			ok: false,
+			conflict: true,
+			reason: "The file changed on disk. Reload before saving."
+		};
+		const next = Buffer.from(request.text, "utf8");
+		textOf(next);
+		temporary = join(dirname(at.path), `.workspace-save-${randomUUID()}`);
+		const fd = openSync(temporary, "wx", before.mode);
+		try {
+			writeFileSync(fd, next);
+			chmodSync(temporary, before.mode);
+			fsyncSync(fd);
+		} finally {
+			closeSync(fd);
+		}
+		const current = locate$1(request);
+		const now = statSync(current.path);
+		if (current.path !== at.path || lstatSync(current.named).isSymbolicLink() || before.ino !== now.ino || before.dev !== now.dev || before.mode !== now.mode || hash$1(bytesAt(current.path)) !== request.baseHash) return {
+			ok: false,
+			conflict: true,
+			reason: "The file changed while saving. Reload before saving."
+		};
+		renameSync(temporary, at.path);
+		temporary = void 0;
+		return {
+			ok: true,
+			hash: hash$1(next)
+		};
+	} catch (error) {
+		return failure(error);
+	} finally {
+		if (temporary) unlinkSync(temporary);
+	}
+}
+function openWorkspace(snapshot) {
+	return {
+		resolvePaths: (request) => attempt(() => {
+			let source;
+			if (request.cwd !== void 0) try {
+				source = directory(request.cwd);
+			} catch {}
+			const files = [];
+			for (const candidate of new Set(request.paths)) try {
+				const file = resolveReference(candidate, source);
+				if (file) files.push(file);
+			} catch {}
+			return { files };
+		}),
+		repositories: () => attempt(async () => {
+			const world = snapshot();
+			const candidates = new Set([...world.characters.map((person) => person.facts?.cwd), ...(world.dormant ?? []).map((person) => person.cwd)].filter((cwd) => Boolean(cwd)));
+			const roots = /* @__PURE__ */ new Set();
+			for (const candidate of candidates) try {
+				roots.add(await gitRoot(directory(candidate)));
+			} catch {}
+			return { roots: [...roots].sort() };
+		}),
+		files: (request) => attempt(async () => {
+			const root = directory(request.root);
+			return {
+				root,
+				paths: await workspaceFiles(root)
+			};
+		}),
+		worktrees: (request) => attempt(async () => {
+			const root = await gitRoot(directory(request.root));
+			return {
+				root,
+				worktrees: parseWorktrees(await git(root, [
+					"worktree",
+					"list",
+					"--porcelain",
+					"-z"
+				]), root)
+			};
+		}),
+		tree: (request) => attempt(() => {
+			const at = locate$1(request);
+			const entries = readdirSync(at.path, { withFileTypes: true }).filter((entry) => entry.name !== ".git").map((entry) => ({
+				name: entry.name,
+				path: join(request.path, entry.name),
+				kind: entry.isDirectory() ? "directory" : entry.isFile() ? "file" : entry.isSymbolicLink() ? "symlink" : "other"
+			}));
+			entries.sort((a, b) => Number(b.kind === "directory") - Number(a.kind === "directory") || a.name.localeCompare(b.name));
+			return {
+				root: at.root,
+				path: request.path,
+				entries
+			};
+		}),
+		readFile: async (request) => {
+			let file;
+			try {
+				const at = locate$1(request);
+				const bytes = bytesAt(at.path);
+				file = at.path;
+				return {
+					ok: true,
+					root: at.root,
+					path: request.path,
+					text: textOf(bytes),
+					hash: hash$1(bytes)
+				};
+			} catch (error) {
+				return {
+					...failure(error),
+					...error instanceof NonTextFileError && file ? { nonTextFile: pathToFileURL(file).href } : {}
+				};
+			}
+		},
+		saveFile: async (request) => save(request)
+	};
+}
+//#endregion
+//#region apps/agent-workplace/src/backend/git.ts
+var FIELD = "";
+var RECORD = "";
+var COMMIT_FORMAT = [
+	"%H",
+	"%P",
+	"%an",
+	"%ae",
+	"%at",
+	"%s",
+	"%D"
+].join("%x1f");
+function relativePath(root, path) {
+	if (!path || isAbsolute(path) || path.includes("\0")) throw new Error("Choose a relative file path.");
+	within$2(root, resolve(root, path));
+	return `:(literal)${path}`;
+}
+function revision(value) {
+	if (!value || value.startsWith("-") || /[\s\0]/.test(value) || value.includes("..")) throw new Error(`Not a revision: ${JSON.stringify(value)}`);
+	return value;
+}
+function branchName(value) {
+	if (!value || value.startsWith("-") || /[\s\0~^:?*[\\]/.test(value) || value.includes("..")) throw new Error(`Not a valid name: ${JSON.stringify(value)}`);
+	return value;
+}
+function parseStatus(output) {
+	const records = output.split("\0");
+	const changes = [];
+	for (let i = 0; i < records.length; i++) {
+		const record = records[i];
+		if (!record) continue;
+		const change = {
+			path: record.slice(3),
+			index: record[0],
+			worktree: record[1]
+		};
+		if (/[RC]/.test(record.slice(0, 2))) change.previousPath = records[++i];
+		changes.push(change);
+	}
+	return changes;
+}
+function refsOf(decoration) {
+	return decoration.split(", ").filter(Boolean).map((ref) => ref.replace(/^HEAD -> /, "HEAD -> "));
+}
+function parseLog(output) {
+	return output.split(RECORD).map((record) => record.replace(/^\n/, "")).filter(Boolean).map((record) => {
+		const [sha, parents, author, email, date, subject, decoration] = record.split(FIELD);
+		return {
+			sha,
+			parents: parents ? parents.split(" ") : [],
+			author,
+			email,
+			date: Number(date),
+			subject,
+			refs: refsOf(decoration ?? "")
+		};
+	});
+}
+function parseTrack(track) {
+	if (track === "gone") return { gone: true };
+	const ahead = /ahead (\d+)/.exec(track)?.[1];
+	const behind = /behind (\d+)/.exec(track)?.[1];
+	return {
+		ahead: Number(ahead ?? 0),
+		behind: Number(behind ?? 0)
+	};
+}
+function parseRefs(output) {
+	return output.split("\n").filter(Boolean).flatMap((line) => {
+		const [full, target, upstream, track, head] = line.split(FIELD);
+		const current = head === "*";
+		if (full.startsWith("refs/heads/")) return [{
+			name: full.slice(11),
+			kind: "local",
+			target,
+			current,
+			...upstream ? {
+				upstream,
+				...parseTrack(track)
+			} : {}
+		}];
+		if (full.startsWith("refs/remotes/")) {
+			const name = full.slice(13);
+			if (name.endsWith("/HEAD")) return [];
+			return [{
+				name,
+				kind: "remote",
+				target,
+				current: false
+			}];
+		}
+		if (full.startsWith("refs/tags/")) return [{
+			name: full.slice(10),
+			kind: "tag",
+			target,
+			current: false
+		}];
+		return [];
+	});
+}
+function parseFiles(output) {
+	const fields = output.split("\0").filter((field, index, all) => field || index < all.length - 1);
+	const files = [];
+	for (let i = 0; i < fields.length; i++) {
+		const status = fields[i];
+		if (!status) continue;
+		if (/^[RC]/.test(status)) {
+			files.push({
+				status: status[0],
+				previousPath: fields[i + 1],
+				path: fields[i + 2]
+			});
+			i += 2;
+		} else {
+			files.push({
+				status: status[0],
+				path: fields[i + 1]
+			});
+			i += 1;
+		}
+	}
+	return files;
+}
+async function gitState(root) {
+	const dir = (await git(root, ["rev-parse", "--absolute-git-dir"])).trim();
+	if (existsSync(join(dir, "rebase-merge")) || existsSync(join(dir, "rebase-apply"))) return "rebasing";
+	if (existsSync(join(dir, "MERGE_HEAD"))) return "merging";
+	if (existsSync(join(dir, "CHERRY_PICK_HEAD"))) return "cherry-picking";
+	if (existsSync(join(dir, "REVERT_HEAD"))) return "reverting";
+	return "clean";
+}
+async function overview(root) {
+	const [status, refsOutput, stashOutput, remotesOutput, worktreeOutput, state, head] = await Promise.all([
+		git(root, [
+			"status",
+			"--porcelain=v1",
+			"-z",
+			"--untracked-files=all"
+		]),
+		git(root, [
+			"for-each-ref",
+			"--format=%(refname)%1f%(objectname)%1f%(upstream:short)%1f%(upstream:track,nobracket)%1f%(HEAD)",
+			"refs/heads",
+			"refs/remotes",
+			"refs/tags"
+		]),
+		git(root, [
+			"stash",
+			"list",
+			"--format=%gd%x1f%ct%x1f%gs"
+		]),
+		git(root, ["remote"]),
+		git(root, [
+			"worktree",
+			"list",
+			"--porcelain",
+			"-z"
+		]),
+		gitState(root),
+		git(root, [
+			"rev-parse",
+			"--verify",
+			"--quiet",
+			"HEAD"
+		], { ok: [1] })
+	]);
+	const refs = parseRefs(refsOutput);
+	const current = refs.find((ref) => ref.kind === "local" && ref.current);
+	return {
+		root,
+		branch: current?.name ?? null,
+		head: head.trim() || null,
+		upstream: current?.upstream ?? null,
+		ahead: current?.ahead ?? 0,
+		behind: current?.behind ?? 0,
+		state,
+		remotes: remotesOutput.split("\n").filter(Boolean),
+		refs,
+		stashes: stashOutput.split("\n").filter(Boolean).map((line) => {
+			const [ref, date, message] = line.split(FIELD);
+			return {
+				index: Number(/\{(\d+)\}/.exec(ref)?.[1] ?? 0),
+				date: Number(date),
+				message
+			};
+		}),
+		worktrees: parseWorktrees(worktreeOutput, root),
+		changes: parseStatus(status)
+	};
+}
+async function show(root, sha) {
+	const at = revision(sha);
+	const [commitSha, parents, author, email, date, subject, decoration, body, committer, committed] = (await git(root, [
+		"show",
+		"-s",
+		`--format=${COMMIT_FORMAT}%x1f%B%x1f%cn%x1f%ct`,
+		at,
+		"--"
+	])).split(FIELD);
+	const parentList = parents ? parents.split(" ") : [];
+	const files = parseFiles(await git(root, [
+		"diff-tree",
+		"-r",
+		"-z",
+		"-M",
+		"--name-status",
+		"--no-commit-id",
+		...parentList.length ? [parentList[0], commitSha] : ["--root", commitSha]
+	]));
+	return {
+		sha: commitSha,
+		parents: parentList,
+		author,
+		email,
+		date: Number(date),
+		subject,
+		refs: refsOf(decoration),
+		body: body.trim(),
+		committer,
+		committed: Number(committed),
+		files
+	};
+}
+async function pushArgs(root, force) {
+	const info = await overview(root);
+	if (!info.branch) throw new Error("Check out a branch before pushing.");
+	const flags = force ? ["--force-with-lease"] : [];
+	if (info.upstream) return ["push", ...flags];
+	const remote = info.remotes.includes("origin") ? "origin" : info.remotes[0];
+	if (!remote) throw new Error("This repository has no remote to push to.");
+	return [
+		"push",
+		...flags,
+		"--set-upstream",
+		remote,
+		info.branch
+	];
+}
+async function checkout(root, ref) {
+	const info = await overview(root);
+	const target = info.refs.find((each) => each.name === ref);
+	if (target?.kind === "remote") {
+		const local = ref.slice(ref.indexOf("/") + 1);
+		if (info.refs.some((each) => each.kind === "local" && each.name === local)) return ["switch", branchName(local)];
+		return [
+			"switch",
+			"--create",
+			branchName(local),
+			"--track",
+			revision(ref)
+		];
+	}
+	if (target?.kind === "local") return ["switch", branchName(ref)];
+	return [
+		"switch",
+		"--detach",
+		revision(ref)
+	];
+}
+async function abortArgs(root, mode) {
+	const command = {
+		rebasing: "rebase",
+		merging: "merge",
+		"cherry-picking": "cherry-pick",
+		reverting: "revert",
+		clean: ""
+	}[await gitState(root)];
+	if (!command) throw new Error("No merge, rebase, cherry-pick or revert is in progress.");
+	if (mode === "continue" && command === "merge") return ["commit", "--no-edit"];
+	return [command, `--${mode}`];
+}
+async function untracked(root, paths) {
+	const output = await git(root, [
+		"ls-files",
+		"--others",
+		"--exclude-standard",
+		"-z",
+		"--",
+		...paths.map((path) => relativePath(root, path))
+	]);
+	return new Set(output.split("\0").filter(Boolean));
+}
+async function argumentsFor(root, action) {
+	const pathspecs = (paths) => {
+		if (!paths.length) throw new Error("Choose at least one file.");
+		return paths.map((path) => relativePath(root, path));
+	};
+	switch (action.kind) {
+		case "stage": return [[
+			"add",
+			"--all",
+			"--",
+			...pathspecs(action.paths)
+		]];
+		case "unstage": return (await git(root, [
+			"rev-parse",
+			"--verify",
+			"--quiet",
+			"HEAD"
+		], { ok: [1] })).trim() ? [[
+			"restore",
+			"--staged",
+			"--",
+			...pathspecs(action.paths)
+		]] : [[
+			"rm",
+			"--cached",
+			"--quiet",
+			"-r",
+			"--",
+			...pathspecs(action.paths)
+		]];
+		case "discard": {
+			const fresh = await untracked(root, action.paths);
+			const tracked = action.paths.filter((path) => !fresh.has(path));
+			return [...tracked.length ? [[
+				"restore",
+				"--source=HEAD",
+				"--staged",
+				"--worktree",
+				"--",
+				...pathspecs(tracked)
+			]] : [], ...fresh.size ? [[
+				"clean",
+				"--force",
+				"--",
+				...pathspecs([...fresh])
+			]] : []];
+		}
+		case "commit":
+			if (!action.message.trim() && !action.amend) throw new Error("Write a commit message.");
+			return [[
+				"commit",
+				...action.amend ? ["--amend"] : [],
+				...action.message.trim() ? ["--file=-"] : ["--no-edit"]
+			]];
+		case "checkout": return [await checkout(root, action.ref)];
+		case "checkoutCommit": return [[
+			"switch",
+			"--detach",
+			revision(action.sha)
+		]];
+		case "createBranch": return [action.checkout ? [
+			"switch",
+			"--create",
+			branchName(action.name),
+			revision(action.from)
+		] : [
+			"branch",
+			branchName(action.name),
+			revision(action.from)
+		]];
+		case "deleteBranch": return [[
+			"branch",
+			action.force ? "--delete" : "--delete",
+			...action.force ? ["--force"] : [],
+			branchName(action.name)
+		]];
+		case "merge": return [[
+			"merge",
+			"--no-edit",
+			revision(action.ref)
+		]];
+		case "rebase": return [["rebase", revision(action.onto)]];
+		case "abort": return [await abortArgs(root, "abort")];
+		case "continue": return [await abortArgs(root, "continue")];
+		case "fetch": return [[
+			"fetch",
+			"--all",
+			"--prune",
+			"--tags"
+		]];
+		case "pull": return [["pull", "--no-edit"]];
+		case "push": return [await pushArgs(root, action.force)];
+		case "stashSave": return [[
+			"stash",
+			"push",
+			...action.untracked ? ["--include-untracked"] : [],
+			...action.message.trim() ? ["--message", action.message.trim()] : []
+		]];
+		case "stashApply": return [[
+			"stash",
+			"apply",
+			`stash@{${action.index}}`
+		]];
+		case "stashPop": return [[
+			"stash",
+			"pop",
+			`stash@{${action.index}}`
+		]];
+		case "stashDrop": return [[
+			"stash",
+			"drop",
+			`stash@{${action.index}}`
+		]];
+		case "cherryPick": return [["cherry-pick", revision(action.sha)]];
+		case "revert": return [[
+			"revert",
+			"--no-edit",
+			revision(action.sha)
+		]];
+		case "reset": return [[
+			"reset",
+			`--${action.mode}`,
+			revision(action.sha)
+		]];
+		case "createTag": return [[
+			"tag",
+			branchName(action.name),
+			revision(action.sha)
+		]];
+		case "deleteTag": return [[
+			"tag",
+			"--delete",
+			branchName(action.name)
+		]];
+	}
+}
+function openGit() {
+	return {
+		overview: (request) => attempt(async () => ({ overview: await overview(await repositoryRoot(request.root)) })),
+		log: (request) => attempt(async () => {
+			const root = await repositoryRoot(request.root);
+			const head = (await git(root, [
+				"rev-parse",
+				"--verify",
+				"--quiet",
+				"HEAD"
+			], { ok: [1] })).trim();
+			const refs = (await git(root, [
+				"for-each-ref",
+				"--count=1",
+				"--format=%(refname)",
+				"refs"
+			])).trim();
+			if (!head && !refs) return { commits: [] };
+			return { commits: parseLog(await git(root, [
+				"log",
+				"--topo-order",
+				"--branches",
+				"--remotes",
+				"--tags",
+				...head ? ["HEAD"] : [],
+				`--format=${COMMIT_FORMAT}%x1e`,
+				`--skip=${request.skip}`,
+				`--max-count=${request.limit}`,
+				"--"
+			])) };
+		}),
+		show: (request) => attempt(async () => {
+			return { commit: await show(await repositoryRoot(request.root), request.sha) };
+		}),
+		diff: (request) => attempt(async () => {
+			const root = await repositoryRoot(request.root);
+			const path = relativePath(root, request.path);
+			if ("commit" in request) {
+				const commit = await show(root, request.commit);
+				const base = commit.parents[0];
+				return { text: await git(root, [
+					"diff",
+					"--no-ext-diff",
+					"--no-textconv",
+					"-M",
+					...base ? [base, commit.sha] : ["--root", commit.sha],
+					"--",
+					path
+				]) };
+			}
+			return { text: !request.staged && (await untracked(root, [request.path])).size > 0 ? await git(root, [
+				"diff",
+				"--no-ext-diff",
+				"--no-textconv",
+				"--no-index",
+				"--",
+				"/dev/null",
+				request.path
+			], { ok: [1] }) : await git(root, [
+				"diff",
+				"--no-ext-diff",
+				"--no-textconv",
+				...request.staged ? ["--cached"] : [],
+				"--",
+				path
+			]) };
+		}),
+		run: (request) => attempt(async () => {
+			const root = await repositoryRoot(request.root);
+			const steps = await argumentsFor(root, request.action);
+			const input = request.action.kind === "commit" && request.action.message.trim() ? request.action.message : void 0;
+			let output = "";
+			for (const args of steps) output += await git(root, args, {
+				input,
+				combined: true
+			});
+			return { output: output.trim() };
+		})
+	};
+}
+//#endregion
 //#region apps/agent-workplace/src/backend/instructions.ts
 var TEXT_MAX$1 = 1e5;
 var reply = (value) => {
@@ -1720,12 +2569,12 @@ function parseShared(json) {
 	parsed.set(json, value);
 	return value;
 }
-var text$5 = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
+var text$6 = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
 function questionsOf(value) {
 	if (!Array.isArray(value) || !value.length) return void 0;
 	const questions = [];
 	for (const raw of value) {
-		const question = text$5(raw?.question);
+		const question = text$6(raw?.question);
 		const options = Array.isArray(raw?.options) ? raw.options.map((option) => ({
 			label: typeof option?.label === "string" ? option.label : "",
 			description: typeof option?.description === "string" ? option.description : ""
@@ -1733,7 +2582,7 @@ function questionsOf(value) {
 		if (!question || !options.length || options.some((option) => !option.label)) return void 0;
 		questions.push({
 			question,
-			header: text$5(raw.header),
+			header: text$6(raw.header),
 			options,
 			multiSelect: raw.multiSelect === true
 		});
@@ -1744,13 +2593,13 @@ function asking(prompt) {
 	if (prompt === null) return null;
 	const open = parse$4(prompt);
 	const first = Array.isArray(open?.questions) ? open.questions[0] : void 0;
-	const kind = text$5(open?.kind) ?? "dialog";
+	const kind = text$6(open?.kind) ?? "dialog";
 	const shown = {
 		kind,
-		text: text$5(open?.title) ?? text$5(first?.question)
+		text: text$6(open?.title) ?? text$6(first?.question)
 	};
 	const questions = kind === "questionnaire" ? questionsOf(open?.questions) : void 0;
-	const id = text$5(open?.id);
+	const id = text$6(open?.id);
 	return questions && id ? {
 		...shown,
 		questionnaire: {
@@ -3478,7 +4327,7 @@ async function settledAll(work) {
 	if (failed) throw failed.reason;
 	return results.map((result) => result.value);
 }
-async function locate$1(cwd, target, signal) {
+async function locate(cwd, target, signal) {
 	const names = [target.kind === "commit" ? target.commit : target.kind === "range" || target.kind === "branch" ? target.head : "HEAD", ...target.kind === "commit" ? target.parent ? [target.parent] : [] : target.kind === "staged" ? [] : [target.base]];
 	const path = (args, from = cwd) => gitLine(from, [
 		"rev-parse",
@@ -3717,7 +4566,7 @@ async function snapshot$1(located, env, working, signal) {
 async function openGitChange(cwd, target, options = {}) {
 	const { signal } = options;
 	await requireGit(signal);
-	const located = await locate$1(cwd, target, signal).catch((error) => {
+	const located = await locate(cwd, target, signal).catch((error) => {
 		throw new Error(`Cannot resolve the Git target: ${error.message}`);
 	});
 	const mutable = target.kind === "staged" || target.kind === "working-tree";
@@ -3798,7 +4647,7 @@ function openTrees(root, baseTree, headTree, options = {}) {
 }
 //#endregion
 //#region components/shared/src/real-path.ts
-function within$2(path, dir) {
+function within$1(path, dir) {
 	const rel = relative(dir, path);
 	return rel === "" || rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
@@ -4098,12 +4947,12 @@ function reviewRolePolicy(source, name, depth = "standard") {
 //#endregion
 //#region components/code-review/src/capture.ts
 var DIFF = [...GIT_DIFF, "--no-renames"];
-var hash$1 = (value) => createHash("sha256").update(value).digest("hex");
+var hash = (value) => createHash("sha256").update(value).digest("hex");
 async function reviewLabel(change, repository, target, signal) {
 	const committed = target.kind !== "working-tree" && target.kind !== "staged";
 	const optional = (query) => query.catch(() => null);
 	const [branch, subject, commits] = await settledAll([
-		optional(text$4(repository, [
+		optional(text$5(repository, [
 			"symbolic-ref",
 			"--short",
 			"-q",
@@ -4129,7 +4978,7 @@ async function reviewLabel(change, repository, target, signal) {
 	};
 }
 function artifactDigest(artifact) {
-	return hash$1(JSON.stringify({
+	return hash(JSON.stringify({
 		version: artifact.version,
 		repository: artifact.repository,
 		commonDirectory: artifact.commonDirectory,
@@ -4151,7 +5000,7 @@ function artifactDigest(artifact) {
 	}));
 }
 var bytes = (cwd, args, options) => gitRun(cwd, args, options);
-var text$4 = (cwd, args, options) => gitLine(cwd, args, options);
+var text$5 = (cwd, args, options) => gitLine(cwd, args, options);
 function scopedPatch(artifact, signal) {
 	return bytes(artifact.source, [
 		"--literal-pathspecs",
@@ -4165,24 +5014,24 @@ function scopedPatch(artifact, signal) {
 }
 async function verifyCapturedSource(artifact, signal) {
 	if (artifactDigest(artifact) !== artifact.digest) throw new Error("Review manifest identity changed");
-	if (hash$1(await readFile(join(dirname(artifact.source), "change.patch"))) !== artifact.patchHash) throw new Error("Captured patch changed");
-	const [head, base] = (await text$4(artifact.source, [
+	if (hash(await readFile(join(dirname(artifact.source), "change.patch"))) !== artifact.patchHash) throw new Error("Captured patch changed");
+	const [head, base] = (await text$5(artifact.source, [
 		"rev-parse",
 		"HEAD",
 		"base"
 	], { signal })).split("\n");
 	if (head !== artifact.headRevision || base !== artifact.baseRevision) throw new Error("Captured Git revisions changed");
-	if (hash$1(await scopedPatch(artifact, signal)) !== artifact.patchHash) throw new Error("Captured comparison changed");
+	if (hash(await scopedPatch(artifact, signal)) !== artifact.patchHash) throw new Error("Captured comparison changed");
 }
 var VERIFY_READERS = 8;
 async function verifyArtifact(artifact, signal) {
 	await verifyCapturedSource(artifact, signal);
-	await text$4(artifact.source, [
+	await text$5(artifact.source, [
 		"fsck",
 		"--no-reflogs",
 		"--no-dangling"
 	], { signal });
-	const format = await text$4(artifact.source, ["rev-parse", "--show-object-format"], { signal });
+	const format = await text$5(artifact.source, ["rev-parse", "--show-object-format"], { signal });
 	const directories = /* @__PURE__ */ new Set();
 	const directory = async (path) => {
 		if (directories.has(path)) return true;
@@ -4298,7 +5147,7 @@ async function transferObjects(change, source, signal) {
 		input: `${change.baseTree}\n${change.headTree}\n`,
 		signal
 	});
-	await text$4(source, ["prune-packed"], { signal });
+	await text$5(source, ["prune-packed"], { signal });
 }
 async function changedRegions(source, base, head, signal) {
 	const [names, output] = await settledAll([bytes(source, [
@@ -4324,7 +5173,7 @@ async function changedRegions(source, base, head, signal) {
 		const file = patch.slice(starts[n], starts[n + 1]);
 		const hunks = [...file.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*$/gm)];
 		if (!hunks.length) regions.push({
-			id: hash$1(`${path}\0${file}`),
+			id: hash(`${path}\0${file}`),
 			path,
 			kind: "non-text",
 			oldStart: 0,
@@ -4336,7 +5185,7 @@ async function changedRegions(source, base, head, signal) {
 		for (const [i, hunk] of hunks.entries()) {
 			const body = file.slice(i === 0 ? 0 : hunk.index, hunks[i + 1]?.index);
 			regions.push({
-				id: hash$1(`${path}\0${body}`),
+				id: hash(`${path}\0${body}`),
 				path,
 				kind: "text",
 				oldStart: Number(hunk[1]),
@@ -4383,7 +5232,7 @@ async function captureIntent(request, signal) {
 	return {
 		origin,
 		text: data.toString("utf8"),
-		hash: hash$1(data)
+		hash: hash(data)
 	};
 }
 var identity = (change) => JSON.stringify([
@@ -4399,16 +5248,16 @@ async function captureReview(request, destination, signal) {
 	if (request.paths) request.paths = [...new Set(request.paths.map((path) => safePath(path.replace(/\/$/, ""))))].sort();
 	destination = canonical$1(destination);
 	const startedAt = Date.now();
-	const repository = await realpath(await text$4(request.cwd, ["rev-parse", "--show-toplevel"], { signal }));
-	if (within$2(destination, repository)) throw new Error("Review artifacts must be outside the author's worktree");
+	const repository = await realpath(await text$5(request.cwd, ["rev-parse", "--show-toplevel"], { signal }));
+	if (within$1(destination, repository)) throw new Error("Review artifacts must be outside the author's worktree");
 	const intent = await captureIntent(request, signal);
 	await mkdir(destination, { mode: 448 });
 	const source = join(destination, "source");
 	let change;
 	try {
 		await mkdir(source);
-		const format = await text$4(repository, ["rev-parse", "--show-object-format"], { signal });
-		await text$4(source, [
+		const format = await text$5(repository, ["rev-parse", "--show-object-format"], { signal });
+		await text$5(source, [
 			"init",
 			"-q",
 			"--template=",
@@ -4421,7 +5270,7 @@ async function captureReview(request, destination, signal) {
 		});
 		const { baseTree, headTree, baseCommit, headCommit } = change;
 		await transferObjects(change, source, signal);
-		await text$4(source, ["mktree"], {
+		await text$5(source, ["mktree"], {
 			input: "",
 			signal
 		});
@@ -4457,8 +5306,8 @@ async function captureReview(request, destination, signal) {
 		}
 		await mkdir(join(source, ".git", "info"), { recursive: true });
 		await writeFile(join(source, ".git", "info", "attributes"), binaryPaths.map((path) => `${JSON.stringify(`/${path.replace(/[\\*?[\]]/g, "\\$&")}`)} -diff\n`).join(""));
-		await text$4(source, ["read-tree", headTree], { signal });
-		await text$4(source, [
+		await text$5(source, ["read-tree", headTree], { signal });
+		await text$5(source, [
 			...rawFlags(format),
 			"checkout-index",
 			"--all",
@@ -4476,7 +5325,7 @@ async function captureReview(request, destination, signal) {
 				GIT_COMMITTER_EMAIL: "review@localhost"
 			}
 		};
-		const baseRevision = await text$4(source, [
+		const baseRevision = await text$5(source, [
 			"-c",
 			"commit.gpgsign=false",
 			"commit-tree",
@@ -4484,7 +5333,7 @@ async function captureReview(request, destination, signal) {
 			"-m",
 			"Captured review base"
 		], commitOptions);
-		const headRevision = await text$4(source, [
+		const headRevision = await text$5(source, [
 			"-c",
 			"commit.gpgsign=false",
 			"commit-tree",
@@ -4494,17 +5343,17 @@ async function captureReview(request, destination, signal) {
 			"-m",
 			"Captured review target"
 		], commitOptions);
-		await text$4(source, [
+		await text$5(source, [
 			"update-ref",
 			"refs/heads/base",
 			baseRevision
 		], { signal });
-		await text$4(source, [
+		await text$5(source, [
 			"update-ref",
 			"refs/heads/review",
 			headRevision
 		], { signal });
-		await text$4(source, [
+		await text$5(source, [
 			"symbolic-ref",
 			"HEAD",
 			"refs/heads/review"
@@ -4532,7 +5381,7 @@ async function captureReview(request, destination, signal) {
 		const changes = (await changedPaths(source, baseTree, headTree, signal)).filter((change) => includes(change.path) || change.previousPath !== void 0 && includes(change.previousPath));
 		for (const entry of after.filter((file) => file.mode === "120000")) try {
 			const target = canonical$1(join(source, entry.path));
-			if (!within$2(target, source)) omissions.push({
+			if (!within$1(target, source)) omissions.push({
 				path: entry.path,
 				reason: "Symlink destination is outside the capture; only its link text is frozen"
 			});
@@ -4567,7 +5416,7 @@ async function captureReview(request, destination, signal) {
 			regions,
 			changes,
 			omissions,
-			patchHash: hash$1(patch),
+			patchHash: hash(patch),
 			digest: "",
 			source,
 			baseRevision,
@@ -4721,32 +5570,32 @@ async function sendCommand(sessionId, command, options = {}) {
 }
 //#endregion
 //#region components/code-review/src/contracts.ts
-var text$3 = Type.String({
+var text$4 = Type.String({
 	minLength: 1,
 	pattern: "\\S"
 });
-var object$4 = { additionalProperties: false };
+var object$5 = { additionalProperties: false };
 var question = Type.Object({
-	id: text$3,
-	question: text$3,
-	verification: text$3
-}, object$4);
+	id: text$4,
+	question: text$4,
+	verification: text$4
+}, object$5);
 var depth = Type.Union([Type.Literal("standard"), Type.Literal("deep")]);
 var pass = Type.Object({
-	id: text$3,
-	role: text$3,
+	id: text$4,
+	role: text$4,
 	depth,
-	lenses: Type.Array(text$3, { minItems: 1 }),
+	lenses: Type.Array(text$4, { minItems: 1 }),
 	questions: Type.Array(question, { minItems: 1 })
-}, object$4);
+}, object$5);
 Type.Object({
-	artifact: text$3,
-	summary: text$3,
+	artifact: text$4,
+	summary: text$4,
 	chunks: Type.Array(Type.Object({
-		id: text$3,
-		title: text$3,
-		paths: Type.Array(text$3, { minItems: 1 }),
-		context: Type.Array(text$3),
+		id: text$4,
+		title: text$4,
+		paths: Type.Array(text$4, { minItems: 1 }),
+		context: Type.Array(text$4),
 		risks: Type.Array(Type.Object({
 			kind: Type.Union([
 				Type.Literal("contract"),
@@ -4756,30 +5605,30 @@ Type.Object({
 				Type.Literal("usability"),
 				Type.Literal("uncertainty")
 			]),
-			reason: text$3
-		}, object$4)),
+			reason: text$4
+		}, object$5)),
 		passes: Type.Array(pass, { minItems: 1 })
-	}, object$4)),
+	}, object$5)),
 	integration: Type.Object({
-		role: text$3,
+		role: text$4,
 		depth,
 		questions: Type.Array(question, { minItems: 1 })
-	}, object$4)
-}, object$4);
+	}, object$5)
+}, object$5);
 Type.Object({
-	artifact: text$3,
-	pass: text$3,
-	summary: text$3,
+	artifact: text$4,
+	pass: text$4,
+	summary: text$4,
 	coverage: Type.Array(Type.Object({
-		question: text$3,
+		question: text$4,
 		state: Type.Union([Type.Literal("completed"), Type.Literal("incomplete")]),
-		evidence: Type.Array(text$3),
+		evidence: Type.Array(text$4),
 		reason: Type.String()
-	}, object$4)),
+	}, object$5)),
 	findings: Type.Array(Type.Object({
-		id: text$3,
-		title: text$3,
-		path: text$3,
+		id: text$4,
+		title: text$4,
+		path: text$4,
 		line: Type.Integer({ minimum: 1 }),
 		side: Type.Union([Type.Literal("before"), Type.Literal("after")]),
 		severity: Type.Union([
@@ -4793,51 +5642,51 @@ Type.Object({
 			Type.Literal("probable"),
 			Type.Literal("hypothesis")
 		]),
-		trigger: text$3,
-		invariant: text$3,
-		impact: text$3,
-		cause: text$3,
-		correction: text$3,
+		trigger: text$4,
+		invariant: text$4,
+		impact: text$4,
+		cause: text$4,
+		correction: text$4,
 		evidence: Type.Array(Type.Object({
 			kind: Type.Union([
 				Type.Literal("source"),
 				Type.Literal("reproduced"),
 				Type.Literal("hypothesis")
 			]),
-			detail: text$3,
-			provenance: text$3
-		}, object$4), { minItems: 1 }),
+			detail: text$4,
+			provenance: text$4
+		}, object$5), { minItems: 1 }),
 		counterevidence: Type.String()
-	}, object$4)),
-	limitations: Type.Array(text$3),
+	}, object$5)),
+	limitations: Type.Array(text$4),
 	extraPasses: Type.Array(Type.Object({
-		reason: text$3,
-		question: text$3,
-		doneWhen: text$3
-	}, object$4))
-}, object$4);
+		reason: text$4,
+		question: text$4,
+		doneWhen: text$4
+	}, object$5))
+}, object$5);
 Type.Object({
-	artifact: text$3,
-	summary: text$3,
+	artifact: text$4,
+	summary: text$4,
 	coverageGaps: Type.Array(Type.Object({
-		pass: text$3,
-		question: text$3,
-		reason: text$3
-	}, object$4)),
+		pass: text$4,
+		question: text$4,
+		reason: text$4
+	}, object$5)),
 	findings: Type.Array(Type.Object({
-		finding: text$3,
+		finding: text$4,
 		disposition: Type.Union([
 			Type.Literal("confirmed"),
 			Type.Literal("rejected"),
 			Type.Literal("unresolved"),
 			Type.Literal("duplicate")
 		]),
-		reason: text$3,
-		evidence: Type.Array(text$3, { minItems: 1 }),
-		duplicateOf: Type.Union([text$3, Type.Null()])
-	}, object$4)),
-	limitations: Type.Array(text$3)
-}, object$4);
+		reason: text$4,
+		evidence: Type.Array(text$4, { minItems: 1 }),
+		duplicateOf: Type.Union([text$4, Type.Null()])
+	}, object$5)),
+	limitations: Type.Array(text$4)
+}, object$5);
 function inScope(paths, file) {
 	return paths.some((path) => {
 		const prefix = path.replace(/\/+$/, "");
@@ -4873,14 +5722,14 @@ function findingKey(pass, finding) {
 	return `${encodeURIComponent(pass)}:${encodeURIComponent(finding)}`;
 }
 Type.Object({
-	artifact: text$3,
-	summary: text$3,
+	artifact: text$4,
+	summary: text$4,
 	duplicates: Type.Array(Type.Object({
-		finding: text$3,
-		duplicateOf: text$3,
-		reason: text$3
-	}, object$4))
-}, object$4);
+		finding: text$4,
+		duplicateOf: text$4,
+		reason: text$4
+	}, object$5))
+}, object$5);
 function checkShape(schema, value) {
 	if (!Value.Check(schema, value)) {
 		const errors = [...Value.Errors(schema, value)].map((error) => `${error.instancePath || "/"}: ${error.message}`);
@@ -4988,7 +5837,7 @@ var SETTLED = [
 	"no-changes",
 	"interrupted"
 ];
-var count = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+var count$1 = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 function reviewCost(db, review) {
 	const attempts = db.prepare("select result -> '$.usage.cost.total' as cost, result -> '$.usage' as usage from review_attempts where review_id = ?").all(review);
 	const tokens = {
@@ -4998,9 +5847,9 @@ function reviewCost(db, review) {
 	};
 	for (const row of attempts) {
 		const usage = row.usage === null ? void 0 : JSON.parse(row.usage);
-		tokens.input += count(usage?.input);
-		tokens.output += count(usage?.output);
-		tokens.cacheRead += count(usage?.cacheRead);
+		tokens.input += count$1(usage?.input);
+		tokens.output += count$1(usage?.output);
+		tokens.cacheRead += count$1(usage?.cacheRead);
 	}
 	const reported = attempts.flatMap((row) => {
 		const cost = row.cost === null ? void 0 : JSON.parse(row.cost);
@@ -6874,11 +7723,11 @@ async function commitApproval(commandId, operation) {
 }
 //#endregion
 //#region components/code-review/src/decisions.ts
-var text$2 = Type.String({
+var text$3 = Type.String({
 	minLength: 1,
 	pattern: "\\S"
 });
-var object$3 = { additionalProperties: false };
+var object$4 = { additionalProperties: false };
 var FindingResponseSchema = Type.Object({
 	disposition: Type.Union([
 		Type.Literal("acknowledged"),
@@ -6887,85 +7736,85 @@ var FindingResponseSchema = Type.Object({
 		Type.Literal("fixed-claimed"),
 		Type.Literal("fixed")
 	]),
-	reason: text$2,
-	evidence: Type.Array(text$2),
-	scope: Type.Optional(text$2),
+	reason: text$3,
+	evidence: Type.Array(text$3),
+	scope: Type.Optional(text$3),
 	verification: Type.Optional(Type.Object({
-		review: text$2,
-		pass: text$2,
-		question: text$2
-	}, object$3))
-}, object$3);
+		review: text$3,
+		pass: text$3,
+		question: text$3
+	}, object$4))
+}, object$4);
 //#endregion
 //#region components/code-review/src/operations.ts
-var text$1 = Type.String({
+var text$2 = Type.String({
 	minLength: 1,
 	pattern: "\\S"
 });
-var object$2 = { additionalProperties: false };
+var object$3 = { additionalProperties: false };
 var ReviewRequestSchema = Type.Object({
-	cwd: text$1,
+	cwd: text$2,
 	target: GitTargetSchema,
 	paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
-	intent: Type.Optional(Type.Union([Type.Object({ text: text$1 }, object$2), Type.Object({ path: Type.String({ minLength: 1 }) }, object$2)])),
-	lenses: Type.Optional(Type.Array(text$1))
-}, object$2);
+	intent: Type.Optional(Type.Union([Type.Object({ text: text$2 }, object$3), Type.Object({ path: Type.String({ minLength: 1 }) }, object$3)])),
+	lenses: Type.Optional(Type.Array(text$2))
+}, object$3);
 var ReviewOperationSchema = Type.Union([
 	Type.Object({
 		action: Type.Literal("enqueue"),
 		request: ReviewRequestSchema,
-		expectedDigest: Type.Optional(text$1),
-		owner: Type.Optional(text$1),
-		parent: Type.Optional(text$1)
-	}, object$2),
+		expectedDigest: Type.Optional(text$2),
+		owner: Type.Optional(text$2),
+		parent: Type.Optional(text$2)
+	}, object$3),
 	Type.Object({
 		action: Type.Literal("cancel"),
-		review: text$1
-	}, object$2),
+		review: text$2
+	}, object$3),
 	Type.Object({
 		action: Type.Literal("resume"),
-		review: text$1
-	}, object$2),
+		review: text$2
+	}, object$3),
 	Type.Object({
 		action: Type.Literal("extend"),
-		review: text$1,
+		review: text$2,
 		revision: Type.Integer({ minimum: 0 }),
-		digest: text$1,
-		question: text$1,
-		reason: text$1,
-		doneWhen: text$1
-	}, object$2),
+		digest: text$2,
+		question: text$2,
+		reason: text$2,
+		doneWhen: text$2
+	}, object$3),
 	Type.Object({
 		action: Type.Literal("priority"),
-		review: text$1,
+		review: text$2,
 		priority: Type.Number()
-	}, object$2),
+	}, object$3),
 	Type.Object({
 		action: Type.Literal("reassign"),
-		review: text$1,
-		owner: text$1
-	}, object$2),
+		review: text$2,
+		owner: text$2
+	}, object$3),
 	Type.Object({
 		action: Type.Literal("comment"),
-		review: text$1,
+		review: text$2,
 		body: Type.String({
 			minLength: 1,
 			pattern: "\\S"
 		})
-	}, object$2),
+	}, object$3),
 	Type.Object({
 		action: Type.Literal("finding"),
-		review: text$1,
+		review: text$2,
 		revision: Type.Integer({ minimum: 0 }),
-		digest: text$1,
-		finding: text$1,
+		digest: text$2,
+		finding: text$2,
 		response: FindingResponseSchema
-	}, object$2),
+	}, object$3),
 	Type.Object({
 		action: Type.Literal("approve"),
-		review: text$1,
+		review: text$2,
 		revision: Type.Integer({ minimum: 0 }),
-		digest: text$1,
+		digest: text$2,
 		verdict: Type.Union([
 			Type.Literal("approved"),
 			Type.Literal("changes-requested"),
@@ -6973,7 +7822,7 @@ var ReviewOperationSchema = Type.Union([
 		]),
 		note: Type.String(),
 		acceptLimits: Type.Boolean()
-	}, object$2)
+	}, object$3)
 ]);
 //#endregion
 //#region components/code-review/src/presentation.ts
@@ -7646,7 +8495,7 @@ function urls(css) {
 	}
 	return found;
 }
-function within$1(dir, ref) {
+function within(dir, ref) {
 	const parts = dir ? dir.split("/") : [];
 	for (const part of ref.split("/")) if (part === "..") {
 		if (!parts.length) return void 0;
@@ -8259,7 +9108,7 @@ async function checkLooks(reader, value, hosts, pixels, problems) {
 	}));
 }
 async function checkSkin(reader, manifest, problems) {
-	const skin = within$1("", manifest.skin);
+	const skin = within("", manifest.skin);
 	const css = skin && await reader.text(skin);
 	if (!skin || css === void 0) return problems.push({
 		file: manifest.skin,
@@ -8272,14 +9121,14 @@ async function checkSkin(reader, manifest, problems) {
 		fault: `does not style ${unstyled.map((c) => `.${c}`).join(", ")}`
 	});
 	for (const ref of urls(css)) {
-		const asset = within$1(dir, ref);
+		const asset = within(dir, ref);
 		if (!asset || await reader.text(asset) === void 0) problems.push({
 			file: skin,
 			fault: `names ${ref}, which is not in the pack`
 		});
 	}
 	for (const [token, value] of Object.entries(isObject(manifest.style) ? manifest.style : {})) for (const ref of typeof value === "string" ? urls(value) : []) {
-		const asset = within$1("", ref);
+		const asset = within("", ref);
 		if (!asset || await reader.text(asset) === void 0) problems.push({
 			file: "theme.json",
 			fault: `style ${token} names ${ref}, which is not in the pack`
@@ -9298,389 +10147,6 @@ function openWorkplace(path, commands, snapshot) {
 		}
 	};
 }
-//#endregion
-//#region apps/agent-workplace/src/backend/workspace.ts
-var hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
-var failure = (error) => ({
-	ok: false,
-	reason: error instanceof Error ? error.message : String(error)
-});
-function inside(root, path) {
-	const rel = relative(root, path);
-	return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`);
-}
-function within(root, path) {
-	if (!inside(root, path)) throw new Error("The path is outside the workspace root.");
-	if (relative(root, path).split(sep).includes(".git")) throw new Error("Git metadata is not available in the file editor.");
-}
-function directory(root) {
-	if (!isAbsolute(root)) throw new Error("Choose an absolute workspace directory.");
-	const canonical = realpathSync(root);
-	if (canonical.split(sep).includes(".git")) throw new Error("Git metadata is not available in the file editor.");
-	if (!statSync(canonical).isDirectory()) throw new Error("The workspace root is not a directory.");
-	return canonical;
-}
-function locate(request) {
-	const root = directory(request.root);
-	if (isAbsolute(request.path) || request.path.includes("\0")) throw new Error("Use a relative file path.");
-	const named = resolve(root, request.path);
-	within(root, named);
-	const path = realpathSync(named);
-	within(root, path);
-	return {
-		root,
-		path,
-		named
-	};
-}
-function referenceRoot(named, parent, source) {
-	if (!source) return parent;
-	if (inside(source, parent)) return source;
-	for (let at = dirname(named);; at = dirname(at)) {
-		if (realpathSync(at) === source) return source;
-		if (dirname(at) === at) return parent;
-	}
-}
-function resolveReference(candidate, source) {
-	if (!candidate || candidate.includes("\0") || candidate.startsWith("~") && !candidate.startsWith("~/")) return;
-	const spelling = candidate.startsWith("~/") ? join(homedir(), candidate.slice(2)) : candidate;
-	let request;
-	if (isAbsolute(spelling)) {
-		const named = resolve(spelling);
-		const parent = directory(dirname(named));
-		const file = join(parent, basename(named));
-		const root = referenceRoot(named, parent, source);
-		request = {
-			root,
-			path: relative(root, file)
-		};
-	} else {
-		if (!source) return;
-		request = {
-			root: source,
-			path: spelling
-		};
-	}
-	const at = locate(request);
-	if (!statSync(at.path).isFile()) return;
-	return {
-		candidate,
-		root: at.root,
-		path: relative(at.root, at.path)
-	};
-}
-function bytesAt(path) {
-	if (!statSync(path).isFile()) throw new Error("Choose a regular file.");
-	return readFileSync(path);
-}
-var NonTextFileError = class extends Error {};
-function textOf(bytes) {
-	if (bytes.subarray(0, 5).equals(Buffer.from("%PDF-"))) throw new NonTextFileError("PDF documents cannot be edited here.");
-	if (bytes.includes(0)) throw new NonTextFileError("Binary files cannot be edited here.");
-	try {
-		return new TextDecoder("utf-8", {
-			fatal: true,
-			ignoreBOM: true
-		}).decode(bytes);
-	} catch {
-		throw new NonTextFileError("This file is not valid UTF-8 text.");
-	}
-}
-async function attempt(action) {
-	try {
-		return {
-			ok: true,
-			...await action()
-		};
-	} catch (error) {
-		return failure(error);
-	}
-}
-function git(root, args, allowDetached = false) {
-	return new Promise((resolve, reject) => {
-		const env = {
-			...process.env,
-			LC_ALL: "C",
-			GIT_OPTIONAL_LOCKS: "0",
-			GIT_TERMINAL_PROMPT: "0"
-		};
-		for (const key of Object.keys(env)) if (key.startsWith("GIT_") && !["GIT_OPTIONAL_LOCKS", "GIT_TERMINAL_PROMPT"].includes(key)) delete env[key];
-		const child = spawn("git", [
-			"--no-pager",
-			"-c",
-			"core.fsmonitor=false",
-			"-C",
-			root,
-			...args
-		], {
-			env,
-			stdio: [
-				"ignore",
-				"pipe",
-				"pipe"
-			]
-		});
-		const out = [], err = [];
-		child.stdout.on("data", (chunk) => out.push(chunk));
-		child.stderr.on("data", (chunk) => err.push(chunk));
-		child.on("error", reject);
-		child.on("close", (code) => code === 0 || allowDetached && code === 1 ? resolve(Buffer.concat(out).toString("utf8")) : reject(new Error(Buffer.concat(err).toString("utf8").trim() || `Git exited with ${code}.`)));
-	});
-}
-async function gitRoot(root) {
-	return directory((await git(root, ["rev-parse", "--show-toplevel"])).replace(/\n$/, ""));
-}
-async function repositoryRoot(path) {
-	const root = directory(path);
-	const top = await gitRoot(root);
-	if (root !== top) throw new Error(`Open the repository root to view Git changes: ${top}`);
-	return root;
-}
-function listedFile(root, path) {
-	const named = resolve(root, path);
-	try {
-		within(root, named);
-	} catch {
-		return false;
-	}
-	let canonical;
-	try {
-		if (!lstatSync(named).isFile()) return false;
-		canonical = realpathSync(named);
-	} catch (error) {
-		if (["ENOENT", "ENOTDIR"].includes(error.code ?? "")) return false;
-		throw error;
-	}
-	try {
-		within(root, canonical);
-		return true;
-	} catch {
-		return false;
-	}
-}
-function folderFiles(root) {
-	const folders = [root];
-	const paths = [];
-	while (folders.length) {
-		const folder = folders.pop();
-		if (!lstatSync(folder).isDirectory()) continue;
-		const canonical = realpathSync(folder);
-		try {
-			within(root, canonical);
-		} catch {
-			continue;
-		}
-		for (const entry of readdirSync(canonical, { withFileTypes: true })) {
-			if (entry.name === ".git") continue;
-			const path = join(canonical, entry.name);
-			if (entry.isDirectory()) folders.push(path);
-			else if (entry.isFile() && listedFile(root, path)) paths.push(relative(root, path));
-		}
-	}
-	return paths.sort();
-}
-async function workspaceFiles(root) {
-	let inside;
-	try {
-		inside = await git(root, ["rev-parse", "--is-inside-work-tree"]);
-	} catch (error) {
-		if (error instanceof Error && error.message.startsWith("fatal: not a git repository")) return folderFiles(root);
-		throw error;
-	}
-	if (inside.trim() !== "true") throw new Error("Choose a working directory, not a bare Git repository.");
-	const paths = (await git(root, [
-		"ls-files",
-		"--cached",
-		"--others",
-		"--exclude-standard",
-		"-z"
-	])).split("\0");
-	return [...new Set(paths.filter((path) => path && listedFile(root, path)))].sort();
-}
-function parseWorktrees(output, root) {
-	return output.split("\0\0").filter(Boolean).map((record) => {
-		const fields = record.split("\0");
-		const value = (key) => fields.find((field) => field === key || field.startsWith(`${key} `))?.slice(key.length + 1);
-		const path = value("worktree");
-		if (!path) throw new Error("Git returned a worktree without a path.");
-		const locked = value("locked"), prunable = value("prunable");
-		return {
-			path,
-			branch: value("branch")?.replace(/^refs\/heads\//, "") ?? null,
-			head: value("HEAD") ?? null,
-			detached: fields.includes("detached"),
-			bare: fields.includes("bare"),
-			current: path === root,
-			...locked !== void 0 ? { locked } : {},
-			...prunable !== void 0 ? { prunable } : {}
-		};
-	});
-}
-function save(request) {
-	let temporary;
-	try {
-		const at = locate(request);
-		if (lstatSync(at.named).isSymbolicLink()) throw new Error("Open the symlink target directly before saving.");
-		const before = statSync(at.path);
-		const bytes = bytesAt(at.path);
-		textOf(bytes);
-		if (hash(bytes) !== request.baseHash) return {
-			ok: false,
-			conflict: true,
-			reason: "The file changed on disk. Reload before saving."
-		};
-		const next = Buffer.from(request.text, "utf8");
-		textOf(next);
-		temporary = join(dirname(at.path), `.workspace-save-${randomUUID()}`);
-		const fd = openSync(temporary, "wx", before.mode);
-		try {
-			writeFileSync(fd, next);
-			chmodSync(temporary, before.mode);
-			fsyncSync(fd);
-		} finally {
-			closeSync(fd);
-		}
-		const current = locate(request);
-		const now = statSync(current.path);
-		if (current.path !== at.path || lstatSync(current.named).isSymbolicLink() || before.ino !== now.ino || before.dev !== now.dev || before.mode !== now.mode || hash(bytesAt(current.path)) !== request.baseHash) return {
-			ok: false,
-			conflict: true,
-			reason: "The file changed while saving. Reload before saving."
-		};
-		renameSync(temporary, at.path);
-		temporary = void 0;
-		return {
-			ok: true,
-			hash: hash(next)
-		};
-	} catch (error) {
-		return failure(error);
-	} finally {
-		if (temporary) unlinkSync(temporary);
-	}
-}
-function openWorkspace(snapshot) {
-	return {
-		resolvePaths: (request) => attempt(() => {
-			let source;
-			if (request.cwd !== void 0) try {
-				source = directory(request.cwd);
-			} catch {}
-			const files = [];
-			for (const candidate of new Set(request.paths)) try {
-				const file = resolveReference(candidate, source);
-				if (file) files.push(file);
-			} catch {}
-			return { files };
-		}),
-		repositories: () => attempt(async () => {
-			const world = snapshot();
-			const candidates = new Set([...world.characters.map((person) => person.facts?.cwd), ...(world.dormant ?? []).map((person) => person.cwd)].filter((cwd) => Boolean(cwd)));
-			const roots = /* @__PURE__ */ new Set();
-			for (const candidate of candidates) try {
-				roots.add(await gitRoot(directory(candidate)));
-			} catch {}
-			return { roots: [...roots].sort() };
-		}),
-		files: (request) => attempt(async () => {
-			const root = directory(request.root);
-			return {
-				root,
-				paths: await workspaceFiles(root)
-			};
-		}),
-		worktrees: (request) => attempt(async () => {
-			const root = await gitRoot(directory(request.root));
-			return {
-				root,
-				worktrees: parseWorktrees(await git(root, [
-					"worktree",
-					"list",
-					"--porcelain",
-					"-z"
-				]), root)
-			};
-		}),
-		tree: (request) => attempt(() => {
-			const at = locate(request);
-			const entries = readdirSync(at.path, { withFileTypes: true }).filter((entry) => entry.name !== ".git").map((entry) => ({
-				name: entry.name,
-				path: join(request.path, entry.name),
-				kind: entry.isDirectory() ? "directory" : entry.isFile() ? "file" : entry.isSymbolicLink() ? "symlink" : "other"
-			}));
-			entries.sort((a, b) => Number(b.kind === "directory") - Number(a.kind === "directory") || a.name.localeCompare(b.name));
-			return {
-				root: at.root,
-				path: request.path,
-				entries
-			};
-		}),
-		readFile: async (request) => {
-			let file;
-			try {
-				const at = locate(request);
-				const bytes = bytesAt(at.path);
-				file = at.path;
-				return {
-					ok: true,
-					root: at.root,
-					path: request.path,
-					text: textOf(bytes),
-					hash: hash(bytes)
-				};
-			} catch (error) {
-				return {
-					...failure(error),
-					...error instanceof NonTextFileError && file ? { nonTextFile: pathToFileURL(file).href } : {}
-				};
-			}
-		},
-		saveFile: async (request) => save(request),
-		gitStatus: (request) => attempt(async () => {
-			const root = await repositoryRoot(request.root);
-			const records = (await git(root, [
-				"status",
-				"--porcelain=v1",
-				"-z",
-				"--untracked-files=all"
-			])).split("\0");
-			const entries = [];
-			for (let i = 0; i < records.length; i++) {
-				const record = records[i];
-				if (!record) continue;
-				const entry = {
-					path: record.slice(3),
-					index: record[0],
-					worktree: record[1]
-				};
-				if (/[RC]/.test(record.slice(0, 2))) entry.previousPath = records[++i];
-				entries.push(entry);
-			}
-			return {
-				entries,
-				branch: (await git(root, [
-					"symbolic-ref",
-					"--quiet",
-					"--short",
-					"HEAD"
-				], true)).trim() || null
-			};
-		}),
-		gitDiff: (request) => attempt(async () => {
-			const root = await repositoryRoot(request.root);
-			if (isAbsolute(request.path) || !request.path || request.path.includes("\0")) throw new Error("Choose a relative file path for the diff.");
-			within(root, resolve(root, request.path));
-			return { text: await git(root, [
-				"diff",
-				"--no-ext-diff",
-				"--no-textconv",
-				...request.staged ? ["--cached"] : [],
-				"--",
-				`:(literal)${request.path}`
-			]) };
-		})
-	};
-}
 var FEED_SINCE = `select e.seq, e.at, e.session_id as sessionId, e.generation, e.type, e.data,
 	s.name, s.cwd, s.kind as sessionKind
 from events e left join sessions s on s.id = e.session_id
@@ -10313,6 +10779,67 @@ function openWorldBackend(paths) {
 	};
 }
 //#endregion
+//#region apps/agent-workplace/src/git.ts
+var object$2 = (value) => typeof value === "object" && value !== null;
+var text$1 = (value) => typeof value === "string";
+var texts = (value) => Array.isArray(value) && value.every(text$1);
+var count = (value) => Number.isInteger(value) && value >= 0;
+var isGitRoot = (value) => object$2(value) && text$1(value.root);
+var isGitLog = (value) => isGitRoot(value) && count(value.skip) && count(value.limit);
+var isGitShow = (value) => isGitRoot(value) && text$1(value.sha);
+var isGitDiff = (value) => isGitRoot(value) && text$1(value.path) && (typeof value.staged === "boolean" || text$1(value.commit));
+var ACTION_FIELDS = {
+	stage: { paths: texts },
+	unstage: { paths: texts },
+	discard: { paths: texts },
+	commit: {
+		message: text$1,
+		amend: (value) => typeof value === "boolean"
+	},
+	checkout: { ref: text$1 },
+	checkoutCommit: { sha: text$1 },
+	createBranch: {
+		name: text$1,
+		from: text$1,
+		checkout: (value) => typeof value === "boolean"
+	},
+	deleteBranch: {
+		name: text$1,
+		force: (value) => typeof value === "boolean"
+	},
+	merge: { ref: text$1 },
+	rebase: { onto: text$1 },
+	abort: {},
+	continue: {},
+	fetch: {},
+	pull: {},
+	push: { force: (value) => typeof value === "boolean" },
+	stashSave: {
+		message: text$1,
+		untracked: (value) => typeof value === "boolean"
+	},
+	stashApply: { index: count },
+	stashPop: { index: count },
+	stashDrop: { index: count },
+	cherryPick: { sha: text$1 },
+	revert: { sha: text$1 },
+	reset: {
+		sha: text$1,
+		mode: (value) => value === "soft" || value === "mixed" || value === "hard"
+	},
+	createTag: {
+		name: text$1,
+		sha: text$1
+	},
+	deleteTag: { name: text$1 }
+};
+var isGitRun = (value) => {
+	if (!isGitRoot(value)) return false;
+	const action = value.action;
+	if (!object$2(action) || !text$1(action.kind) || !(action.kind in ACTION_FIELDS)) return false;
+	return Object.entries(ACTION_FIELDS[action.kind]).every(([field, valid]) => valid(action[field]));
+};
+//#endregion
 //#region apps/agent-workplace/src/org.ts
 function object$1(value) {
 	return typeof value === "object" && value !== null;
@@ -10336,7 +10863,6 @@ var isWorkspaceResolvePaths = (value) => object(value) && Array.isArray(value.pa
 var isWorkspaceRoot = (value) => object(value) && typeof value.root === "string";
 var isWorkspacePath = (value) => isWorkspaceRoot(value) && "path" in value && typeof value.path === "string";
 var isWorkspaceSave = (value) => isWorkspacePath(value) && "text" in value && typeof value.text === "string" && "baseHash" in value && typeof value.baseHash === "string";
-var isWorkspaceDiff = (value) => isWorkspacePath(value) && (!("staged" in value) || value.staged === void 0 || typeof value.staged === "boolean");
 //#endregion
 //#region apps/agent-workplace/src/electron/communications-ipc.ts
 function wireCommunications(api) {
@@ -12639,12 +13165,32 @@ function wireWorkspace(workspace) {
 	ipcMain.handle("workspace:tree", (_event, request) => isWorkspacePath(request) ? workspace.tree(request) : invalid);
 	ipcMain.handle("workspace:read-file", (_event, request) => isWorkspacePath(request) ? workspace.readFile(request) : invalid);
 	ipcMain.handle("workspace:save-file", (_event, request) => isWorkspaceSave(request) ? workspace.saveFile(request) : invalid);
-	ipcMain.handle("workspace:git-status", (_event, request) => isWorkspaceRoot(request) ? workspace.gitStatus(request) : invalid);
-	ipcMain.handle("workspace:git-diff", (_event, request) => isWorkspaceDiff(request) ? workspace.gitDiff(request) : invalid);
+}
+function wireGit(git) {
+	const invalid = {
+		ok: false,
+		reason: "A valid Git request is required."
+	};
+	ipcMain.handle("git:overview", (_event, request) => isGitRoot(request) ? git.overview({ root: request.root }) : invalid);
+	ipcMain.handle("git:log", (_event, request) => isGitLog(request) ? git.log({
+		root: request.root,
+		skip: request.skip,
+		limit: request.limit
+	}) : invalid);
+	ipcMain.handle("git:show", (_event, request) => isGitShow(request) ? git.show({
+		root: request.root,
+		sha: request.sha
+	}) : invalid);
+	ipcMain.handle("git:diff", (_event, request) => isGitDiff(request) ? git.diff(request) : invalid);
+	ipcMain.handle("git:run", (_event, request) => isGitRun(request) ? git.run({
+		root: request.root,
+		action: request.action
+	}) : invalid);
 }
 function start() {
 	const world = openWorldBackend(statePaths());
 	wireWorkspace(openWorkspace(() => world.snapshot()));
+	wireGit(openGit());
 	const conversations = openConversations(statePaths().socket);
 	const commands = openCommands(statePaths().socket);
 	wireCommunications(openCommunications(statePaths().db, commands));
@@ -13000,6 +13546,7 @@ function start() {
 				"app://world/index.html?workplace=mail",
 				"app://world/index.html?workplace=org",
 				"app://world/index.html?workplace=code",
+				"app://world/index.html?workplace=git",
 				"app://world/index.html?workplace=issues"
 			].includes(url)) event.preventDefault();
 		});
