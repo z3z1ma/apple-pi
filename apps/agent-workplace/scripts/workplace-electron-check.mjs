@@ -185,6 +185,7 @@ try {
 			review,
 			replay,
 			queue: await api.queue({ cwd, limit: 1 }),
+			states: await api.states({}),
 			source: await api.source({ review: review.id, side: "after", path: "example.ts", limit: 1 }),
 			freshness: await api.freshness({ review: review.id }),
 		};
@@ -193,6 +194,7 @@ try {
 	assert.equal(reviewProbe.review.state, "no-changes");
 	assert.equal(reviewProbe.replay.id, reviewProbe.review.id);
 	assert.equal(reviewProbe.queue.total, 1);
+	assert.deepEqual(reviewProbe.states, [{ id: reviewProbe.review.id, state: "no-changes" }]);
 	assert.deepEqual(reviewProbe.source.page.rows, ["export const answer = 1;"]);
 	assert.equal(reviewProbe.freshness.requestedTarget, "matches");
 	assert.equal(query("select id from review_attempts").length, 0);

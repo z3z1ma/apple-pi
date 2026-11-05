@@ -69,6 +69,7 @@ test("Workplace previews, queues, reads retained source and commits browser appr
 		timeout: 15000,
 	});
 	expect((await api.enqueue(input)).id).toBe(job.id);
+	expect(await api.states({})).toEqual([{ id: job.id, state: "completed" }]);
 	writeFileSync(join(cwd, "value.ts"), "export const value = 999;\n");
 	expect(await api.source({ review: job.id, side: "after", path: "value.ts", limit: 1 })).toMatchObject({
 		page: { rows: ["export const value = 2;"] },

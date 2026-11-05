@@ -42,8 +42,7 @@
 .wp-gitx-where input,
 .wp-gitx-filter,
 .wp-gitx-summary input,
-.wp-gitx-commit textarea,
-.wp-gitx-dialog input {
+.wp-gitx-commit textarea {
 	width: 100%;
 	padding: 6px 9px;
 	border: 1px solid var(--wp-border);
@@ -139,8 +138,7 @@
 	flex: 1;
 	color: var(--wp-muted);
 }
-.wp-gitx-state button,
-.wp-gitx-dialog-actions button {
+.wp-gitx-state button {
 	padding: 5px 12px;
 	border: 1px solid var(--wp-border);
 	border-radius: 7px;
@@ -818,45 +816,6 @@
 	to {
 		transform: rotate(360deg);
 	}
-}
-.wp-gitx-scrim {
-	position: absolute;
-	inset: 0;
-	z-index: 30;
-	display: grid;
-	place-items: center;
-	background: color-mix(in srgb, var(--wp-bg) 55%, transparent);
-}
-.wp-gitx-dialog {
-	display: flex;
-	flex-direction: column;
-	gap: 14px;
-	width: min(420px, 90%);
-	padding: 20px;
-	border: 1px solid var(--wp-border);
-	border-radius: 12px;
-	background: var(--wp-panel);
-	box-shadow: var(--wp-shadow);
-}
-.wp-gitx-dialog h2 {
-	font-size: 16px;
-}
-.wp-gitx-dialog p {
-	margin: 0;
-	color: var(--wp-muted);
-	line-height: 1.45;
-}
-.wp-gitx-dialog label {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	color: var(--wp-muted);
-	font-size: 12px;
-}
-.wp-gitx-dialog-actions {
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
 }
 @media (max-width: 1100px) {
 	.wp-gitx-body {

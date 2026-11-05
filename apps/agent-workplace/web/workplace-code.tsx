@@ -9,7 +9,6 @@ import { Select } from "./workplace-fields.js";
 import { Icon } from "./workplace-icon.js";
 import { QuickOpen } from "./workplace-quick-open.js";
 import { usePaneResize } from "./workplace-resize.js";
-import { WorkplaceReviews } from "./workplace-reviews.js";
 import { WorkplaceTerminal } from "./workplace-terminal.js";
 import "./workplace-code.css";
 
@@ -125,22 +124,19 @@ function FileTree({
 
 export function WorkplaceCode({
 	world,
-	active: visible,
+	active,
 	onDirtyChange,
 	onTerminalCountChange,
+	onOpenReview,
 	fileRequest,
 }: {
 	world: WorldSnapshot;
 	active: boolean;
 	onDirtyChange?: (dirty: boolean) => void;
 	onTerminalCountChange?: (count: number) => void;
+	onOpenReview(id: string): void;
 	fileRequest?: FileReferenceTarget;
 }) {
-	const [showReviews, setShowReviews] = useState(false);
-	const active = visible && !showReviews;
-	useEffect(() => {
-		if (fileRequest) setShowReviews(false);
-	}, [fileRequest]);
 	const openMenu = useWorkplaceMenu();
 	const tabButtons = useRef(new Map<string, HTMLButtonElement>());
 	const filesPane = useRef<HTMLElement>(null);
@@ -192,7 +188,7 @@ export function WorkplaceCode({
 		file: current ? { root: current.root, path: current.path } : undefined,
 		world,
 		visible: active,
-		onOpenReviews: () => setShowReviews(true),
+		onOpenReview,
 	});
 	const dirty = current !== undefined && current.text !== current.base;
 	const repositoryList = [...new Set([...roots, root].filter(Boolean))];
@@ -721,9 +717,6 @@ export function WorkplaceCode({
 						Open
 					</button>
 				</form>
-				<button type="button" aria-pressed={showReviews} onClick={() => setShowReviews(!showReviews)}>
-					Reviews
-				</button>
 				<button type="button" aria-pressed={showFiles} onClick={() => setShowFiles(!showFiles)}>
 					Files
 				</button>
@@ -744,14 +737,8 @@ export function WorkplaceCode({
 					{notice}
 				</div>
 			)}
-			<WorkplaceReviews root={root} active={visible && showReviews} world={world} />
 			{asks}
-			<div
-				hidden={showReviews}
-				ref={panes}
-				style={files.style}
-				className={`wp-code-panes ${showFiles ? "" : "without-files"}`}
-			>
+			<div ref={panes} style={files.style} className={`wp-code-panes ${showFiles ? "" : "without-files"}`}>
 				<aside
 					className="wp-code-files"
 					hidden={!showFiles}

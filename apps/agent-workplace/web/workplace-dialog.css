@@ -1,0 +1,79 @@
+.wp-dialog-scrim {
+	position: absolute;
+	inset: 0;
+	z-index: 30;
+	display: grid;
+	place-items: center;
+	background: color-mix(in srgb, var(--wp-bg) 55%, transparent);
+	backdrop-filter: blur(2px);
+}
+.wp-dialog {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	width: min(420px, 90%);
+	max-height: 90%;
+	overflow: auto;
+	padding: 20px;
+	border: 1px solid var(--wp-border);
+	border-radius: 12px;
+	background: var(--wp-panel);
+	color: var(--wp-text);
+	box-shadow: var(--wp-shadow);
+}
+.wp-dialog.is-wide {
+	width: min(640px, 92%);
+}
+.wp-dialog h2 {
+	font-size: 16px;
+}
+.wp-dialog p {
+	margin: 0;
+	color: var(--wp-muted);
+	line-height: 1.45;
+}
+.wp-dialog label,
+.wp-dialog-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	color: var(--wp-muted);
+	font-size: 12px;
+}
+.wp-dialog input,
+.wp-dialog textarea {
+	width: 100%;
+	padding: 7px 10px;
+	border: 1px solid var(--wp-border);
+	border-radius: 7px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font: inherit;
+}
+.wp-dialog-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+.wp-dialog-actions button {
+	padding: 6px 14px;
+	border: 1px solid var(--wp-border);
+	border-radius: 7px;
+	background: var(--wp-bg);
+	color: var(--wp-text);
+	font-weight: 600;
+}
+.wp-dialog-actions .is-danger {
+	border-color: var(--wp-danger);
+	background: var(--wp-danger);
+	color: var(--wp-on-accent);
+}
+.wp-dialog-actions .is-primary {
+	border-color: var(--wp-accent);
+	background: var(--wp-accent);
+	color: var(--wp-on-accent);
+}
+.wp-dialog-actions button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}

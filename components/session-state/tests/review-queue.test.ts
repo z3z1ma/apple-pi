@@ -32,6 +32,7 @@ import {
 	reviewAnalytics,
 	reviewAssessment,
 	reviewQueue,
+	reviewStates,
 	reviewSummary,
 } from "../src/review-read.js";
 import { fakeBridge, query, runtimePid, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
@@ -435,6 +436,8 @@ test("the queue reader separates required coverage, absent intent and findings w
 		expect(assessment.passes.map((entry) => entry.report?.pass)).toEqual(["value-correctness", "integration"]);
 		expect(assessment.validation?.attempt.state).toBe("completed");
 		expect(reviewQueue(db, "outsider", { limit: 1 }).total).toBe(0);
+		expect(reviewStates(db, "owner")).toEqual([{ id: job.id, state: "completed" }]);
+		expect(reviewStates(db, "outsider")).toEqual([]);
 		expect(() => readReview(db, "outsider", job.id)).toThrow("another organization");
 		expect(() => reviewQueue(db, "missing-person")).toThrow();
 		expect(() => reviewQueue(db, "owner", { offset: 1 })).toThrow("limit");

@@ -14,6 +14,7 @@ import {
 	readReviewSource,
 	reviewAnalytics,
 	reviewQueue,
+	reviewStates,
 	reviewSummary,
 } from "../../../../components/session-state/src/review-read.js";
 import type { ReviewsApi } from "../reviews.js";
@@ -41,6 +42,9 @@ export function openReviews(path: string, commands: Commands) {
 	}
 	const pages = new Set<() => void>();
 	const api: ReviewsApi = {
+		async states() {
+			return store((db) => reviewStates(db, OPERATOR));
+		},
 		async queue(options) {
 			return store((db) => reviewQueue(db, OPERATOR, options));
 		},

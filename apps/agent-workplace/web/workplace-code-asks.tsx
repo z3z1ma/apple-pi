@@ -81,7 +81,7 @@ function AskThread({
 	onSend,
 	onClose,
 	onReveal,
-	onOpenReviews,
+	onOpenReview,
 }: {
 	ask: CodeAsk;
 	asleep: boolean;
@@ -89,7 +89,7 @@ function AskThread({
 	onSend(text: string): void;
 	onClose(): void;
 	onReveal(line: number): void;
-	onOpenReviews(): void;
+	onOpenReview(id: string): void;
 }) {
 	const action = actionOf(ask.kind);
 	const [draft, setDraft] = useState("");
@@ -212,7 +212,7 @@ function AskThread({
 							<p className="wp-code-ask-status">
 								Review {reviewState ?? "queued"}
 								{findings && ` \u00b7 ${findings.length} finding${findings.length === 1 ? "" : "s"}`}
-								<button type="button" onClick={onOpenReviews}>
+								<button type="button" onClick={() => onOpenReview(ask.review!)}>
 									Open in Reviews
 								</button>
 							</p>
@@ -276,13 +276,13 @@ export function useCodeAsks({
 	file,
 	world,
 	visible,
-	onOpenReviews,
+	onOpenReview,
 }: {
 	instance: editor.IStandaloneCodeEditor | undefined;
 	file: { root: string; path: string } | undefined;
 	world: WorldSnapshot;
 	visible: boolean;
-	onOpenReviews(): void;
+	onOpenReview(id: string): void;
 }): ReactNode {
 	const [asks, setAsks] = useState<CodeAsk[]>([]);
 	const fileRef = useRef(file);
@@ -491,7 +491,7 @@ export function useCodeAsks({
 						instance?.setPosition({ lineNumber: line, column: 1 });
 						instance?.focus();
 					}}
-					onOpenReviews={onOpenReviews}
+					onOpenReview={onOpenReview}
 				/>
 			</div>
 		)),

@@ -34,6 +34,8 @@ import type {
 
 const api: AgentWorkplaceApi = {
 	reviews: {
+		states: (request) =>
+			ipcRenderer.invoke("reviews:states", request) as ReturnType<AgentWorkplaceApi["reviews"]["states"]>,
 		queue: (request) =>
 			ipcRenderer.invoke("reviews:queue", request) as ReturnType<AgentWorkplaceApi["reviews"]["queue"]>,
 		analytics: (request) =>

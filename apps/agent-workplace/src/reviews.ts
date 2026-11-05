@@ -12,6 +12,7 @@ export type ReviewManagement = Extract<
 	{ action: "cancel" | "resume" | "priority" | "reassign" | "extend" | "finding" | "comment" }
 >;
 export interface ReviewsApi {
+	states(request: Record<string, never>): Promise<{ id: string; state: ReviewState }[]>;
 	queue(options: {
 		cwd?: string;
 		state?: ReviewState;

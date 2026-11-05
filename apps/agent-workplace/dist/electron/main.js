@@ -5931,19 +5931,31 @@ function reviewSummary(db, actor, id) {
 		};
 	});
 }
+function scopeClause(db, actor) {
+	const scope = organization(db, actor);
+	if (!scope) return {
+		where: [],
+		args: []
+	};
+	const roots = db.prepare("select distinct organization from review_jobs").all().filter((row) => rootOf$1(db, row.organization) === scope).map((row) => row.organization);
+	return {
+		where: [`organization in (${roots.map(() => "?").join(",")})`],
+		args: roots
+	};
+}
+function reviewStates(db, actor) {
+	return snapshot(db, () => {
+		const { where, args } = scopeClause(db, actor);
+		const filter = where.length ? `where ${where.join(" and ")}` : "";
+		return db.prepare(`select id, state from review_jobs ${filter}`).all(...args);
+	});
+}
 function reviewQueue(db, actor, options = {}) {
 	if (options.offset !== void 0 && options.limit === void 0) throw new Error("A page offset requires a limit");
 	if (options.limit !== void 0 && (!Number.isSafeInteger(options.limit) || options.limit < 1)) throw new Error("limit must be a positive safe integer");
 	if (options.offset !== void 0 && (!Number.isSafeInteger(options.offset) || options.offset < 0)) throw new Error("offset must be a non-negative safe integer");
 	return snapshot(db, () => {
-		const scope = organization(db, actor);
-		const where = [];
-		const args = [];
-		if (scope) {
-			const roots = db.prepare("select distinct organization from review_jobs").all().filter((row) => rootOf$1(db, row.organization) === scope).map((row) => row.organization);
-			where.push(`organization in (${roots.map(() => "?").join(",")})`);
-			args.push(...roots);
-		}
+		const { where, args } = scopeClause(db, actor);
 		if (options.state) {
 			where.push("state = ?");
 			args.push(options.state);
@@ -7917,6 +7929,9 @@ function openReviews(path, commands) {
 	const pages = /* @__PURE__ */ new Set();
 	return {
 		api: {
+			async states() {
+				return store((db) => reviewStates(db, OPERATOR));
+			},
 			async queue(options) {
 				return store((db) => reviewQueue(db, OPERATOR, options));
 			},
@@ -13070,6 +13085,7 @@ function wireIntegrations(options) {
 //#region apps/agent-workplace/src/electron/reviews-ipc.ts
 function wireReviews(api) {
 	for (const method of [
+		"states",
 		"queue",
 		"analytics",
 		"read",
@@ -13547,6 +13563,7 @@ function start() {
 				"app://world/index.html?workplace=org",
 				"app://world/index.html?workplace=code",
 				"app://world/index.html?workplace=git",
+				"app://world/index.html?workplace=reviews",
 				"app://world/index.html?workplace=issues"
 			].includes(url)) event.preventDefault();
 		});

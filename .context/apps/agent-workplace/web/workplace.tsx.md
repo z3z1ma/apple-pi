@@ -8,7 +8,7 @@ Why: a person menu belongs to the row's person, not the selected conversation; i
 Coupled: apps/agent-workplace/web/workplace-resize.tsx, apps/agent-workplace/web/workplace-person-actions.tsx
 Verify: apps/agent-workplace/tests/world-org.test.ts
 
-RailApps measures the rail's app area with a ResizeObserver and shows as many apps as fit, in their fixed order; the rest go under one More button that opens the shared workplace menu. When the active app is hidden, More shows that app's icon and label and is pressed; its badge sums the hidden apps' badges. Git, like Code, mounts on first visit and stays mounted while hidden.
+RailApps measures the rail's app area with a ResizeObserver and shows as many apps as fit, in their fixed order; the rest go under one More button that opens the shared workplace menu. When the active app is hidden, More shows that app's icon and label and is pressed; its badge sums the hidden apps' badges. Git and Reviews, like Code, mount on first visit and stay mounted while hidden. The Reviews badge comes from useReviewUpdates, which the shell owns so it polls before Reviews is first opened; `openReview` lets Code's inline review threads switch to Reviews with that review selected. The rail's app gap is 8px so all seven apps fit a 900px-high window; at 16px Reviews fell under More there.
 Why: the operator asked for each major tool to become its own app; the rail cannot fit them all on short windows, and an app must stay reachable and visibly selected when it does not fit.
 Verify: apps/agent-workplace/tests/world-git.test.ts
 

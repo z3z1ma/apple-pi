@@ -46,6 +46,8 @@ import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
 import { ChatPeople, PersonAvatar, PersonName, PersonProfile, presenceOf, sessionStatus } from "./workplace-people.js";
 import { PersonActionsButton, usePersonMenu, WorkplacePersonActions } from "./workplace-person-actions.js";
 import { usePaneResize } from "./workplace-resize.js";
+import { useReviewUpdates } from "./workplace-review-updates.js";
+import { WorkplaceReviews } from "./workplace-reviews.js";
 import { type AppearanceMode, WorkplaceSettings } from "./workplace-settings.js";
 import { QuickSwitcher, type SwitchTarget } from "./workplace-switcher.js";
 import { DEFAULT_THEME, THEMES, themeOf, themeVariables } from "./workplace-themes.js";
@@ -158,6 +160,17 @@ function useSystemDark(): boolean {
 	return dark;
 }
 
+const VIEW_TITLES: Record<string, string> = {
+	chat: "Conversations",
+	org: "Organizations",
+	code: "Code",
+	git: "Git",
+	reviews: "Reviews",
+	issues: "Issues",
+	world: "World",
+	settings: "Settings",
+};
+
 type RailApp = {
 	id: string;
 	label: string;
@@ -264,13 +277,22 @@ function Workplace() {
 	);
 	const initialView = new URLSearchParams(location.search).get("workplace");
 	const [view, setView] = useState(
-		["org", "mail", "code", "git", "issues", "world", "settings"].includes(initialView ?? "")
+		["org", "mail", "code", "git", "reviews", "issues", "world", "settings"].includes(initialView ?? "")
 			? (initialView ?? "chat")
 			: "chat",
 	);
 	const [orgVisited, setOrgVisited] = useState(initialView === "org");
 	const [codeVisited, setCodeVisited] = useState(initialView === "code");
 	const [gitVisited, setGitVisited] = useState(initialView === "git");
+	const [reviewsVisited, setReviewsVisited] = useState(initialView === "reviews");
+	const [reviewRequest, setReviewRequest] = useState<{ id: string; key: string }>();
+	const reviewUpdates = useReviewUpdates(!!world?.connected);
+	const openReview = useCallback((id: string) => {
+		setReviewRequest({ id, key: crypto.randomUUID() });
+		setReviewsVisited(true);
+		setView("reviews");
+		history.replaceState(null, "", "?workplace=reviews");
+	}, []);
 	const [issuesVisited, setIssuesVisited] = useState(initialView === "issues");
 	const [worldVisited, setWorldVisited] = useState(initialView === "world");
 	const [codeDirty, setCodeDirty] = useState(false);
@@ -332,7 +354,7 @@ function Workplace() {
 		: 0;
 	return (
 		<div
-			className={`wp-app wp-${["org", "code", "git", "issues"].includes(view) ? `${view}-view` : view}`}
+			className={`wp-app wp-${["org", "code", "git", "reviews", "issues"].includes(view) ? `${view}-view` : view}`}
 			data-appearance={dark ? "dark" : "light"}
 			data-theme={theme.id}
 			style={themeStyle}
@@ -355,12 +377,20 @@ function Workplace() {
 						{ id: "org", label: "Org", icon: "org" },
 						{ id: "code", label: "Code", icon: "code" },
 						{ id: "git", label: "Git", icon: "git" },
+						{
+							id: "reviews",
+							label: "Reviews",
+							icon: "review",
+							badge: reviewUpdates.updated.size,
+							description: `${reviewUpdates.updated.size} updated reviews`,
+						},
 						{ id: "issues", label: "Issues", icon: "issues" },
 					]}
 					onSelect={(id) => {
 						if (id === "org") setOrgVisited(true);
 						if (id === "code") setCodeVisited(true);
 						if (id === "git") setGitVisited(true);
+						if (id === "reviews") setReviewsVisited(true);
 						if (id === "issues") setIssuesVisited(true);
 						setView(id);
 						history.replaceState(null, "", `?workplace=${id}`);
@@ -418,26 +448,7 @@ function Workplace() {
 			<div className="wp-workspace">
 				<header className="wp-topbar">
 					<strong>
-						Workplace{" "}
-						<span>
-							{" "}
-							/{" "}
-							{view === "chat"
-								? "Conversations"
-								: view === "org"
-									? "Organizations"
-									: view === "code"
-										? "Code"
-										: view === "git"
-											? "Git"
-											: view === "issues"
-												? "Issues"
-												: view === "world"
-													? "World"
-													: view === "settings"
-														? "Settings"
-														: "Mail"}
-						</span>
+						Workplace <span> / {VIEW_TITLES[view] ?? "Mail"}</span>
 					</strong>
 					<button
 						type="button"
@@ -492,12 +503,23 @@ function Workplace() {
 											fileRequest={fileRequest}
 											onDirtyChange={setCodeDirty}
 											onTerminalCountChange={setTerminalCount}
+											onOpenReview={openReview}
 										/>
 									</div>
 								)}
 								{gitVisited && (
 									<div hidden={view !== "git"}>
 										<WorkplaceGit active={view === "git"} />
+									</div>
+								)}
+								{reviewsVisited && (
+									<div hidden={view !== "reviews"}>
+										<WorkplaceReviews
+											active={view === "reviews"}
+											world={world}
+											updates={reviewUpdates}
+											request={reviewRequest}
+										/>
 									</div>
 								)}
 								{issuesVisited && (

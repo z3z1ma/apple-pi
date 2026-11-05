@@ -11,6 +11,7 @@ import {
 import type { GitAction, GitChange, GitCommit, GitCommitDetail, GitOverview, GitRef } from "../src/git.js";
 import type { WorkspaceWorktree } from "../src/workspace.js";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
+import { WorkplaceDialog } from "./workplace-dialog.js";
 import { Select } from "./workplace-fields.js";
 import { type DiffView, GitDiff } from "./workplace-git-diff.js";
 import { laneLayout } from "./workplace-git-graph.js";
@@ -1223,52 +1224,29 @@ export function WorkplaceGit({ active }: { active: boolean }) {
 				</div>
 			)}
 			{ask && (
-				<div className="wp-gitx-scrim">
-					<form
-						className="wp-gitx-dialog"
-						role="dialog"
-						aria-modal="true"
-						aria-label={ask.title}
-						onSubmit={(event) => {
-							event.preventDefault();
-							const current = ask;
-							setAsk(undefined);
-							if (current.kind === "confirm") current.run();
-							else if (askValue.trim()) current.run(askValue.trim());
-						}}
-						onKeyDown={(event) => {
-							if (event.key === "Escape") {
-								event.preventDefault();
-								setAsk(undefined);
-							}
-						}}
-					>
-						<h2>{ask.title}</h2>
-						{ask.kind === "confirm" ? (
-							<p>{ask.body}</p>
-						) : (
-							<label>
-								{ask.label}
-								{/* biome-ignore lint/a11y/noAutofocus: the dialog exists to take this name. */}
-								<input autoFocus value={askValue} onChange={(event) => setAskValue(event.target.value)} />
-							</label>
-						)}
-						<div className="wp-gitx-dialog-actions">
-							<button type="button" onClick={() => setAsk(undefined)}>
-								Cancel
-							</button>
-							<button
-								type="submit"
-								// biome-ignore lint/a11y/noAutofocus: confirming is the dialog's purpose.
-								autoFocus={ask.kind === "confirm"}
-								className={ask.kind === "confirm" && ask.danger ? "is-danger" : "is-primary"}
-								disabled={ask.kind === "name" && !askValue.trim()}
-							>
-								{ask.confirm}
-							</button>
-						</div>
-					</form>
-				</div>
+				<WorkplaceDialog
+					title={ask.title}
+					confirm={ask.confirm}
+					danger={ask.kind === "confirm" && ask.danger}
+					disabled={ask.kind === "name" && !askValue.trim()}
+					focusConfirm={ask.kind === "confirm"}
+					onCancel={() => setAsk(undefined)}
+					onConfirm={() => {
+						setAsk(undefined);
+						if (ask.kind === "confirm") ask.run();
+						else ask.run(askValue.trim());
+					}}
+				>
+					{ask.kind === "confirm" ? (
+						<p>{ask.body}</p>
+					) : (
+						<label>
+							{ask.label}
+							{/* biome-ignore lint/a11y/noAutofocus: the dialog exists to take this name. */}
+							<input autoFocus value={askValue} onChange={(event) => setAskValue(event.target.value)} />
+						</label>
+					)}
+				</WorkplaceDialog>
 			)}
 		</section>
 	);

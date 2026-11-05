@@ -3,6 +3,7 @@ import type { ReviewsApi } from "../reviews.js";
 
 export function wireReviews(api: ReviewsApi): void {
 	const methods: (keyof ReviewsApi)[] = [
+		"states",
 		"queue",
 		"analytics",
 		"read",

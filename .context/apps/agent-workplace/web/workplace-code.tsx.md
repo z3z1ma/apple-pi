@@ -1,6 +1,6 @@
 ## file
 
-Files uses a shared usePaneResize handle as a grid sibling; resizing changes CSS tracks, not pane/model keys. Bounds reserve center space. The existing Files focus ref still points to the same pane. Git is its own app (workplace-git.tsx); Code has no Git pane, status or diff view.
+Files uses a shared usePaneResize handle as a grid sibling; resizing changes CSS tracks, not pane/model keys. Bounds reserve center space. The existing Files focus ref still points to the same pane. Git and Reviews are their own apps (workplace-git.tsx, workplace-reviews.tsx); Code has no Git pane, status, diff view or review queue. Its inline review threads open a review through the shell's `onOpenReview`.
 Coupled: apps/agent-workplace/web/workplace-resize.tsx
 
 File-reference navigation supplies an immutable fileRequest with backend-validated root/path and optional positive line/column. Code selects that root before using the existing guarded openFile path, retains all other buffers/models, and reveals/focuses the clamped position once the target model exists and Code is visible. Each request is consumed once; later repository changes must not reopen it. The same literal file without a location opens at the start. Missing/deleted files show the existing Code read error rather than an external-open fallback. Decoration itself never reads file contents.

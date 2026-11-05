@@ -464,6 +464,7 @@ function start() {
 					"app://world/index.html?workplace=org",
 					"app://world/index.html?workplace=code",
 					"app://world/index.html?workplace=git",
+					"app://world/index.html?workplace=reviews",
 					"app://world/index.html?workplace=issues",
 				].includes(url)
 			)

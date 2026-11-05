@@ -278,6 +278,26 @@ export function reviewSummary(db: DatabaseSync, actor: string, id: string): Revi
 	});
 }
 
+function scopeClause(db: DatabaseSync, actor: string): { where: string[]; args: SQLInputValue[] } {
+	const scope = organization(db, actor);
+	if (!scope) return { where: [], args: [] };
+	const roots = (db.prepare("select distinct organization from review_jobs").all() as { organization: string }[])
+		.filter((row) => rootOf(db, row.organization) === scope)
+		.map((row) => row.organization);
+	return { where: [`organization in (${roots.map(() => "?").join(",")})`], args: roots };
+}
+
+export function reviewStates(db: DatabaseSync, actor: string): { id: string; state: ReviewState }[] {
+	return snapshot(db, () => {
+		const { where, args } = scopeClause(db, actor);
+		const filter = where.length ? `where ${where.join(" and ")}` : "";
+		return db.prepare(`select id, state from review_jobs ${filter}`).all(...args) as {
+			id: string;
+			state: ReviewState;
+		}[];
+	});
+}
+
 export function reviewQueue(
 	db: DatabaseSync,
 	actor: string,
@@ -296,16 +316,7 @@ export function reviewQueue(
 	if (options.offset !== undefined && (!Number.isSafeInteger(options.offset) || options.offset < 0))
 		throw new Error("offset must be a non-negative safe integer");
 	return snapshot(db, () => {
-		const scope = organization(db, actor);
-		const where: string[] = [];
-		const args: SQLInputValue[] = [];
-		if (scope) {
-			const roots = (db.prepare("select distinct organization from review_jobs").all() as { organization: string }[])
-				.filter((row) => rootOf(db, row.organization) === scope)
-				.map((row) => row.organization);
-			where.push(`organization in (${roots.map(() => "?").join(",")})`);
-			args.push(...roots);
-		}
+		const { where, args } = scopeClause(db, actor);
 		if (options.state) {
 			where.push("state = ?");
 			args.push(options.state);

@@ -54,6 +54,11 @@ const paths = {
 	undo: "M9 14 4 9l5-5 M4 9h11a5 5 0 0 1 0 10h-3",
 	back: "M15 18 9 12l6-6",
 	cloud: "M7 18a4 4 0 0 1-.5-8 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 17.5 18H7Z",
+	review: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z M8.5 12l2.5 2.5 4.5-5",
+	chart: "M4 20V4 M4 20h16 M8 16v-5 M12 16V8 M16 16v-3",
+	signoff: "m5 16-1 4 4-1L20 7l-3-3L5 16Z M3 21h18",
+	stop: "M6 6h12v12H6V6Z",
+	play: "M7 4v16l13-8L7 4Z",
 };
 
 export function Icon({ name }: { name: keyof typeof paths }) {

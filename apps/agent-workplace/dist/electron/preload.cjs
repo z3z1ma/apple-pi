@@ -2,6 +2,7 @@ let electron = require("electron");
 //#region apps/agent-workplace/src/electron/preload.ts
 var api = {
 	reviews: {
+		states: (request) => electron.ipcRenderer.invoke("reviews:states", request),
 		queue: (request) => electron.ipcRenderer.invoke("reviews:queue", request),
 		analytics: (request) => electron.ipcRenderer.invoke("reviews:analytics", request),
 		read: (request) => electron.ipcRenderer.invoke("reviews:read", request),
