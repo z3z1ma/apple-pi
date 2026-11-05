@@ -4,31 +4,34 @@ import { dirname, isAbsolute, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { captureReview, verifyArtifact } from "../../code-review/src/capture.js";
 import {
+	assessFindings,
 	checkShape,
-	combineValidation,
-	DuplicateLinksSchema,
+	type DuplicateLinks,
+	duplicateToolSchema,
 	type FindingValidation,
-	FindingValidationSchema,
 	findingKey,
+	linksFromTool,
+	planFromTool,
 	planPasses,
+	planToolSchema,
 	REVIEW_PASS_CONCURRENCY,
 	type ReviewPlan,
-	ReviewPlanSchema,
 	type ReviewReport,
-	ReviewReportSchema,
+	reportFromTool,
+	reportToolSchema,
 	unscopedRegions,
+	validateLinks,
 	validatePlan,
 	validateReport,
-	validateShard,
 } from "../../code-review/src/contracts.js";
 import { type ReviewJob, type ReviewOperation, ReviewOperationSchema } from "../../code-review/src/operations.js";
 import { reviewRoleCatalog } from "../../code-review/src/policy.js";
-import { INSPECT_REVIEW, LINK_DUPLICATES, PLAN_REVIEW, VALIDATE_REVIEW } from "../../code-review/src/prompts.js";
+import { INSPECT_REVIEW, LINK_DUPLICATES, PLAN_REVIEW } from "../../code-review/src/prompts.js";
 import type { ReviewArtifact } from "../../code-review/src/types.js";
 import { RETRY_MS } from "./client.js";
 import type { StatePaths } from "./paths.js";
 import { temporaryCallers } from "./program-peers.js";
-import { runReviewAttempt } from "./review-attempt.js";
+import { type ReviewPassRequest, ReviewStop, runReviewAttempt } from "./review-attempt.js";
 import { recordReviewDecision, reviewSettled } from "./review-decisions.js";
 import { readReview } from "./review-read.js";
 import { rootOf } from "./tree.js";
@@ -52,6 +55,8 @@ function reviewSource(artifact: ReviewArtifact) {
 }
 
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const PLANNER_THINKING = "medium";
 
 export type ReviewNotify = (notice: {
 	review: string;
@@ -67,6 +72,7 @@ function outcomeNotice(
 	state: "completed" | "incomplete",
 	reports: ReviewReport[],
 	validation: FindingValidation,
+	reasons: string[],
 ): string {
 	const findings = new Map(
 		reports.flatMap((report) =>
@@ -75,35 +81,32 @@ function outcomeNotice(
 	);
 	const confirmed = validation.findings.filter((entry) => entry.disposition === "confirmed");
 	const unresolved = validation.findings.filter((entry) => entry.disposition === "unresolved").length;
+	const unavailable = reports.flatMap((report) =>
+		report.coverage
+			.filter((entry) => entry.state === "unavailable")
+			.map((entry) => `- ${report.pass}/${entry.question}: ${entry.reason}`),
+	);
 	return [
-		`Review ${id} ${state === "completed" ? "completed" : "is incomplete"}: ${count(confirmed.length, "confirmed finding")}, ${unresolved} unresolved, ${count(validation.coverageGaps.length, "coverage gap")}.`,
+		`Review ${id} ${state === "completed" ? "completed" : "is incomplete"}: ${count(confirmed.length, "finding")}, ${unresolved} unresolved.`,
 		...confirmed.map((entry) => {
 			const finding = findings.get(entry.finding);
 			return finding
 				? `- [${finding.severity}] ${finding.title} (${finding.path}:${finding.line})`
 				: `- ${entry.finding}`;
 		}),
-		"",
-		validation.summary,
+		...(reasons.length ? ["", "Why it is incomplete:", ...reasons.map((reason) => `- ${reason}`)] : []),
+		...(unavailable.length ? ["", "Could not be checked on this machine:", ...unavailable] : []),
+		...(validation.summary ? ["", validation.summary] : []),
 		"",
 		`Completion is not approval. Read the evidence with read_review (review "${id}", part "findings"); respond with resolve_finding.`,
 	].join("\n");
 }
 
-function findingsNotice(
-	id: string,
-	report: ReviewReport,
-	attempt: string,
-	validation: FindingValidation,
-): string | undefined {
-	const confirmed = new Set(
-		validation.findings.filter((entry) => entry.disposition === "confirmed").map((entry) => entry.finding),
-	);
-	const findings = report.findings.filter((finding) => confirmed.has(findingKey(report.pass, finding.id)));
-	if (!findings.length) return undefined;
+function findingsNotice(id: string, report: ReviewReport, attempt: string): string | undefined {
+	if (!report.findings.length) return undefined;
 	return [
-		`Review ${id}: ${count(findings.length, "confirmed finding")} from pass ${report.pass}. Other passes are still settling; duplicates across passes are linked when validation finishes.`,
-		...findings.map(
+		`Review ${id}: ${count(report.findings.length, "finding")} from pass ${report.pass}. Other passes are still running; duplicates across passes are linked when they finish.`,
+		...report.findings.map(
 			(finding) =>
 				`- [${finding.severity}] ${finding.title} (${finding.path}:${finding.line}), finding "${attempt}:${finding.id}"`,
 		),
@@ -177,11 +180,43 @@ export class ReviewJobs {
 				"update review_attempts set state = 'interrupted', reason = 'The runtime restarted before this attempt completed', finished_at = ? where state in ('starting', 'running', 'cleaning')",
 			)
 			.run(Date.now());
+		const resumable = this.db
+			.prepare("select id from review_jobs where state in ('queued', 'running') and artifact is not null")
+			.all() as { id: string }[];
 		this.db
 			.prepare(
 				`update review_jobs set state = 'interrupted', reason = 'The runtime restarted. Inspect the retained work and explicitly resume a verified target.', updated_at = ? where state in ('capturing', 'queued', 'running', 'cancelling')`,
 			)
 			.run(Date.now());
+		if (resumable.length) void this.resumeAfterRestart(resumable.map(({ id }) => id));
+	}
+
+	private async resumeAfterRestart(ids: string[]): Promise<void> {
+		for (const id of ids) {
+			try {
+				const job = readReview(this.db, "operator", id);
+				if (job.state !== "interrupted" || !job.artifact) continue;
+				this.availableOwner(job.owner);
+				await this.waitCleanup(id);
+				await verifyArtifact(job.artifact);
+				this.live();
+				this.db
+					.prepare(
+						"update review_jobs set state = 'queued', generation = generation + 1, revision = revision + 1, reason = null, updated_at = ? where id = ? and state = 'interrupted' and generation = ? and revision = ?",
+					)
+					.run(Date.now(), id, job.generation, job.revision);
+			} catch (error) {
+				if (this.stopped) return;
+				this.db
+					.prepare("update review_jobs set reason = ?, updated_at = ? where id = ? and state = 'interrupted'")
+					.run(
+						`The runtime restarted and could not resume this review: ${message(error)}. Resume it explicitly once the cause is fixed.`,
+						Date.now(),
+						id,
+					);
+			}
+		}
+		this.wake();
 	}
 
 	stop(): void {
@@ -404,6 +439,15 @@ export class ReviewJobs {
 		}
 	}
 
+	private async attempt(job: ReviewJob, pass: ReviewPassRequest, signal: AbortSignal) {
+		try {
+			return await runReviewAttempt(this.db, this.paths, job, pass, signal);
+		} catch (error) {
+			if (signal.aborted || this.stopped || error instanceof ReviewStop) throw error;
+			return runReviewAttempt(this.db, this.paths, job, pass, signal);
+		}
+	}
+
 	private async inspect(id: string, signal: AbortSignal): Promise<void> {
 		let job = readReview(this.db, "operator", id);
 		try {
@@ -413,17 +457,17 @@ export class ReviewJobs {
 			const artifact = job.artifact!;
 			const source = reviewSource(artifact);
 			const roles = reviewRoleCatalog(artifact.source);
-			const planned = await runReviewAttempt(
-				this.db,
-				this.paths,
+			const specialist = roles.find((role) => role.name === "code-review-specialist")?.policy;
+			const planned = await this.attempt(
 				job,
 				{
 					id: "planner",
 					role: "code-review-specialist",
-					policyFingerprint: roles.find((role) => role.name === "code-review-specialist")?.policy,
+					policyFingerprint: specialist,
 					kind: "planner",
+					thinking: PLANNER_THINKING,
 					goal: `${artifact.configuration?.instructions.planning ?? PLAN_REVIEW}\nEach authorized additionalWork entry is required work. Assign its id as a lens to a focused pass and answer its question with the stated doneWhen evidence; preserve its reason.\nCaptured source: ${artifact.source}`,
-					schema: ReviewPlanSchema,
+					schema: planToolSchema(roles.map((role) => role.name)),
 					context: {
 						phase: "planning",
 						artifact: source,
@@ -431,6 +475,7 @@ export class ReviewJobs {
 						roles,
 						additionalWork: job.additionalWork,
 					},
+					fromTool: (value) => planFromTool(value, artifact.digest),
 					validate: (value) =>
 						validatePlan(value, artifact.digest, artifact.regions, new Set(roles.map((role) => role.name)), [
 							...(artifact.request.lenses ?? []),
@@ -469,140 +514,128 @@ export class ReviewJobs {
 				);
 			}
 			const plan = job.plan!;
-			const paths = new Set([...artifact.files, ...artifact.regions, ...artifact.omissions].map((entry) => entry.path));
-			const reports = await inParallel(
+			const failures: string[] = [];
+			const results = await inParallel(
 				planPasses(plan, artifact.regions),
 				REVIEW_PASS_CONCURRENCY,
 				signal,
 				async (pass, passSignal) => {
-					const inspected = await runReviewAttempt(
-						this.db,
-						this.paths,
+					try {
+						const inspected = await this.attempt(
+							job,
+							{
+								id: pass.id,
+								role: pass.role,
+								depth: pass.depth ?? "standard",
+								policyFingerprint: roles.find((role) => role.name === pass.role)?.[
+									pass.depth === "deep" ? "deepPolicy" : "policy"
+								],
+								kind: pass.kind,
+								goal: `${artifact.configuration?.instructions.inspection ?? INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
+								schema: reportToolSchema(pass),
+								context: {
+									phase: "inspection",
+									artifact: source,
+									pass,
+									regions: artifact.regions.filter((region) => pass.regions.includes(region.id)),
+									chunks: plan.chunks.map(({ id, title, paths, context, risks }) => ({
+										id,
+										title,
+										paths,
+										context,
+										risks,
+									})),
+								},
+								fromTool: (value) => reportFromTool(value, artifact.digest, pass),
+								validate: (value) => validateReport(value, artifact.digest, pass),
+								reuse: (value) => (value as ReviewReport).coverage.every((entry) => entry.state !== "incomplete"),
+							},
+							passSignal,
+						);
+						job.selectedAttempts = { ...job.selectedAttempts, [pass.id]: inspected.attempt };
+						this.storeSelection(job);
+						const report = inspected.output as ReviewReport;
+						const streamed = findingsNotice(job.id, report, inspected.attempt);
+						if (streamed) this.notice(job, `findings:${pass.id}`, streamed);
+						return report;
+					} catch (error) {
+						if (passSignal.aborted || this.stopped || error instanceof ReviewStop) throw error;
+						failures.push(`pass ${pass.id} failed twice (${message(error)})`);
+						return null;
+					}
+				},
+			);
+			const reports = results.filter((report): report is ReviewReport => report !== null);
+			const findings = reports.flatMap((report) =>
+				report.findings.map((finding) => ({ key: findingKey(report.pass, finding.id), report, finding })),
+			);
+			let links: DuplicateLinks | null = null;
+			let unlinked = "";
+			if (findings.length > 1) {
+				try {
+					const merged = await this.attempt(
 						job,
 						{
-							id: pass.id,
-							role: pass.role,
-							depth: pass.depth ?? "standard",
-							policyFingerprint: roles.find((role) => role.name === pass.role)?.[
-								pass.depth === "deep" ? "deepPolicy" : "policy"
-							],
-							kind: pass.kind,
-							goal: `${artifact.configuration?.instructions.inspection ?? INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
-							schema: ReviewReportSchema,
+							id: "validator",
+							role: "code-review-specialist",
+							policyFingerprint: specialist,
+							kind: "validation",
+							goal: artifact.configuration?.instructions.duplicates ?? LINK_DUPLICATES,
+							schema: duplicateToolSchema(findings.map(({ key }) => key)),
 							context: {
-								phase: "inspection",
+								phase: "validation",
 								artifact: source,
-								pass,
-								regions: artifact.regions.filter((region) => pass.regions.includes(region.id)),
-								chunks: plan.chunks.map(({ id, title, paths, context, risks }) => ({
-									id,
-									title,
-									paths,
-									context,
-									risks,
+								findings: findings.map(({ key, finding }) => ({
+									key,
+									title: finding.title,
+									location: `${finding.path}:${finding.line}`,
+									trigger: finding.trigger,
+									invariant: finding.invariant,
+									cause: finding.cause,
 								})),
 							},
-							validate: (value) => validateReport(value, artifact.digest, pass, paths),
-							reuse: (value) => (value as ReviewReport).coverage.every((entry) => entry.state === "completed"),
+							fromTool: (value) => linksFromTool(value, artifact.digest),
+							validate: (value) => validateLinks(value, artifact.digest),
 						},
-						passSignal,
+						signal,
 					);
-					job.selectedAttempts = { ...job.selectedAttempts, [pass.id]: inspected.attempt };
+					job.selectedAttempts = { ...job.selectedAttempts, validator: merged.attempt };
 					this.storeSelection(job);
-					return inspected.output as ReviewReport;
-				},
-			);
-			const reviewedAttempts = { ...job.selectedAttempts };
-			const validatorPolicy = roles.find((role) => role.name === "code-review-specialist")?.policy;
-			const shards = await inParallel(reports, REVIEW_PASS_CONCURRENCY, signal, async (report, shardSignal) => {
-				const inspected = { [report.pass]: reviewedAttempts[report.pass]! };
-				const shard = await runReviewAttempt(
-					this.db,
-					this.paths,
-					job,
-					{
-						id: `validator:${report.pass}`,
-						role: "code-review-specialist",
-						policyFingerprint: validatorPolicy,
-						kind: "validation",
-						goal: `${artifact.configuration?.instructions.validation ?? VALIDATE_REVIEW}\nCaptured source: ${artifact.source}`,
-						schema: FindingValidationSchema,
-						context: { phase: "validation", artifact: source, plan, reports: [report], reviewedAttempts: inspected },
-						reviewedAttempts: inspected,
-						validate: (value) => validateShard(value, artifact.digest, report),
-						reuse: (value) => !(value as FindingValidation).coverageGaps.length,
-					},
-					shardSignal,
-				);
-				job.selectedAttempts = { ...job.selectedAttempts, [`validator:${report.pass}`]: shard.attempt };
-				this.storeSelection(job);
-				const streamed = findingsNotice(job.id, report, inspected[report.pass], shard.output as FindingValidation);
-				if (streamed) this.notice(job, `findings:${report.pass}`, streamed);
-				return shard.output as FindingValidation;
-			});
-			const validated = await runReviewAttempt(
-				this.db,
-				this.paths,
-				job,
-				{
-					id: "validator",
-					role: "code-review-specialist",
-					policyFingerprint: validatorPolicy,
-					kind: "validation",
-					goal: artifact.configuration?.instructions.duplicates ?? LINK_DUPLICATES,
-					schema: DuplicateLinksSchema,
-					context: {
-						phase: "validation",
-						artifact: source,
-						shards: shards.map(({ summary, coverageGaps, limitations }) => ({ summary, coverageGaps, limitations })),
-						findings: reports.flatMap((report) =>
-							report.findings.map((finding) => ({
-								key: findingKey(report.pass, finding.id),
-								title: finding.title,
-								location: `${finding.path}:${finding.line}`,
-								trigger: finding.trigger,
-								invariant: finding.invariant,
-								cause: finding.cause,
-								validation: shards
-									.flatMap((shard) => shard.findings)
-									.find((entry) => entry.finding === findingKey(report.pass, finding.id)),
-							})),
-						),
-					},
-					reviewedAttempts,
-					validate: (value) => combineValidation(value, artifact.digest, reports, shards),
-					reuse: (value) => !(value as FindingValidation).coverageGaps.length,
-				},
-				signal,
-			);
-			job.selectedAttempts.validator = validated.attempt;
-			this.storeSelection(job);
-			const validation = validated.output as FindingValidation;
+					links = merged.output as DuplicateLinks;
+				} catch (error) {
+					if (signal.aborted || this.stopped || error instanceof ReviewStop) throw error;
+					unlinked = `Duplicate findings were not linked: ${message(error)}`;
+				}
+			}
+			const validation = assessFindings(artifact.digest, reports, links);
 			this.live();
 			signal.throwIfAborted();
 			if (JSON.stringify(reviewRoleCatalog(artifact.source)) !== JSON.stringify(roles))
 				throw new Error("The review policy changed during execution; resume to obtain a current-policy plan");
-			const incomplete =
-				plan.gaps?.length ||
-				reports.some(
-					(report) => report.coverage.some((entry) => entry.state === "incomplete") || report.extraPasses.length,
-				) ||
-				validation.coverageGaps.length;
+			const reasons = [
+				...(plan.gaps?.length ? [`${count(plan.gaps.length, "changed region")} had no reviewer`] : []),
+				...failures,
+				...reports.flatMap((report) => [
+					...report.coverage
+						.filter((entry) => entry.state === "incomplete")
+						.map((entry) => `${report.pass}/${entry.question} is unsettled: ${entry.reason}`),
+					...report.extraPasses.map((extra) => `${report.pass} asks for more review: ${extra.question}`),
+				]),
+			];
+			const state = reasons.length ? "incomplete" : "completed";
 			this.db
 				.prepare(
 					"update review_jobs set state = ?, reason = ?, revision = revision + 1, updated_at = ? where id = ? and generation = ? and state = 'running'",
 				)
-				.run(
-					incomplete ? "incomplete" : "completed",
-					incomplete ? "Required coverage is incomplete or additional questions need the plan owner's decision" : null,
-					Date.now(),
-					id,
-					job.generation,
-				);
-			this.notice(job, "outcome", outcomeNotice(job.id, incomplete ? "incomplete" : "completed", reports, validation));
+				.run(state, reasons.length ? reasons.join("\n") : null, Date.now(), id, job.generation);
+			this.notice(
+				job,
+				"outcome",
+				outcomeNotice(job.id, state, reports, validation, [...reasons, ...(unlinked ? [unlinked] : [])]),
+			);
 		} catch (error) {
 			if (this.stopped) return;
-			const reason = error instanceof Error ? error.message : String(error);
+			const reason = message(error);
 			const failed = this.db
 				.prepare(
 					"update review_jobs set state = 'failed', reason = ?, revision = revision + 1, updated_at = ? where id = ? and generation = ? and state = 'running'",

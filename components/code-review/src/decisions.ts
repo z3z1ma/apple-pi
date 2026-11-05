@@ -24,7 +24,7 @@ export interface VerifiedQuestion {
 	digest: string;
 	revision: number;
 	attempt: string;
-	validator: string;
+	validator: string | null;
 	pass: string;
 	question: string;
 	evidence: string[];

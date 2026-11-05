@@ -84,7 +84,12 @@ try {
 					}
 				}
 				return fauxAssistantMessage(
-					[fauxToolCall("pi_exec_return", reviewReply(input, { otherReport: "OTHER_FIRST_REPORT_SENTINEL" }))],
+					[
+						fauxToolCall(
+							"pi_exec_return",
+							reviewReply(input, { otherReport: "OTHER_FIRST_REPORT_SENTINEL" }) as Parameters<typeof fauxToolCall>[1],
+						),
+					],
 					{ stopReason: "toolUse" },
 				);
 			}

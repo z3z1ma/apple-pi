@@ -19,42 +19,61 @@ const pass = Type.Object(
 	object,
 );
 
+const chunkFields = {
+	id: text,
+	title: text,
+	paths: Type.Array(text, { minItems: 1 }),
+	context: Type.Array(text),
+	risks: Type.Array(
+		Type.Object(
+			{
+				kind: Type.Union([
+					Type.Literal("contract"),
+					Type.Literal("reliability"),
+					Type.Literal("authority"),
+					Type.Literal("compatibility"),
+					Type.Literal("usability"),
+					Type.Literal("uncertainty"),
+				]),
+				reason: text,
+			},
+			object,
+		),
+	),
+};
+
 export const ReviewPlanSchema = Type.Object(
 	{
 		artifact: text,
 		summary: text,
-		chunks: Type.Array(
-			Type.Object(
-				{
-					id: text,
-					title: text,
-					paths: Type.Array(text, { minItems: 1 }),
-					context: Type.Array(text),
-					risks: Type.Array(
-						Type.Object(
-							{
-								kind: Type.Union([
-									Type.Literal("contract"),
-									Type.Literal("reliability"),
-									Type.Literal("authority"),
-									Type.Literal("compatibility"),
-									Type.Literal("usability"),
-									Type.Literal("uncertainty"),
-								]),
-								reason: text,
-							},
-							object,
-						),
-					),
-					passes: Type.Array(pass, { minItems: 1 }),
-				},
-				object,
-			),
-		),
+		chunks: Type.Array(Type.Object({ ...chunkFields, passes: Type.Array(pass, { minItems: 1 }) }, object)),
 		integration: Type.Object({ role: text, depth, questions: Type.Array(question, { minItems: 1 }) }, object),
 	},
 	object,
 );
+
+const literals = (values: readonly string[]) => Type.Union(values.map((value) => Type.Literal(value)));
+
+export function planToolSchema(roles: readonly string[]) {
+	const role = literals(roles);
+	return Type.Object(
+		{
+			summary: text,
+			chunks: Type.Array(
+				Type.Object(
+					{ ...chunkFields, passes: Type.Array(Type.Object({ ...pass.properties, role }, object), { minItems: 1 }) },
+					object,
+				),
+			),
+			integration: Type.Object({ role, depth, questions: Type.Array(question, { minItems: 1 }) }, object),
+		},
+		object,
+	);
+}
+
+export function planFromTool(value: unknown, artifact: string): unknown {
+	return { ...(value as object), artifact };
+}
 type LegacyPlan = { chunks: { regions?: string[] }[]; gaps?: { region: string; reason: string }[] };
 export type ReviewPlan = Static<typeof ReviewPlanSchema> & LegacyPlan;
 export type PlannedPass = Static<typeof pass> & {
@@ -62,6 +81,37 @@ export type PlannedPass = Static<typeof pass> & {
 	regions: string[];
 	kind: "focused" | "integration";
 };
+
+const finding = Type.Object(
+	{
+		id: text,
+		title: text,
+		path: text,
+		line: Type.Integer({ minimum: 1 }),
+		side: Type.Union([Type.Literal("before"), Type.Literal("after")]),
+		severity: Type.Union([Type.Literal("critical"), Type.Literal("high"), Type.Literal("medium"), Type.Literal("low")]),
+		certainty: Type.Union([Type.Literal("confirmed"), Type.Literal("probable"), Type.Literal("hypothesis")]),
+		trigger: text,
+		invariant: text,
+		impact: text,
+		cause: text,
+		correction: text,
+		evidence: Type.Array(
+			Type.Object(
+				{
+					kind: Type.Union([Type.Literal("source"), Type.Literal("reproduced"), Type.Literal("hypothesis")]),
+					detail: text,
+					provenance: text,
+				},
+				object,
+			),
+			{ minItems: 1 },
+		),
+		counterevidence: Type.String(),
+	},
+	object,
+);
+const extraPass = Type.Object({ reason: text, question: text, doneWhen: text }, object);
 
 export const ReviewReportSchema = Type.Object(
 	{
@@ -72,55 +122,73 @@ export const ReviewReportSchema = Type.Object(
 			Type.Object(
 				{
 					question: text,
-					state: Type.Union([Type.Literal("completed"), Type.Literal("incomplete")]),
+					state: Type.Union([Type.Literal("completed"), Type.Literal("incomplete"), Type.Literal("unavailable")]),
 					evidence: Type.Array(text),
 					reason: Type.String(),
 				},
 				object,
 			),
 		),
-		findings: Type.Array(
-			Type.Object(
-				{
-					id: text,
-					title: text,
-					path: text,
-					line: Type.Integer({ minimum: 1 }),
-					side: Type.Union([Type.Literal("before"), Type.Literal("after")]),
-					severity: Type.Union([
-						Type.Literal("critical"),
-						Type.Literal("high"),
-						Type.Literal("medium"),
-						Type.Literal("low"),
-					]),
-					certainty: Type.Union([Type.Literal("confirmed"), Type.Literal("probable"), Type.Literal("hypothesis")]),
-					trigger: text,
-					invariant: text,
-					impact: text,
-					cause: text,
-					correction: text,
-					evidence: Type.Array(
-						Type.Object(
-							{
-								kind: Type.Union([Type.Literal("source"), Type.Literal("reproduced"), Type.Literal("hypothesis")]),
-								detail: text,
-								provenance: text,
-							},
-							object,
-						),
-						{ minItems: 1 },
-					),
-					counterevidence: Type.String(),
-				},
-				object,
-			),
-		),
+		findings: Type.Array(finding),
 		limitations: Type.Array(text),
-		extraPasses: Type.Array(Type.Object({ reason: text, question: text, doneWhen: text }, object)),
+		extraPasses: Type.Array(extraPass),
 	},
 	object,
 );
 export type ReviewReport = Static<typeof ReviewReportSchema>;
+
+const answer = (description: string) =>
+	Type.Union(
+		[
+			Type.Object({ state: Type.Literal("completed"), evidence: Type.Array(text, { minItems: 1 }) }, object),
+			Type.Object({ state: Type.Literal("incomplete"), reason: text }, object),
+			Type.Object({ state: Type.Literal("unavailable"), reason: text }, object),
+		],
+		{ description },
+	);
+
+export function reportToolSchema(pass: Pick<PlannedPass, "questions">) {
+	return Type.Object(
+		{
+			summary: text,
+			coverage: Type.Object(
+				Object.fromEntries(pass.questions.map((entry) => [entry.id, answer(entry.question)])),
+				object,
+			),
+			findings: Type.Array(finding),
+			limitations: Type.Array(text),
+			extraPasses: Type.Array(extraPass),
+		},
+		object,
+	);
+}
+
+type ToolAnswer = { state: "completed"; evidence: string[] } | { state: "incomplete" | "unavailable"; reason: string };
+
+export function reportFromTool(value: unknown, artifact: string, pass: Pick<PlannedPass, "id" | "questions">): unknown {
+	const tool = value as Omit<ReviewReport, "artifact" | "pass" | "coverage"> & {
+		coverage: Record<string, ToolAnswer>;
+	};
+	const seen = new Map<string, number>();
+	return {
+		artifact,
+		pass: pass.id,
+		summary: tool.summary,
+		coverage: pass.questions.map((entry) => {
+			const reply = tool.coverage[entry.id]!;
+			return reply.state === "completed"
+				? { question: entry.id, state: reply.state, evidence: reply.evidence, reason: "" }
+				: { question: entry.id, state: reply.state, evidence: [], reason: reply.reason };
+		}),
+		findings: tool.findings.map((entry) => {
+			const repeats = seen.get(entry.id) ?? 0;
+			seen.set(entry.id, repeats + 1);
+			return repeats ? { ...entry, id: `${entry.id}-${repeats + 1}` } : entry;
+		}),
+		limitations: tool.limitations,
+		extraPasses: tool.extraPasses,
+	};
+}
 
 export const FindingValidationSchema = Type.Object(
 	{
@@ -219,12 +287,7 @@ export function validatePlan(
 	return plan;
 }
 
-export function validateReport(
-	value: unknown,
-	artifact: string,
-	pass: PlannedPass,
-	paths: ReadonlySet<string>,
-): ReviewReport {
+export function validateReport(value: unknown, artifact: string, pass: PlannedPass): ReviewReport {
 	const report = checkShape(ReviewReportSchema, value);
 	if (report.artifact !== artifact || report.pass !== pass.id)
 		throw new Error("The report names a different artifact or pass");
@@ -237,16 +300,14 @@ export function validateReport(
 		if (!expected.delete(entry.question)) throw new Error(`Unknown coverage question: ${entry.question}`);
 		if (entry.state === "completed" && !entry.evidence.length)
 			throw new Error(`Completed question has no evidence: ${entry.question}`);
-		if (entry.state === "incomplete" && !entry.reason.trim())
-			throw new Error(`Incomplete question needs a reason: ${entry.question}`);
+		if (entry.state !== "completed" && !entry.reason.trim())
+			throw new Error(`An unanswered question needs a reason: ${entry.question}`);
 	}
 	if (expected.size) throw new Error(`Missing question coverage: ${[...expected].join(", ")}`);
 	unique(
 		report.findings.map((finding) => finding.id),
 		"finding",
 	);
-	for (const finding of report.findings)
-		if (!paths.has(finding.path)) throw new Error(`Finding location is not in captured source: ${finding.path}`);
 	return report;
 }
 
@@ -254,101 +315,71 @@ export function findingKey(pass: string, finding: string): string {
 	return `${encodeURIComponent(pass)}:${encodeURIComponent(finding)}`;
 }
 
-export function validateFindings(value: unknown, artifact: string, reports: ReviewReport[]): FindingValidation {
-	const result = checkShape(FindingValidationSchema, value);
-	if (result.artifact !== artifact) throw new Error("Finding validation names a different artifact");
-	const expected = new Set(
-		reports.flatMap((report) => report.findings.map((finding) => findingKey(report.pass, finding.id))),
-	);
-	unique(
-		result.findings.map((entry) => entry.finding),
-		"finding disposition",
-	);
-	for (const entry of result.findings) {
-		if (!expected.delete(entry.finding)) throw new Error(`Unknown finding disposition: ${entry.finding}`);
-		if (entry.disposition !== "duplicate" && entry.duplicateOf !== null)
-			throw new Error(`Only a duplicate can point to another finding: ${entry.finding}`);
-	}
-	if (expected.size) throw new Error(`Missing finding dispositions: ${[...expected].join(", ")}`);
-	for (const gap of result.coverageGaps) {
-		if (
-			!reports.some(
-				(report) => report.pass === gap.pass && report.coverage.some((entry) => entry.question === gap.question),
-			)
-		)
-			throw new Error(`Unknown coverage gap: ${gap.pass}/${gap.question}`);
-	}
-	const decisions = new Map(result.findings.map((entry) => [entry.finding, entry]));
-	for (const entry of result.findings) {
-		const visited = new Set<string>();
-		let next: typeof entry | undefined = entry;
-		while (next?.disposition === "duplicate") {
-			if (visited.has(next.finding)) throw new Error("Duplicate findings form a cycle");
-			visited.add(next.finding);
-			next = decisions.get(next.duplicateOf ?? "");
-			if (!next) throw new Error(`Duplicate names an unknown finding: ${entry.finding}`);
-		}
-	}
-	return result;
-}
-
-export function validateShard(value: unknown, artifact: string, report: ReviewReport): FindingValidation {
-	const result = checkShape(FindingValidationSchema, value);
-	const keys = new Map(report.findings.map((finding) => [finding.id, findingKey(report.pass, finding.id)]));
-	const key = (name: string) => keys.get(name) ?? name;
-	return validateFindings(
-		{
-			...result,
-			findings: result.findings.map((entry) => ({
-				...entry,
-				finding: key(entry.finding),
-				duplicateOf: entry.duplicateOf === null ? null : key(entry.duplicateOf),
-			})),
-		},
-		artifact,
-		[report],
-	);
-}
-
 export const DuplicateLinksSchema = Type.Object(
 	{
 		artifact: text,
-		summary: text,
+		summary: Type.String(),
 		duplicates: Type.Array(Type.Object({ finding: text, duplicateOf: text, reason: text }, object)),
 	},
 	object,
 );
+export type DuplicateLinks = Static<typeof DuplicateLinksSchema>;
 
-export function combineValidation(
-	value: unknown,
-	artifact: string,
-	reports: ReviewReport[],
-	shards: FindingValidation[],
-): FindingValidation {
-	if (value && typeof value === "object" && "findings" in value) return validateFindings(value, artifact, reports);
+export function duplicateToolSchema(keys: readonly string[]) {
+	const key = literals(keys);
+	return Type.Object(
+		{
+			summary: text,
+			duplicates: Type.Array(Type.Object({ finding: key, duplicateOf: key, reason: text }, object)),
+		},
+		object,
+	);
+}
+
+export function linksFromTool(value: unknown, artifact: string): unknown {
+	return { ...(value as object), artifact };
+}
+
+export function validateLinks(value: unknown, artifact: string): DuplicateLinks {
 	const links = checkShape(DuplicateLinksSchema, value);
 	if (links.artifact !== artifact) throw new Error("Duplicate links name a different artifact");
-	const findings = shards.flatMap((shard) => shard.findings.map((entry) => ({ ...entry })));
-	const byKey = new Map(findings.map((entry) => [entry.finding, entry]));
-	for (const link of links.duplicates) {
-		const entry = byKey.get(link.finding);
-		if (!entry) throw new Error(`Duplicate link names an unknown finding: ${link.finding}`);
-		if (!byKey.has(link.duplicateOf)) throw new Error(`Duplicate link targets an unknown finding: ${link.duplicateOf}`);
-		entry.disposition = "duplicate";
-		entry.duplicateOf = link.duplicateOf;
-		entry.reason = link.reason;
-	}
-	return validateFindings(
-		{
-			artifact,
-			summary: [links.summary, ...shards.map((shard) => shard.summary)].join("\n\n"),
-			coverageGaps: shards.flatMap((shard) => shard.coverageGaps),
-			findings,
-			limitations: shards.flatMap((shard) => shard.limitations),
-		},
-		artifact,
-		reports,
+	return links;
+}
+
+export function assessFindings(
+	artifact: string,
+	reports: ReviewReport[],
+	links: DuplicateLinks | null,
+): FindingValidation {
+	const findings = reports.flatMap((report) =>
+		report.findings.map((entry) => ({
+			finding: findingKey(report.pass, entry.id),
+			disposition: entry.certainty === "hypothesis" ? ("unresolved" as const) : ("confirmed" as const),
+			reason:
+				entry.certainty === "hypothesis"
+					? `Pass ${report.pass} reported this as a hypothesis without a reproduction.`
+					: `Pass ${report.pass} reported this with ${entry.certainty} certainty and the evidence below; no separate validator re-ran it.`,
+			evidence: entry.evidence.map((item) => `${item.kind}: ${item.detail} (${item.provenance})`),
+			duplicateOf: null as string | null,
+		})),
 	);
+	const byKey = new Map<string, FindingValidation["findings"][number]>(findings.map((entry) => [entry.finding, entry]));
+	const reaches = (from: string, target: string) => {
+		const visited = new Set<string>();
+		for (let next: string | null = from; next; next = byKey.get(next)?.duplicateOf ?? null) {
+			if (next === target) return true;
+			if (visited.has(next)) return false;
+			visited.add(next);
+		}
+		return false;
+	};
+	for (const link of links?.duplicates ?? []) {
+		const entry = byKey.get(link.finding);
+		if (!entry || !byKey.has(link.duplicateOf) || entry.disposition === "duplicate") continue;
+		if (reaches(link.duplicateOf, link.finding)) continue;
+		Object.assign(entry, { disposition: "duplicate", duplicateOf: link.duplicateOf, reason: link.reason });
+	}
+	return { artifact, summary: links?.summary ?? "", coverageGaps: [], findings, limitations: [] };
 }
 
 function unique(ids: string[], kind: string): void {

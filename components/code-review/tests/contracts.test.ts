@@ -1,13 +1,19 @@
+import { Value } from "typebox/value";
 import { expect, test } from "vitest";
 import {
+	assessFindings,
+	duplicateToolSchema,
+	findingKey,
+	planFromTool,
 	planPasses,
+	planToolSchema,
 	type ReviewPlan,
 	type ReviewReport,
+	reportFromTool,
+	reportToolSchema,
 	unscopedRegions,
-	validateFindings,
 	validatePlan,
 	validateReport,
-	validateShard,
 } from "../src/contracts.js";
 import type { ChangeRegion } from "../src/types.js";
 
@@ -127,123 +133,105 @@ function report(): ReviewReport {
 	};
 }
 
+const finding = (id: string, certainty: "confirmed" | "probable" | "hypothesis" = "confirmed") => ({
+	id,
+	title: "Consent changes after selection",
+	path: "api.ts",
+	line: 10,
+	side: "after" as const,
+	severity: "high" as const,
+	certainty,
+	trigger: "The roster changes while a request waits.",
+	invariant: "Selection must stay fixed.",
+	impact: "An unintended person can be selected.",
+	cause: "The backend expands the roster again.",
+	correction: "Retain the selected identifiers.",
+	evidence: [
+		{ kind: "source" as const, detail: "api.ts:10 expands the current roster.", provenance: "captured source" },
+	],
+	counterevidence: "No caller guard was found.",
+});
+
 test("a report accounts for every question and cannot claim completed coverage without evidence", () => {
 	const pass = planPasses(plan(), regions)[0]!;
-	const paths = new Set(["api.ts", "web/form.tsx"]);
-	expect(validateReport(report(), "captured-target", pass, paths).coverage[0]!.state).toBe("completed");
+	expect(validateReport(report(), "captured-target", pass).coverage[0]!.state).toBe("completed");
 	const missing = report();
 	missing.coverage = [];
-	expect(() => validateReport(missing, "captured-target", pass, paths)).toThrow("Missing question");
+	expect(() => validateReport(missing, "captured-target", pass)).toThrow("Missing question");
 	const unsupported = report();
 	unsupported.coverage[0]!.evidence = [];
-	expect(() => validateReport(unsupported, "captured-target", pass, paths)).toThrow("no evidence");
-	unsupported.coverage[0]!.state = "incomplete";
-	unsupported.coverage[0]!.reason = "The required host check was unavailable.";
-	expect(validateReport(unsupported, "captured-target", pass, paths).coverage[0]!.state).toBe("incomplete");
-	expect(() => validateReport(report(), "new-target", pass, paths)).toThrow("different artifact");
+	expect(() => validateReport(unsupported, "captured-target", pass)).toThrow("no evidence");
+	unsupported.coverage[0]!.state = "unavailable";
+	unsupported.coverage[0]!.reason = "The check needs a live provider.";
+	expect(validateReport(unsupported, "captured-target", pass).coverage[0]!.state).toBe("unavailable");
+	expect(() => validateReport(report(), "new-target", pass)).toThrow("different artifact");
 });
 
-test("validation coverage gaps name actual inspected questions", () => {
-	const value = {
-		artifact: "captured-target",
-		summary: "Check the claim",
-		findings: [],
-		coverageGaps: [
-			{ pass: "request-correctness", question: "consent", reason: "The evidence does not trace the called guard." },
-		],
+test("the inspection tool takes one answer per planned question, so a reviewer cannot invent, skip or leave one unexplained", () => {
+	const pass = planPasses(plan(), regions)[0]!;
+	const schema = reportToolSchema(pass);
+	const reply = {
+		summary: "The source trace preserves selected IDs.",
+		coverage: { consent: { state: "completed", evidence: ["api.ts:10 forwards the selected IDs."] } },
+		findings: [finding("roster"), finding("roster")],
 		limitations: [],
+		extraPasses: [],
 	};
-	expect(validateFindings(value, "captured-target", [report()]).coverageGaps).toHaveLength(1);
-	value.coverageGaps[0]!.question = "invented-question";
-	expect(() => validateFindings(value, "captured-target", [report()])).toThrow("Unknown coverage gap");
+	expect(Value.Check(schema, reply)).toBe(true);
+	expect(
+		Value.Check(schema, { ...reply, coverage: { ...reply.coverage, "standards-and-intent": reply.coverage.consent } }),
+	).toBe(false);
+	expect(Value.Check(schema, { ...reply, coverage: {} })).toBe(false);
+	expect(Value.Check(schema, { ...reply, coverage: { consent: { state: "completed", evidence: [] } } })).toBe(false);
+	expect(
+		Value.Check(schema, { ...reply, coverage: { consent: { state: "unavailable", reason: "Needs Docker." } } }),
+	).toBe(true);
+	const stored = validateReport(reportFromTool(reply, "captured-target", pass), "captured-target", pass);
+	expect(stored).toMatchObject({ artifact: "captured-target", pass: "request-correctness" });
+	expect(stored.coverage).toEqual([
+		{ question: "consent", state: "completed", evidence: ["api.ts:10 forwards the selected IDs."], reason: "" },
+	]);
+	expect(stored.findings.map((entry) => entry.id)).toEqual(["roster", "roster-2"]);
 });
 
-test("finding validation retains every allegation and rejects circular or invented duplicate associations", () => {
-	const findings = report();
-	findings.findings = ["first", "second"].map((id) => ({
-		id,
-		title: "Consent changes after selection",
-		path: "api.ts",
-		line: 10,
-		side: "after",
-		severity: "high",
-		certainty: "probable",
-		trigger: "The roster changes while a request waits.",
-		invariant: "Selection must stay fixed.",
-		impact: "An unintended person can be selected.",
-		cause: "The backend expands the roster again.",
-		correction: "Retain the selected identifiers.",
-		evidence: [{ kind: "source", detail: "api.ts:10 expands the current roster.", provenance: "captured source" }],
-		counterevidence: "No caller guard was found.",
-	}));
-	const incomplete = {
-		artifact: "captured-target",
-		summary: "Challenge findings",
-		findings: [],
-		coverageGaps: [],
-		limitations: [],
-	};
-	expect(() => validateFindings(incomplete, "captured-target", [findings])).toThrow("Missing finding dispositions");
-	const valid = {
-		...incomplete,
-		findings: [
-			{
-				finding: "request-correctness:first",
-				disposition: "confirmed",
-				reason: "The caller does not narrow the request.",
-				evidence: ["Traced the captured caller and backend."],
-				duplicateOf: null,
-			},
-			{
-				finding: "request-correctness:second",
-				disposition: "duplicate",
-				reason: "Same trigger, invariant and faulty expansion.",
-				evidence: ["Both reports identify the same roster expansion."],
-				duplicateOf: "request-correctness:first",
-			},
-		],
-	};
-	expect(validateFindings(valid, "captured-target", [findings]).findings).toHaveLength(2);
-	valid.findings[0]!.disposition = "duplicate";
-	valid.findings[0]!.duplicateOf = "request-correctness:second";
-	expect(() => validateFindings(valid, "captured-target", [findings])).toThrow("cycle");
-});
-
-test("a single-report validator may name findings by their bare IDs", () => {
-	const findings = report();
-	findings.findings = ["first", "second"].map((id) => ({
-		id,
-		title: "Consent changes after selection",
-		path: "api.ts",
-		line: 10,
-		side: "after",
-		severity: "high",
-		certainty: "probable",
-		trigger: "The roster changes while a request waits.",
-		invariant: "Selection must stay fixed.",
-		impact: "An unintended person can be selected.",
-		cause: "The backend expands the roster again.",
-		correction: "Retain the selected identifiers.",
-		evidence: [{ kind: "source", detail: "api.ts:10 expands the current roster.", provenance: "captured source" }],
-		counterevidence: "No caller guard was found.",
-	}));
-	const shard = validateShard(
-		{
-			artifact: "captured-target",
-			summary: "Challenge findings",
-			coverageGaps: [],
-			limitations: [],
-			findings: [
-				{ finding: "first", disposition: "confirmed", reason: "Traced.", evidence: ["caller"], duplicateOf: null },
-				{ finding: "second", disposition: "duplicate", reason: "Same.", evidence: ["caller"], duplicateOf: "first" },
-			],
-		},
+test("the planner chooses only supplied roles and never repeats the artifact", () => {
+	const { artifact: _, ...reply } = plan();
+	const schema = planToolSchema([...roles]);
+	expect(Value.Check(schema, reply)).toBe(true);
+	expect(Value.Check(schema, { ...reply, integration: { ...reply.integration, role: "invented-role" } })).toBe(false);
+	expect(validatePlan(planFromTool(reply, "captured-target"), "captured-target", regions, roles).artifact).toBe(
 		"captured-target",
-		findings,
 	);
-	expect(shard.findings.map((entry) => [entry.finding, entry.duplicateOf])).toEqual([
-		["request-correctness:first", null],
-		["request-correctness:second", "request-correctness:first"],
+});
+
+test("findings stand as reported, hypotheses stay unresolved, and only sound duplicate links apply", () => {
+	const first = report();
+	first.findings = [finding("first"), finding("second"), finding("guess", "hypothesis")];
+	const keys = first.findings.map((entry) => findingKey(first.pass, entry.id));
+	expect(
+		Value.Check(duplicateToolSchema(keys), {
+			summary: "One pair",
+			duplicates: [{ finding: "x", duplicateOf: keys[0], reason: "r" }],
+		}),
+	).toBe(false);
+	const assessed = assessFindings("captured-target", [first], {
+		artifact: "captured-target",
+		summary: "One pair.",
+		duplicates: [
+			{ finding: keys[1]!, duplicateOf: keys[0]!, reason: "Same trigger, invariant and cause." },
+			{ finding: keys[0]!, duplicateOf: keys[1]!, reason: "A cycle back." },
+			{ finding: keys[2]!, duplicateOf: keys[2]!, reason: "Itself." },
+		],
+	});
+	expect(assessed.findings.map((entry) => [entry.disposition, entry.duplicateOf])).toEqual([
+		["confirmed", null],
+		["duplicate", keys[0]],
+		["unresolved", null],
+	]);
+	expect(assessFindings("captured-target", [first], null).findings.map((entry) => entry.disposition)).toEqual([
+		"confirmed",
+		"confirmed",
+		"unresolved",
 	]);
 });
 

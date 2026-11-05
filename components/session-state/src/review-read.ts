@@ -5,7 +5,9 @@ import { dirname, join, posix } from "node:path";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { captureIntent, readCapturedSource } from "../../code-review/src/capture.js";
 import {
+	assessFindings,
 	chunkRegions,
+	type DuplicateLinks,
 	type FindingValidation,
 	findingKey,
 	planPasses,
@@ -127,7 +129,21 @@ export function reviewAssessment(db: DatabaseSync, actor: string, id: string): R
 			return { pass, attempt, report: (attempt?.output as ReviewReport | null) ?? null };
 		});
 		const validator = selected("validator", "validation");
-		const validation = validator ? { attempt: validator, report: validator.output as FindingValidation } : null;
+		const stored = validator?.output as FindingValidation | DuplicateLinks | undefined;
+		const validation =
+			job.plan && job.artifact
+				? {
+						attempt: validator,
+						report:
+							stored && "findings" in stored
+								? stored
+								: assessFindings(
+										job.artifact.digest,
+										passes.flatMap(({ report }) => (report ? [report] : [])),
+										stored ?? null,
+									),
+					}
+				: null;
 		const decisions = db
 			.prepare(
 				"select id, review_id as review, digest, revision, actor, kind, finding, data, created_at as createdAt from review_decisions where review_id = ? order by created_at, rowid",

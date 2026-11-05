@@ -1,15 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Static } from "typebox";
-import type {
-	DuplicateLinksSchema,
-	FindingValidation,
-	PlannedPass,
-	ReviewPlan,
-	ReviewReport,
-} from "../../components/code-review/src/contracts.js";
-
-type DuplicateLinks = Static<typeof DuplicateLinksSchema>;
+import type { PlannedPass, ReviewPlan } from "../../components/code-review/src/contracts.js";
 
 export type ReviewInput = { artifact: { digest: string } } & (
 	| {
@@ -18,27 +9,23 @@ export type ReviewInput = { artifact: { digest: string } } & (
 			additionalWork?: { id: string; question: string; doneWhen: string }[];
 	  }
 	| { phase: "inspection"; pass: PlannedPass }
-	| { phase: "validation"; reports: ReviewReport[] }
 	| { phase: "validation"; findings: { key: string }[] }
 );
 export interface ReviewSettings {
 	authority?: boolean;
 	partial?: boolean;
+	partialPass?: string;
+	unavailable?: boolean;
 	otherReport?: string;
 	passId?: string;
-	challenged?: boolean;
 	finding?: boolean;
-	rejectFinding?: boolean;
+	duplicate?: boolean;
 }
 
-export function reviewReply(
-	input: ReviewInput,
-	settings: ReviewSettings = {},
-): ReviewPlan | ReviewReport | FindingValidation | DuplicateLinks {
+export function reviewReply(input: ReviewInput, settings: ReviewSettings = {}): unknown {
 	const summary = readFileSync(join(process.cwd(), "value.ts"), "utf8").trim();
 	if (input.phase === "planning") {
-		const plan: ReviewPlan = {
-			artifact: input.artifact.digest,
+		const plan: Omit<ReviewPlan, "artifact"> = {
 			summary,
 			chunks: [
 				{
@@ -105,17 +92,19 @@ export function reviewReply(
 	}
 	if (input.phase === "inspection")
 		return {
-			artifact: input.artifact.digest,
-			pass: input.pass.id,
 			summary: summary + (input.pass.kind === "focused" && settings.otherReport ? `\n${settings.otherReport}` : ""),
-			coverage: input.pass.questions.map((question) => ({
-				question: question.id,
-				state: settings.partial ? "incomplete" : "completed",
-				evidence: settings.partial ? [] : [summary],
-				reason: settings.partial ? "The required service is unavailable." : "",
-			})),
+			coverage: Object.fromEntries(
+				input.pass.questions.map((question) => [
+					question.id,
+					settings.partial || settings.partialPass === input.pass.id
+						? { state: "incomplete", reason: "The scripted inspection stopped before settling this." }
+						: settings.unavailable
+							? { state: "unavailable", reason: "The required service is not reachable from this machine." }
+							: { state: "completed", evidence: [summary] },
+				]),
+			),
 			findings:
-				settings.finding && input.pass.kind === "focused"
+				settings.finding && (input.pass.kind === "focused" || settings.duplicate)
 					? [
 							{
 								id: "mismatch",
@@ -138,31 +127,13 @@ export function reviewReply(
 			limitations: [],
 			extraPasses: [],
 		};
-	if ("findings" in input) return { artifact: input.artifact.digest, summary, duplicates: [] };
+	const [first, ...rest] = input.findings;
 	return {
-		artifact: input.artifact.digest,
 		summary,
-		findings: input.reports.flatMap((report) =>
-			report.findings.map((finding) => ({
-				finding: `${encodeURIComponent(report.pass)}:${encodeURIComponent(finding.id)}`,
-				disposition: settings.rejectFinding ? ("rejected" as const) : ("confirmed" as const),
-				reason: settings.rejectFinding
-					? "Scripted counterevidence rejects this allegation."
-					: "The scripted challenge retains this allegation.",
-				evidence: [summary],
-				duplicateOf: null,
-			})),
-		),
-		coverageGaps:
-			settings.challenged && input.reports[0]!.pass === (settings.passId ?? "value-correctness")
-				? [
-						{
-							pass: input.reports[0]!.pass,
-							question: input.reports[0]!.coverage[0]!.question,
-							reason: "The claimed consumer check has no supporting trace.",
-						},
-					]
-				: [],
-		limitations: [],
+		duplicates: rest.map((entry) => ({
+			finding: entry.key,
+			duplicateOf: first!.key,
+			reason: "The scripted passes report the same trigger, invariant and cause.",
+		})),
 	};
 }

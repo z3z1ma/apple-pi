@@ -29,7 +29,7 @@ export interface ChangeRegion {
 }
 
 export interface ReviewConfiguration {
-	instructions: { planning: string; inspection: string; validation: string; duplicates?: string };
+	instructions: { planning: string; inspection: string; validation?: string; duplicates?: string };
 	roleReferences: { role: string; models: string[] }[];
 	catalogIssues: number;
 }

@@ -58,7 +58,7 @@ test("capture binds review instructions and configured references without resolv
 			instructions: {
 				planning: expect.stringContaining("behavior or contract"),
 				inspection: expect.stringContaining("first inspection independently"),
-				validation: expect.stringContaining("sealed first-inspection report"),
+				duplicates: expect.stringContaining("Link duplicate findings"),
 			},
 			roleReferences: expect.arrayContaining([
 				{ role: "capture-reader", models: ["balanced", "fixture/fallback:high"] },

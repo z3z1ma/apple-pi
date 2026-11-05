@@ -1,6 +1,6 @@
 ## file
 
-A finding response is an accountable judgment, not a schema-certified fact. A fixed decision cites a completed question on another captured target and retains its exact attempt, validator, digest, revision and reported evidence. It never changes the original captured code. Keep original allegations, validation and response history separate.
+A finding response is an accountable judgment, not a schema-certified fact. A fixed decision cites a completed question on another captured target and retains its exact attempt, validator (null when that review ran no linking attempt), digest, revision and reported evidence. It never changes the original captured code. Keep original allegations, validation and response history separate.
 
 With TypeBox 1.3.27, Type.Union over a mapped literal array validated at runtime but inferred never for Static. Explicit literal tuples preserve the usable static type; typecheck the actual callers as well as exercising the schemas.
 

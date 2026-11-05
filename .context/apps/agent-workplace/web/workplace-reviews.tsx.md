@@ -11,7 +11,7 @@ While the app is visible the queue reloads on a two-second tick, and the Log and
 
 A review shown selected while the app is visible is marked seen at its current state, including each later state while it stays selected: the operator is watching it. The rail badge and the cards' "was …" labels come from `updates` (workplace-review-updates.ts), not from the queue.
 
-The progress line derives its step from the summary: queued or capturing is the first step; running uses `phase.kind` (planner, then focused or integration as inspecting, then validation); settled states end on Settled; failed, interrupted and cancelled stop at the step they reached, in their own tone. It is a reading of `state`, `phase` and `passes`, not a separate record.
+The progress line derives its step from the summary: queued or capturing is the first step; running uses `phase.kind` (planner, then focused or integration as inspecting, then validation as Merging, the duplicate-linking step); settled states end on Settled; failed, interrupted and cancelled stop at the step they reached, in their own tone. It is a reading of `state`, `phase` and `passes`, not a separate record.
 
 Evidence views live in workplace-review-views.tsx, one purpose-built view per part; no part falls back to raw text or JSON in a code block, and the browser test asserts that for every tab. They trust the shared reader shapes from review-read.ts; a reader shape change must update its view.
 

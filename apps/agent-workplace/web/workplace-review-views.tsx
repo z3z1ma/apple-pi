@@ -219,7 +219,7 @@ export function FindingView({ entry }: { entry: ReviewAssessment["findings"][num
 				<i className={`wp-review-severity is-${finding.severity}`}>{finding.severity}</i> {finding.title}
 			</h4>
 			<p className="wp-review-meta">
-				{finding.path}:{finding.line} · validation {entry.validation?.disposition ?? "pending"} · response{" "}
+				{finding.path}:{finding.line} · {entry.validation?.disposition ?? "pending"} · response{" "}
 				{entry.decision?.data.disposition ?? "none"} · {entry.id}
 			</p>
 			<dl>
@@ -229,7 +229,7 @@ export function FindingView({ entry }: { entry: ReviewAssessment["findings"][num
 				{field("Correction", finding.correction)}
 			</dl>
 			<details>
-				<summary>Evidence and validation</summary>
+				<summary>Evidence and status</summary>
 				<FindingEvidence entry={entry} />
 			</details>
 		</article>
@@ -268,8 +268,8 @@ function FindingEvidence({ entry }: { entry: ReviewAssessment["findings"][number
 			/>
 			<h5>Inspector evidence</h5>
 			<EvidenceList items={finding.evidence} />
-			<h5>Validation</h5>
-			{validation ? <ValidationEntry entry={validation} /> : <Empty>Not yet validated.</Empty>}
+			<h5>Status</h5>
+			{validation ? <ValidationEntry entry={validation} /> : <Empty>Not settled yet.</Empty>}
 			<h5>Owner response</h5>
 			{decision ? <DecisionBody decision={decision} /> : <Empty>No response yet.</Empty>}
 		</div>

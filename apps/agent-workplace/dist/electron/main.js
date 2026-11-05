@@ -4883,17 +4883,13 @@ This is triage, not the review itself. Read the change at a high level and enoug
 Group the change into a few scopes by the behavior or contract they affect, naming each scope's files or directories in paths (repository-relative; a directory covers everything under it). The runtime maps changed regions to scopes and gives the integration pass the whole change, so never list regions and never enumerate files that a directory already covers.
 Spend depth where risk concentrates. Prefer a few deep passes over a grid of lenses: one pass may combine several lenses, a low-risk scope (docs, tests, wiring) may need one light pass or none of its own, and a high-risk scope may deserve several independent passes with different roles. Every pass needs concrete questions and the evidence that would settle them. When intent is absent, keep that axis unassessed rather than inventing a goal.
 Give every pass, including integration, a depth. A role chooses the perspective; depth chooses the model tier: standard runs the balanced profile, deep the strongest profile at several times the cost per pass. Use deep only where a miss would hurt most (the highest-risk scope, usually one or two passes), and standard everywhere else.
-Use only supplied advisory role names. Preserve requested lens labels as actual assigned work. The integration pass owns cross-scope interactions and challenges to this decomposition. Return the plan through the structured result tool.`;
+Use only supplied advisory role names. Preserve requested lens labels as actual assigned work. Every pass, including integration, runs at the same time as the others and never sees their reports: the integration pass owns how the scopes interact across the whole change and what this decomposition missed, judged from the source itself. Never ask a pass to reconcile, compare or challenge other passes' reports; duplicates are linked afterwards. Ask only for evidence a reviewer can produce from the captured source on this machine; when a check needs a live service, hardware or credentials, say so in the question so it can be reported as unavailable. Return the plan through the structured result tool.`;
 var INSPECT_REVIEW = `Perform your assigned first inspection independently. ${source}
 Start from the assigned questions and form your own causal trace before consulting other review reports or opinions. Your brief contains source, intent, scope and questions rather than the author's narrative or colleagues' conclusions. Record any outside conclusions you encounter as a limitation on that independence.
-Account for every question. Cover the applicable repository standards and captured intent; when intent is absent, state that it was not assessed in limitations. A completed question names evidence; unavailable checks or unresolved dependencies remain incomplete with a reason. Report defects with a triggering case, violated invariant, causal trace, user impact, captured location and counterevidence considered. Distinguish a source inference from an executed reproduction or a hypothesis. A severity is a judgment, not calibrated probability. Follow guards, callers and reconciliation before alleging a local omission.
+Answer every assigned question under its own key; the result tool lists them. Apply the repository's standards and the captured intent within those answers, and note in limitations when intent is absent. A completed answer names its evidence. When the evidence cannot be produced here (a live service, hardware, credentials or a tool this machine lacks), answer unavailable with what would settle it. When it could be produced but you did not settle it, answer incomplete with the reason. Report defects with a triggering case, violated invariant, causal trace, user impact, captured location and counterevidence considered. Distinguish a source inference from an executed reproduction or a hypothesis. A severity is a judgment, not calibrated probability. Follow guards, callers and reconciliation before alleging a local omission.
 An additional pass request must name a concrete uncertainty, why more work is justified and what would settle it. Known unavailable evidence belongs in incomplete coverage rather than repeated broad review. Preserve limitations even when no defects are found. Return the report through the structured result tool.`;
-var VALIDATE_REVIEW = `Challenge one sealed first-inspection report against the captured source. ${source}
-Settle every finding in this report by its trigger, invariant and causal path: confirm, reject with counterevidence, leave unresolved when proof is missing, or mark a duplicate of another finding in the same report. Preserve every allegation in the returned dispositions.
-Start from the inspector's recorded evidence. When it is a specific, checkable reproduction or trace, verify that it shows what it claims and confirm without repeating the whole experiment. Re-run or trace yourself only when the evidence is a bare inference, missing, or doubtful, and say which you did.
-Check whether the coverage claims answer their actual questions. Record required missing evidence as a coverage gap naming the pass and question. Duplicates across other reports are linked afterwards; do not look for them. Return the validation through the structured result tool.`;
 var LINK_DUPLICATES = `Link duplicate findings across independently validated reports. The bound context lists every finding with its validation; do not re-investigate the source.
-Two findings are duplicates only when they share the same trigger, violated invariant and cause; similar titles or the same file do not make a duplicate. For each duplicate, name the finding it duplicates (prefer the one with the clearest evidence) and why. Never link a finding to itself or in a cycle. Summarize the combined outcome in a few sentences. Return the links through the structured result tool.`;
+Two findings are duplicates only when they share the same trigger, violated invariant and cause; similar titles or the same file do not make a duplicate. For each duplicate, name the finding it duplicates (prefer the one with the clearest evidence) and why, using the finding keys the result tool lists. Summarize the combined outcome in a few sentences. Return the links through the structured result tool.`;
 //#endregion
 //#region components/code-review/src/policy.ts
 function reviewConfiguration(source) {
@@ -4902,7 +4898,6 @@ function reviewConfiguration(source) {
 		instructions: {
 			planning: PLAN_REVIEW,
 			inspection: INSPECT_REVIEW,
-			validation: VALIDATE_REVIEW,
 			duplicates: LINK_DUPLICATES
 		},
 		roleReferences: [...roles.keys()].sort().flatMap((name) => {
@@ -5588,25 +5583,28 @@ var pass = Type.Object({
 	lenses: Type.Array(text$4, { minItems: 1 }),
 	questions: Type.Array(question, { minItems: 1 })
 }, object$5);
+var chunkFields = {
+	id: text$4,
+	title: text$4,
+	paths: Type.Array(text$4, { minItems: 1 }),
+	context: Type.Array(text$4),
+	risks: Type.Array(Type.Object({
+		kind: Type.Union([
+			Type.Literal("contract"),
+			Type.Literal("reliability"),
+			Type.Literal("authority"),
+			Type.Literal("compatibility"),
+			Type.Literal("usability"),
+			Type.Literal("uncertainty")
+		]),
+		reason: text$4
+	}, object$5))
+};
 Type.Object({
 	artifact: text$4,
 	summary: text$4,
 	chunks: Type.Array(Type.Object({
-		id: text$4,
-		title: text$4,
-		paths: Type.Array(text$4, { minItems: 1 }),
-		context: Type.Array(text$4),
-		risks: Type.Array(Type.Object({
-			kind: Type.Union([
-				Type.Literal("contract"),
-				Type.Literal("reliability"),
-				Type.Literal("authority"),
-				Type.Literal("compatibility"),
-				Type.Literal("usability"),
-				Type.Literal("uncertainty")
-			]),
-			reason: text$4
-		}, object$5)),
+		...chunkFields,
 		passes: Type.Array(pass, { minItems: 1 })
 	}, object$5)),
 	integration: Type.Object({
@@ -5615,55 +5613,61 @@ Type.Object({
 		questions: Type.Array(question, { minItems: 1 })
 	}, object$5)
 }, object$5);
+var finding = Type.Object({
+	id: text$4,
+	title: text$4,
+	path: text$4,
+	line: Type.Integer({ minimum: 1 }),
+	side: Type.Union([Type.Literal("before"), Type.Literal("after")]),
+	severity: Type.Union([
+		Type.Literal("critical"),
+		Type.Literal("high"),
+		Type.Literal("medium"),
+		Type.Literal("low")
+	]),
+	certainty: Type.Union([
+		Type.Literal("confirmed"),
+		Type.Literal("probable"),
+		Type.Literal("hypothesis")
+	]),
+	trigger: text$4,
+	invariant: text$4,
+	impact: text$4,
+	cause: text$4,
+	correction: text$4,
+	evidence: Type.Array(Type.Object({
+		kind: Type.Union([
+			Type.Literal("source"),
+			Type.Literal("reproduced"),
+			Type.Literal("hypothesis")
+		]),
+		detail: text$4,
+		provenance: text$4
+	}, object$5), { minItems: 1 }),
+	counterevidence: Type.String()
+}, object$5);
+var extraPass = Type.Object({
+	reason: text$4,
+	question: text$4,
+	doneWhen: text$4
+}, object$5);
 Type.Object({
 	artifact: text$4,
 	pass: text$4,
 	summary: text$4,
 	coverage: Type.Array(Type.Object({
 		question: text$4,
-		state: Type.Union([Type.Literal("completed"), Type.Literal("incomplete")]),
+		state: Type.Union([
+			Type.Literal("completed"),
+			Type.Literal("incomplete"),
+			Type.Literal("unavailable")
+		]),
 		evidence: Type.Array(text$4),
 		reason: Type.String()
 	}, object$5)),
-	findings: Type.Array(Type.Object({
-		id: text$4,
-		title: text$4,
-		path: text$4,
-		line: Type.Integer({ minimum: 1 }),
-		side: Type.Union([Type.Literal("before"), Type.Literal("after")]),
-		severity: Type.Union([
-			Type.Literal("critical"),
-			Type.Literal("high"),
-			Type.Literal("medium"),
-			Type.Literal("low")
-		]),
-		certainty: Type.Union([
-			Type.Literal("confirmed"),
-			Type.Literal("probable"),
-			Type.Literal("hypothesis")
-		]),
-		trigger: text$4,
-		invariant: text$4,
-		impact: text$4,
-		cause: text$4,
-		correction: text$4,
-		evidence: Type.Array(Type.Object({
-			kind: Type.Union([
-				Type.Literal("source"),
-				Type.Literal("reproduced"),
-				Type.Literal("hypothesis")
-			]),
-			detail: text$4,
-			provenance: text$4
-		}, object$5), { minItems: 1 }),
-		counterevidence: Type.String()
-	}, object$5)),
+	findings: Type.Array(finding),
 	limitations: Type.Array(text$4),
-	extraPasses: Type.Array(Type.Object({
-		reason: text$4,
-		question: text$4,
-		doneWhen: text$4
-	}, object$5))
+	extraPasses: Type.Array(extraPass)
 }, object$5);
 Type.Object({
 	artifact: text$4,
@@ -5723,13 +5727,49 @@ function findingKey(pass, finding) {
 }
 Type.Object({
 	artifact: text$4,
-	summary: text$4,
+	summary: Type.String(),
 	duplicates: Type.Array(Type.Object({
 		finding: text$4,
 		duplicateOf: text$4,
 		reason: text$4
 	}, object$5))
 }, object$5);
+function assessFindings(artifact, reports, links) {
+	const findings = reports.flatMap((report) => report.findings.map((entry) => ({
+		finding: findingKey(report.pass, entry.id),
+		disposition: entry.certainty === "hypothesis" ? "unresolved" : "confirmed",
+		reason: entry.certainty === "hypothesis" ? `Pass ${report.pass} reported this as a hypothesis without a reproduction.` : `Pass ${report.pass} reported this with ${entry.certainty} certainty and the evidence below; no separate validator re-ran it.`,
+		evidence: entry.evidence.map((item) => `${item.kind}: ${item.detail} (${item.provenance})`),
+		duplicateOf: null
+	})));
+	const byKey = new Map(findings.map((entry) => [entry.finding, entry]));
+	const reaches = (from, target) => {
+		const visited = /* @__PURE__ */ new Set();
+		for (let next = from; next; next = byKey.get(next)?.duplicateOf ?? null) {
+			if (next === target) return true;
+			if (visited.has(next)) return false;
+			visited.add(next);
+		}
+		return false;
+	};
+	for (const link of links?.duplicates ?? []) {
+		const entry = byKey.get(link.finding);
+		if (!entry || !byKey.has(link.duplicateOf) || entry.disposition === "duplicate") continue;
+		if (reaches(link.duplicateOf, link.finding)) continue;
+		Object.assign(entry, {
+			disposition: "duplicate",
+			duplicateOf: link.duplicateOf,
+			reason: link.reason
+		});
+	}
+	return {
+		artifact,
+		summary: links?.summary ?? "",
+		coverageGaps: [],
+		findings,
+		limitations: []
+	};
+}
 function checkShape(schema, value) {
 	if (!Value.Check(schema, value)) {
 		const errors = [...Value.Errors(schema, value)].map((error) => `${error.instancePath || "/"}: ${error.message}`);
@@ -5797,9 +5837,10 @@ function reviewAssessment(db, actor, id) {
 			};
 		});
 		const validator = selected("validator", "validation");
-		const validation = validator ? {
+		const stored = validator?.output;
+		const validation = job.plan && job.artifact ? {
 			attempt: validator,
-			report: validator.output
+			report: stored && "findings" in stored ? stored : assessFindings(job.artifact.digest, passes.flatMap(({ report }) => report ? [report] : []), stored ?? null)
 		} : null;
 		const decisions = db.prepare("select id, review_id as review, digest, revision, actor, kind, finding, data, created_at as createdAt from review_decisions where review_id = ? order by created_at, rowid").all(job.id).map((row) => ({
 			...row,

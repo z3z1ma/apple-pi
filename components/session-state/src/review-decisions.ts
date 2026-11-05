@@ -175,7 +175,7 @@ function verifiedQuestion(
 		digest: verified.job.artifact.digest,
 		revision: verified.job.revision,
 		attempt: inspected.attempt.id,
-		validator: verified.validation.attempt.id,
+		validator: verified.validation.attempt?.id ?? null,
 		evidence: coverage.evidence,
 	};
 }

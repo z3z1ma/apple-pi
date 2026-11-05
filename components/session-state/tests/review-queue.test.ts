@@ -170,7 +170,11 @@ test("an ordinary reviewer runs in captured source and its result survives guard
 	);
 	expect(attempts.length).toBeGreaterThan(0);
 	for (const attempt of attempts) {
-		expect(attempt).toMatchObject({ state: "completed", model: "fixture/code-review-specialist", thinking: "high" });
+		expect(attempt).toMatchObject({
+			state: "completed",
+			model: "fixture/code-review-specialist",
+			thinking: JSON.parse(attempt.output).chunks ? "medium" : "high",
+		});
 		expect(JSON.parse(attempt.output).summary).toContain("export const value = 2;");
 		const header = JSON.parse(
 			readFileSync(join(state.agentDir, "peer-records", `${attempt.person}.jsonl`), "utf8").split("\n")[0]!,
@@ -434,7 +438,8 @@ test("the queue reader separates required coverage, absent intent and findings w
 		});
 		const assessment = reviewAssessment(db, "owner", job.id);
 		expect(assessment.passes.map((entry) => entry.report?.pass)).toEqual(["value-correctness", "integration"]);
-		expect(assessment.validation?.attempt.state).toBe("completed");
+		expect(assessment.validation?.attempt).toBeNull();
+		expect(assessment.validation?.report.findings).toEqual([]);
 		expect(reviewQueue(db, "outsider", { limit: 1 }).total).toBe(0);
 		expect(reviewStates(db, "owner")).toEqual([{ id: job.id, state: "completed" }]);
 		expect(reviewStates(db, "outsider")).toEqual([]);
@@ -457,13 +462,16 @@ test("the queue reader separates required coverage, absent intent and findings w
 	}
 }, 30000);
 
-test("a challenged question is not completed coverage and resume obtains a new inspection", async () => {
+test("an unsettled question makes the review incomplete, a pass that fails twice does not fail the review, and resume reruns only what is unsettled", async () => {
 	writeFileSync(
 		join(state.agentDir, "peer-control.json"),
-		JSON.stringify({ review: { passId: "constructor", finding: true, challenged: true } }),
+		JSON.stringify({ review: { passId: "constructor", finding: true, partialPass: "constructor" } }),
 	);
 	const job = await enqueue();
 	await settled(job.id, "incomplete");
+	expect(query(state.dbPath, "select reason from review_jobs where id = ?", job.id)).toEqual([
+		{ reason: "constructor/value is unsettled: The scripted inspection stopped before settling this." },
+	]);
 	const db = new DatabaseSync(state.dbPath, { readOnly: true });
 	try {
 		const before = reviewAssessment(db, "owner", job.id);
@@ -491,7 +499,18 @@ test("a challenged question is not completed coverage and resume obtains a new i
 			(await sendCommand("owner", { kind: "review", version: 1, operation: { action: "resume", review: job.id } }))
 				.stage,
 		).toBe("applied");
-		await settled(job.id, "failed");
+		await settled(job.id, "incomplete");
+		expect(
+			query<{ reason: string }>(state.dbPath, "select reason from review_jobs where id = ?", job.id)[0]!.reason,
+		).toMatch(/^pass constructor failed twice \(/);
+		expect(
+			query(
+				state.dbPath,
+				"select state from review_attempts where review_id = ? and pass_id = 'constructor' and generation = (select generation from review_jobs where id = ?)",
+				job.id,
+				job.id,
+			),
+		).toEqual([{ state: "failed" }, { state: "failed" }]);
 		writeFileSync(
 			join(state.agentDir, "peer-control.json"),
 			JSON.stringify({ review: { passId: "constructor", finding: true } }),
@@ -514,10 +533,10 @@ test("a challenged question is not completed coverage and resume obtains a new i
 	}
 }, 30000);
 
-test("partial allegations stay unvalidated while queue pages follow priority and FIFO", async () => {
+test("findings stand as reported while duplicates are linked, and queue pages follow priority and FIFO", async () => {
 	writeFileSync(
 		join(state.agentDir, "peer-control.json"),
-		JSON.stringify({ review: { finding: true, hold: "validation" } }),
+		JSON.stringify({ review: { finding: true, duplicate: true, hold: "validation" } }),
 	);
 	const active = await enqueue();
 	await vi.waitFor(
@@ -528,7 +547,7 @@ test("partial allegations stay unvalidated while queue pages follow priority and
 					"select id from review_attempts where review_id = ? and kind = 'validation' and state = 'running'",
 					active.id,
 				),
-			).toHaveLength(2),
+			).toHaveLength(1),
 		{ timeout: 15000 },
 	);
 	const first = await enqueue();
@@ -538,7 +557,7 @@ test("partial allegations stay unvalidated while queue pages follow priority and
 		expect(reviewQueue(db, "owner", { limit: 1 }).page!.rows[0]).toMatchObject({
 			id: active.id,
 			phase: { kind: "validation", state: "running" },
-			findings: { reported: 1, confirmed: 0, unresolved: 1 },
+			findings: { reported: 2, confirmed: 2, unresolved: 0 },
 		});
 		expect(reviewQueue(db, "owner", { state: "queued", limit: 1 }).page).toMatchObject({
 			nextOffset: 1,
@@ -621,7 +640,7 @@ test("review_code can wait for the settled outcome and return its confirmed find
 test("native tools admit, read, cancel, recover exact requests and explicitly capture a fresh rerun", async () => {
 	writeFileSync(
 		join(state.agentDir, "peer-control.json"),
-		JSON.stringify({ review: { finding: true, hold: "validation" } }),
+		JSON.stringify({ review: { finding: true, duplicate: true, hold: "validation" } }),
 	);
 	const { run, callTool } = await nativeReviewTools();
 	try {
@@ -647,13 +666,20 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 						"select id from review_attempts where review_id = ? and kind = 'validation' and state = 'running'",
 						id,
 					),
-				).toHaveLength(2),
+				).toHaveLength(1),
 			{ timeout: 15000 },
 		);
 		expect(await callTool("review_queue", {})).toMatchObject({ total: 1, states: { running: 1 }, page: null });
-		expect(await callTool("read_review", { review: id, part: "findings" })).toEqual({ total: 1, page: null });
+		expect(await callTool("read_review", { review: id, part: "findings" })).toEqual({ total: 2, page: null });
 		expect(await callTool("read_review", { review: id, part: "findings", limit: 1 })).toMatchObject({
-			page: { rows: [{ finding: { title: "The value disagrees with its consumer" }, validation: null }] },
+			page: {
+				rows: [
+					{
+						finding: { title: "The value disagrees with its consumer" },
+						validation: { disposition: "confirmed", duplicateOf: null },
+					},
+				],
+			},
 		});
 		expect(await callTool("read_review", { review: handle, part: "freshness" })).toMatchObject({
 			requestedTarget: "matches",
@@ -738,7 +764,7 @@ test("native tools admit, read, cancel, recover exact requests and explicitly ca
 		await settled(next, "completed");
 		expect(query(state.dbPath, "select parent from review_jobs where id = ?", next)).toEqual([{ parent: id }]);
 		expect(await callTool("read_review", { review: next, part: "attempts", limit: 1 })).toMatchObject({
-			total: 6,
+			total: 3,
 			page: { nextOffset: 1, rows: [{ kind: "planner", state: "completed", selected: true }] },
 		});
 		const fresh = await callTool("read_review", { review: next, part: "target" });
@@ -840,10 +866,7 @@ test.each(["empty", "scoped"])(
 );
 
 test("finding responses retain allegations and approval binds a stable artifact and assessment", async () => {
-	writeFileSync(
-		join(state.agentDir, "peer-control.json"),
-		JSON.stringify({ review: { finding: true, rejectFinding: true } }),
-	);
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { finding: true } }));
 	const job = await enqueue();
 	await settled(job.id, "completed");
 	const db = new DatabaseSync(state.dbPath, { readOnly: true });
@@ -878,7 +901,7 @@ test("finding responses retain allegations and approval binds a stable artifact 
 		).toBe("failed");
 		expect(reviewAssessment(db, "owner", job.id).findings[0]).toMatchObject({
 			finding: assessment.findings[0]!.finding,
-			validation: { disposition: "rejected" },
+			validation: { disposition: "confirmed" },
 			decision: { data: { disposition: "fixed-claimed", verifiedAgainst: null } },
 		});
 		expect(
@@ -1278,6 +1301,36 @@ test("incomplete evidence stays incomplete with zero findings and can resume wit
 	).toHaveLength(2);
 }, 30000);
 
+test("evidence this machine cannot produce completes the review as a stated limit, through a tool that names each planned question", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { unavailable: true } }));
+	const job = await enqueue();
+	await settled(job.id, "completed");
+	const [focused] = query<{ input: string }>(
+		state.dbPath,
+		"select input from review_attempts where review_id = ? and kind = 'focused'",
+		job.id,
+	);
+	const schema = JSON.parse(focused!.input).outputSchema;
+	expect(schema.properties).not.toHaveProperty("artifact");
+	expect(schema.properties.coverage).toMatchObject({ required: ["value"], additionalProperties: false });
+	const outcome = query<{ body: string }>(
+		state.dbPath,
+		"select body from thread_messages where thread_id = ? order by at desc, rowid desc limit 1",
+		`review:${job.id}`,
+	)[0]!.body;
+	expect(outcome).toContain("Could not be checked on this machine:");
+	expect(outcome).toContain("- value-correctness/value: The required service is not reachable from this machine.");
+	const db = new DatabaseSync(state.dbPath, { readOnly: true });
+	try {
+		expect(reviewSummary(db, "owner", job.id)).toMatchObject({
+			state: "completed",
+			coverage: { completedQuestions: 0, requiredQuestions: 2 },
+		});
+	} finally {
+		db.close();
+	}
+}, 30000);
+
 test.each(["role", "profile", "selection", "catalog"])(
 	"resume replans under changed %s policy instead of reusing the earlier assessment",
 	async (change) => {
@@ -1289,7 +1342,10 @@ test.each(["role", "profile", "selection", "catalog"])(
 		const profilePath = join(state.agentDir, "model-profiles.json");
 		const profile = { selection: "ordered", models: [{ model: "fixture/code-review-specialist", thinking: "high" }] };
 		writeFileSync(profilePath, JSON.stringify({ profiles: { balanced: profile } }));
-		writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { challenged: true } }));
+		writeFileSync(
+			join(state.agentDir, "peer-control.json"),
+			JSON.stringify({ review: { partialPass: "value-correctness" } }),
+		);
 		const job = await enqueue();
 		await settled(job.id, "incomplete");
 		const before = query<{ digest: string; revision: number; selected: string }>(
@@ -1424,7 +1480,10 @@ test("a policy change during a real SDK turn retains raw results without accepti
 			job.id,
 		).length,
 	).toBeGreaterThan(0);
-	expect(JSON.parse(attempt.result)).toMatchObject({ status: "completed", value: { pass: "value-correctness" } });
+	expect(JSON.parse(attempt.result)).toMatchObject({
+		status: "completed",
+		value: { coverage: { value: { state: "completed" } } },
+	});
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
 
@@ -1516,7 +1575,7 @@ test("an all-concrete review completes without consulting an unrelated malformed
 	const job = await enqueue();
 	await settled(job.id, "completed");
 	expect(query(state.dbPath, "select state from review_attempts where review_id = ?", job.id)).toEqual(
-		Array.from({ length: 6 }, () => ({ state: "completed" })),
+		Array.from({ length: 3 }, () => ({ state: "completed" })),
 	);
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 	expect(existsSync(join(state.agentDir, "state", "model-profile-selection.sqlite"))).toBe(false);
@@ -1549,29 +1608,29 @@ test("reported cost keeps invalid observations and nonfinite totals unavailable"
 			expect(reviewSummary(db, "owner", job.id).cost).toMatchObject({
 				reportedDollars: null,
 				reportedAttempts: 0,
-				totalAttempts: 2,
+				totalAttempts: 4,
 			});
 			const analytics = reviewAnalytics(db, "owner");
-			expect(analytics).toMatchObject({ dollars: 0, unreported: 2 });
+			expect(analytics).toMatchObject({ dollars: 0, unreported: 4 });
 			expect(analytics.byPhase.every((row) => row.reported === 0 && row.dollars === 0)).toBe(true);
 		}
 		setCost.run("0", job.id);
 		expect(reviewSummary(db, "owner", job.id).cost).toMatchObject({
 			reportedDollars: 0,
-			reportedAttempts: 2,
-			totalAttempts: 2,
+			reportedAttempts: 4,
+			totalAttempts: 4,
 		});
 		setCost.run(String(2 ** 53), job.id);
 		expect(reviewSummary(db, "owner", job.id).cost).toMatchObject({
-			reportedDollars: 2 ** 54,
-			reportedAttempts: 2,
-			totalAttempts: 2,
+			reportedDollars: 2 ** 55,
+			reportedAttempts: 4,
+			totalAttempts: 4,
 		});
 		setCost.run(String(Number.MAX_VALUE), job.id);
 		expect(reviewSummary(db, "owner", job.id).cost).toMatchObject({
 			reportedDollars: null,
-			reportedAttempts: 2,
-			totalAttempts: 2,
+			reportedAttempts: 4,
+			totalAttempts: 4,
 		});
 	} finally {
 		db.close();
@@ -1595,7 +1654,7 @@ test("a malformed planner result retains its observed usage without turning zero
 	const db = new DatabaseSync(state.dbPath, { readOnly: true });
 	try {
 		expect(reviewSummary(db, "owner", job.id)).toMatchObject({
-			cost: { reportedDollars: 0.3, reportedAttempts: 1, totalAttempts: 1 },
+			cost: { reportedDollars: 0.6, reportedAttempts: 2, totalAttempts: 2 },
 		});
 		writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: true }));
 		const resumed = await sendCommand(
@@ -1606,7 +1665,7 @@ test("a malformed planner result retains its observed usage without turning zero
 		expect(resumed.stage, resumed.reason).toBe("applied");
 		await settled(job.id, "completed");
 		expect(reviewSummary(db, "owner", job.id)).toMatchObject({
-			cost: { reportedDollars: expect.closeTo(2.1, 10), reportedAttempts: 7, totalAttempts: 7 },
+			cost: { reportedDollars: expect.closeTo(1.5, 10), reportedAttempts: 5, totalAttempts: 5 },
 		});
 	} finally {
 		db.close();
@@ -1648,9 +1707,9 @@ test("a model outside the recorded role policy fails before a review turn is dis
 	const completed = new DatabaseSync(state.dbPath, { readOnly: true });
 	try {
 		expect(reviewSummary(completed, "owner", job.id).cost).toMatchObject({
-			reportedDollars: expect.closeTo(1.8, 10),
-			reportedAttempts: 6,
-			totalAttempts: 7,
+			reportedDollars: expect.closeTo(0.9, 10),
+			reportedAttempts: 3,
+			totalAttempts: 4,
 		});
 	} finally {
 		completed.close();
@@ -1685,7 +1744,7 @@ test("planned passes run concurrently instead of one after another", async () =>
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
 
-test("the owner is mailed when the plan is ready, as each pass's findings are confirmed, and when the review settles", async () => {
+test("the owner is mailed when the plan is ready, as each pass reports findings, and when the review settles", async () => {
 	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { finding: true } }));
 	const job = await enqueue();
 	await settled(job.id, "completed");
@@ -1698,7 +1757,7 @@ test("the owner is mailed when the plan is ready, as each pass's findings are co
 	await vi.waitFor(() => expect(messages()).toHaveLength(3));
 	const [plan, streamed, outcome] = messages();
 	expect(plan!.body).toContain("is planned: 1 scope, 2 passes, 2 questions");
-	expect(streamed!.body).toContain("1 confirmed finding from pass value-correctness");
+	expect(streamed!.body).toContain("1 finding from pass value-correctness");
 	expect(
 		query<{ kind: string; policy: string }>(
 			state.dbPath,
@@ -1712,7 +1771,7 @@ test("the owner is mailed when the plan is ready, as each pass's findings are co
 	expect(streamed!.body).toMatch(
 		/\[high\] The value disagrees with its consumer \(value\.ts:1\), finding "[0-9a-f-]+:/,
 	);
-	expect(outcome!.body).toContain("completed: 1 confirmed finding");
+	expect(outcome!.body).toContain("completed: 1 finding, 0 unresolved");
 	expect(outcome!.body).toContain("[high] The value disagrees with its consumer (value.ts:1)");
 	expect(
 		query(
@@ -1821,12 +1880,7 @@ test("readers name the change, take comments, show pass logs and analytics, and 
 		const analytics = reviewAnalytics(db, "owner");
 		expect(analytics).toMatchObject({ reviews: 1, settled: 1, confirmed: 1 });
 		expect(analytics.byModel.reduce((sum, row) => sum + row.confirmed, 0)).toBe(1);
-		expect(analytics.byPhase.map((row) => row.kind).sort()).toEqual([
-			"focused",
-			"integration",
-			"planner",
-			"validation",
-		]);
+		expect(analytics.byPhase.map((row) => row.kind).sort()).toEqual(["focused", "integration", "planner"]);
 		expect(reviewQueue(db, "owner", { limit: 5, hideAddressed: true }).total).toBe(1);
 		const [finding] = (
 			readReviewPart(db, "owner", committed.id, { part: "findings", limit: 5 }) as { page: { rows: { id: string }[] } }
@@ -1901,7 +1955,7 @@ test("cancellation retains observed turn usage and waits for reviewer cleanup", 
 	expect(query(state.dbPath, "select session_id from program_peers")).toEqual([]);
 }, 30000);
 
-test("actual first provider inputs keep author narrative and other first reports out until validation", async () => {
+test("actual provider inputs keep author narrative and other passes' reports out of every inspection", async () => {
 	const fixture = new URL("../../../tests/fixtures/review-sdk-peer.ts", import.meta.url).pathname;
 	const register = new URL("../src/register.mjs", import.meta.url).pathname;
 	writeFileSync(
@@ -1930,14 +1984,12 @@ test("actual first provider inputs keep author narrative and other first reports
 		"select kind, person from review_attempts where review_id = ? order by created_at",
 		job.id,
 	);
-	let validatorSawFirstReports = false;
 	for (const attempt of attempts) {
 		const inputs = readFileSync(join(state.agentDir, "provider-inputs", `${attempt.person}.jsonl`), "utf8");
 		expect(inputs).not.toContain("AUTHOR_NARRATIVE_SENTINEL");
 		expect(inputs).not.toContain("Team context at your arrival");
 		expect(inputs).toContain("export const value = 2;");
-		if (attempt.kind === "validation") validatorSawFirstReports ||= inputs.includes("OTHER_FIRST_REPORT_SENTINEL");
-		else expect(inputs.split("\n").slice(0, 4).join("\n")).not.toContain("OTHER_FIRST_REPORT_SENTINEL");
+		expect(inputs.split("\n").slice(0, 4).join("\n")).not.toContain("OTHER_FIRST_REPORT_SENTINEL");
 		const requests = inputs
 			.trim()
 			.split("\n")
@@ -1953,8 +2005,7 @@ test("actual first provider inputs keep author narrative and other first reports
 			expect(JSON.stringify(result.content)).toContain(JSON.parse(job.artifact).source);
 		}
 	}
-	expect(attempts.some((attempt) => attempt.kind === "validation")).toBe(true);
-	expect(validatorSawFirstReports).toBe(true);
+	expect(attempts.map((attempt) => attempt.kind).sort()).toEqual(["focused", "integration", "planner"]);
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 }, 30000);
 
@@ -2004,13 +2055,16 @@ test("a branch cannot leave an unfinished review behind, but can move after canc
 	}
 }, 15000);
 
-async function restart() {
+async function stop() {
 	process.kill(runtimePid(state.pidPath)!, "SIGTERM");
 	await vi.waitFor(() => expect(existsSync(state.socketPath)).toBe(false), { timeout: 5000 });
+}
+async function restart() {
+	await stop();
 	await startRuntime(state.socketPath);
 }
 
-test("restart requires explicit resume of the same verified source and rejects a damaged target", async () => {
+test("restart resumes a verified target by itself and leaves a damaged one interrupted with its reason", async () => {
 	writeFileSync(
 		join(state.agentDir, "peer-control.json"),
 		JSON.stringify({ helloGate: join(state.agentDir, "release-review") }),
@@ -2018,9 +2072,28 @@ test("restart requires explicit resume of the same verified source and rejects a
 	const job = await enqueue();
 	const artifact = JSON.parse(job.artifact);
 	await restart();
-	expect(query(state.dbPath, "select state from review_jobs")).toEqual([{ state: "interrupted" }]);
+	await vi.waitFor(
+		() =>
+			expect(
+				query<{ generation: number }>(state.dbPath, "select generation from review_jobs")[0]!.generation,
+			).toBeGreaterThan(job.generation + 1),
+		{ timeout: 10000 },
+	);
+	expect(query(state.dbPath, "select state, reason from review_jobs")).toEqual([{ state: "running", reason: null }]);
+	await stop();
 	writeFileSync(join(repository, "value.ts"), "export const value = 3;\n");
 	writeFileSync(join(artifact.source, "value.ts"), "export const value = 99;\n");
+	await startRuntime(state.socketPath);
+	await vi.waitFor(
+		() =>
+			expect(query(state.dbPath, "select state, reason from review_jobs")).toEqual([
+				{
+					state: "interrupted",
+					reason: expect.stringContaining("could not resume this review: Captured source changed"),
+				},
+			]),
+		{ timeout: 10000 },
+	);
 	const resume = {
 		kind: "review" as const,
 		version: 1 as const,
@@ -2040,7 +2113,7 @@ test("restart requires explicit resume of the same verified source and rejects a
 	expect(readFileSync(join(artifact.source, "value.ts"), "utf8")).toBe("export const value = 2;\n");
 }, 15000);
 
-test("after interruption an obsolete receipt cannot complete the replacement attempt", async () => {
+test("after a restart an obsolete receipt cannot complete the automatically resumed replacement attempt", async () => {
 	const controls = join(state.agentDir, "peer-control.json");
 	writeFileSync(controls, JSON.stringify({ review: { hold: "inspection" } }));
 	const job = await enqueue();
@@ -2060,15 +2133,8 @@ test("after interruption an obsolete receipt cannot complete the replacement att
 		"select id, person, generation from review_attempts where review_id = ? and kind = 'focused'",
 		job.id,
 	)[0]!;
-	await restart();
-	await settled(job.id, "interrupted");
 	writeFileSync(controls, JSON.stringify({ review: { hold: "inspection" }, replayReviewTurn: `${old.id}:turn` }));
-	const resume = await sendCommand(
-		"owner",
-		{ kind: "review", version: 1, operation: { action: "resume", review: job.id } },
-		{ socketPath: state.socketPath },
-	);
-	expect(resume.stage, resume.reason).toBe("applied");
+	await restart();
 	await vi.waitFor(
 		() =>
 			expect(

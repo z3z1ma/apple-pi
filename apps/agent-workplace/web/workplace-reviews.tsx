@@ -170,7 +170,7 @@ function ReviewCard({
 	);
 }
 
-const STEPS = ["Queued", "Planning", "Inspecting", "Validating", "Settled"] as const;
+const STEPS = ["Queued", "Planning", "Inspecting", "Merging", "Settled"] as const;
 
 function stepOf(review: ReviewSummary): { at: number; tone: Tone } {
 	const { state, phase, passes } = review;

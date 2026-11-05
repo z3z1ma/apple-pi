@@ -142,7 +142,7 @@ it("leads finding evidence with the allegation and keeps validation and later cl
 		},
 	});
 	expect(lines[0]).toBe("[medium] Recorded policy differs");
-	expect(lines).toContain("Validation: not yet validated");
+	expect(lines).toContain("Status: pending");
 	expect(lines).toContain("Owner response: fixed-claimed");
 	for (const text of [
 		"Incorrect coverage",

@@ -3,13 +3,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { verifyArtifact, verifyCapturedSource } from "../../code-review/src/capture.js";
-import type { FindingValidation } from "../../code-review/src/contracts.js";
 import type { ReviewJob } from "../../code-review/src/operations.js";
 import { type ReviewDepth, reviewPolicyFingerprint, reviewRolePolicy } from "../../code-review/src/policy.js";
 import { normalizeOutputSchema } from "../../shared/src/structured-output.js";
 import type { TurnResult } from "../../shared/src/turn-observer.js";
 import type { StatePaths } from "./paths.js";
 import { openPeerProgram, type PeerProgram } from "./program-client.js";
+
+export class ReviewStop extends Error {}
 
 export interface ReviewPassRequest {
 	id: string;
@@ -20,7 +21,8 @@ export interface ReviewPassRequest {
 	goal: string;
 	context: unknown;
 	schema: unknown;
-	reviewedAttempts?: Record<string, string>;
+	thinking?: string;
+	fromTool?(value: unknown): unknown;
 	validate(value: unknown): unknown;
 	reuse?(value: unknown): boolean;
 }
@@ -50,15 +52,24 @@ export async function runReviewAttempt(
 ): Promise<{ attempt: string; output: unknown }> {
 	const artifact = job.artifact;
 	if (!artifact) throw new Error("Review execution requires an admitted artifact");
-	await (pass.kind === "planner" ? verifyArtifact : verifyCapturedSource)(artifact, signal);
+	await verified(pass.kind === "planner" ? verifyArtifact : verifyCapturedSource, artifact, signal);
 	signal.throwIfAborted();
 	const policy = reviewRolePolicy(artifact.source, pass.role, pass.depth);
 	if (reviewPolicyFingerprint(policy) !== pass.policyFingerprint)
-		throw new Error(
+		throw new ReviewStop(
 			`The review policy for ${pass.role} differs from the planned catalog; resume to plan under current policy`,
 		);
 	const inputKey = createHash("sha256")
-		.update(JSON.stringify({ role: pass.role, policy, goal: pass.goal, context: pass.context, schema: pass.schema }))
+		.update(
+			JSON.stringify({
+				role: pass.role,
+				policy,
+				thinking: pass.thinking ?? null,
+				goal: pass.goal,
+				context: pass.context,
+				schema: pass.schema,
+			}),
+		)
 		.digest("hex");
 	const previous = db
 		.prepare(
@@ -80,7 +91,7 @@ export async function runReviewAttempt(
 	const contextFile = join(directory, "input.json");
 	writeFileSync(contextFile, `${JSON.stringify(pass.context, null, 2)}\n`, { mode: 0o600 });
 	const input = { task: pass.goal, outputSchema: normalizeOutputSchema(pass.schema), contextFile };
-	if (!current(db, job)) throw new Error("The review no longer owns this attempt");
+	if (!current(db, job)) throw new ReviewStop("The review no longer owns this attempt");
 	db.prepare(
 		`insert into review_attempts (id, review_id, generation, plan_revision, pass_id, kind, program_id, person, role, policy, input, input_key, state, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'starting', ?)`,
 	).run(
@@ -133,16 +144,17 @@ export async function runReviewAttempt(
 		);
 		if (started.stage !== "applied") throw new Error(started.reason ?? "The reviewer did not start");
 		signal.throwIfAborted();
+		if (pass.thinking) await setThinking(program, person, pass.thinking, `${id}:thinking`, signal);
 		const observed = db
 			.prepare("select role, model, thinking_level as thinking, session_file as file from sessions where id = ?")
 			.get(person) as { role: string | null; model: string | null; thinking: string | null; file: string | null };
 		db.prepare(
 			"update review_attempts set model = ?, thinking = ?, session_file = ?, state = 'running' where id = ?",
-		).run(observed.model, observed.thinking, observed.file, id);
+		).run(observed.model, pass.thinking ?? observed.thinking, observed.file, id);
 		if (observed.role !== pass.role || !candidates.some((candidate) => candidate.model === observed.model))
-			throw new Error("The reviewer did not select its recorded role/model policy; no review turn was sent");
+			throw new ReviewStop("The reviewer did not select its recorded role/model policy; no review turn was sent");
 		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role, pass.depth)) !== JSON.stringify(policy))
-			throw new Error("The review policy changed during startup; no review turn was sent");
+			throw new ReviewStop("The review policy changed during startup; no review turn was sent");
 		const receipt = await program.command(
 			person,
 			{ kind: "run_turn", ...input },
@@ -150,11 +162,11 @@ export async function runReviewAttempt(
 		);
 		if (receipt.stage !== "applied" || receipt.result?.status !== "completed")
 			throw new Error(receipt.reason ?? receipt.result?.error ?? "The review turn did not complete");
-		await verifyCapturedSource(artifact, signal);
+		await verified(verifyCapturedSource, artifact, signal);
 		if (JSON.stringify(reviewRolePolicy(artifact.source, pass.role, pass.depth)) !== JSON.stringify(policy))
-			throw new Error("The review policy changed during the turn; resume to obtain current-policy evidence");
-		output = pass.validate(receipt.result.value);
-		storeOutput(db, job, id, pass, output);
+			throw new ReviewStop("The review policy changed during the turn; resume to obtain current-policy evidence");
+		output = pass.validate(pass.fromTool ? pass.fromTool(receipt.result.value) : receipt.result.value);
+		storeOutput(db, job, id, output);
 	} catch (error) {
 		failure = error;
 		cancelled = signal.aborted && (error === signal.reason || (error as Error)?.name === "AbortError");
@@ -163,15 +175,15 @@ export async function runReviewAttempt(
 			if (program) await program.close();
 			cleaned = true;
 		} catch (error) {
-			failure = new Error(`${failure ? `${message(failure)}; ` : ""}Reviewer cleanup: ${message(error)}`);
+			failure = new ReviewStop(`${failure ? `${message(failure)}; ` : ""}Reviewer cleanup: ${message(error)}`);
 		}
 	}
 	if (!db.isOpen) throw failure ?? new Error("The runtime stopped before the attempt settled");
 	cleaned = cleaned && !db.prepare("select 1 from program_scopes where id = ?").get(programId);
-	if (!cleaned && !failure) failure = new Error("The attempt still owns resources; inspect its pending cleanup");
+	if (!cleaned && !failure) failure = new ReviewStop("The attempt still owns resources; inspect its pending cleanup");
 	const eligible = current(db, job) && !signal.aborted;
 	if (!failure && signal.aborted) cancelled = true;
-	if (!eligible && !failure) failure = new Error("The attempt was interrupted or superseded");
+	if (!eligible && !failure) failure = new ReviewStop("The attempt was interrupted or superseded");
 	const state = !cleaned ? "interrupted" : failure ? (cancelled ? "cancelled" : "failed") : "completed";
 	db.prepare("update review_attempts set state = ?, reason = ?, finished_at = ? where id = ?").run(
 		state,
@@ -183,26 +195,9 @@ export async function runReviewAttempt(
 	return { attempt: id, output };
 }
 
-function storeOutput(db: DatabaseSync, job: ReviewJob, id: string, pass: ReviewPassRequest, output: unknown): void {
-	if (!current(db, job)) throw new Error("The review no longer owns this output");
-	db.exec("begin");
-	try {
-		db.prepare("update review_attempts set output = ? where id = ?").run(JSON.stringify(output), id);
-		if (pass.kind === "validation") {
-			for (const gap of (output as FindingValidation).coverageGaps) {
-				const attempts = pass.reviewedAttempts;
-				if (!attempts || !Object.hasOwn(attempts, gap.pass))
-					throw new Error("The coverage challenge has no inspected attempt");
-				db.prepare(
-					"update review_attempts set reuse_blocked_by = ? where id = ? and review_id = ? and state = 'completed'",
-				).run(id, attempts[gap.pass], job.id);
-			}
-		}
-		db.exec("commit");
-	} catch (error) {
-		db.exec("rollback");
-		throw error;
-	}
+function storeOutput(db: DatabaseSync, job: ReviewJob, id: string, output: unknown): void {
+	if (!current(db, job)) throw new ReviewStop("The review no longer owns this output");
+	db.prepare("update review_attempts set output = ? where id = ?").run(JSON.stringify(output), id);
 }
 
 function current(db: DatabaseSync, job: ReviewJob): boolean {
@@ -217,6 +212,29 @@ function current(db: DatabaseSync, job: ReviewJob): boolean {
 		)
 	);
 }
+async function setThinking(
+	program: PeerProgram,
+	person: string,
+	level: string,
+	commandId: string,
+	signal: AbortSignal,
+): Promise<void> {
+	const receipt = await program.command(person, { kind: "set_thinking", level }, { signal, commandId });
+	if (receipt.stage !== "applied") throw new Error(receipt.reason ?? "The reviewer did not take its thinking level");
+}
+
+async function verified<T>(
+	check: (artifact: T, signal: AbortSignal) => Promise<unknown>,
+	artifact: T,
+	signal: AbortSignal,
+): Promise<void> {
+	try {
+		await check(artifact, signal);
+	} catch (error) {
+		throw signal.aborted ? error : new ReviewStop(message(error));
+	}
+}
+
 function message(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }

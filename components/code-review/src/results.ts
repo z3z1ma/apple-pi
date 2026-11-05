@@ -166,7 +166,7 @@ export interface ReviewAnalytics {
 export interface ReviewAssessment {
 	job: ReviewJob;
 	passes: { pass: PlannedPass; attempt: ReviewAttempt | null; report: ReviewReport | null }[];
-	validation: { attempt: ReviewAttempt; report: FindingValidation } | null;
+	validation: { attempt: ReviewAttempt | null; report: FindingValidation } | null;
 	decisions: ReviewDecision[];
 	findings: {
 		id: string;

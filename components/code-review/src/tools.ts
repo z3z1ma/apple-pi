@@ -76,7 +76,7 @@ const parts = Type.Union([
 const wait = Type.Optional(
 	Type.Boolean({
 		description:
-			"Block until the review settles, then return its summary and confirmed findings. Its milestone mail then arrives only as a pointer. Omit to keep working; mail reports each validated pass's findings and the outcome as they happen.",
+			"Block until the review settles, then return its summary and confirmed findings. Its milestone mail then arrives only as a pointer. Omit to keep working; mail reports each pass's findings and the outcome as they happen.",
 	}),
 );
 const SETTLED = new Set(["completed", "incomplete", "failed", "cancelled", "no-changes", "interrupted"]);
