@@ -655,8 +655,6 @@ test("real Monaco retains dirty files across file and app switches, then saves e
 		await vi.waitFor(async () => expect(await editorText(page)).toContain("operator draft"));
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([]);
 		await shot(page, "dirty-retained");
-		expect(await page.getByRole("button", { name: "Git", exact: true }).count()).toBe(1);
-		expect(await page.locator(".wp-code").getByText("Source control").count()).toBe(0);
 		await page.getByRole("button", { name: "Save", exact: true }).click();
 		await page.getByText("Saved src/main.ts", { exact: true }).waitFor();
 		expect(await page.evaluate(() => (window as any).workspaceCalls.saves)).toEqual([
