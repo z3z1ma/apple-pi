@@ -22,6 +22,9 @@ Why: a URL change alone cannot distinguish history replacement from document rep
 Progress events and invoke replies travel asynchronously through Electron. Wait for the subscribed progress event separately before disposing its listener; a resolved orgStart promise alone does not mean the renderer has dispatched world:org-progress.
 Why: the first actual-host run missed a valid progress event by disposing the listener as soon as the invocation resolved. Both channels must be observed independently.
 
+The runtime child runs with `stdio: "ignore"`, so a broken runtime entry shows only as "The isolated runtime did not become ready." Run the same spawn by hand with a temporary `PI_CODING_AGENT_DIR` to see the real error before suspecting your own change.
+Why: a rename of the runtime entry (`runtime-main.ts` to `runtime-main.runtime.ts`, 5345bdcf) broke this script silently; the hand run showed ERR_MODULE_NOT_FOUND at once.
+
 Run this script against a completed Agent Workplace build while the shared browser/Electron validation slot is free. It reads built dist/ output, not renderer source; a later build needs a new run regardless of commit state. Capture paths are logged absolute because macOS Node tmpdir is not necessarily /tmp.
 Coupled: apps/agent-workplace/src/electron/main.ts, apps/agent-workplace/src/electron/preload.ts, apps/agent-workplace/src/backend/org.ts, apps/agent-workplace/src/backend/call-in.ts, apps/agent-workplace/src/backend/workspace.ts, apps/agent-workplace/web/workplace-org-chart.tsx, apps/agent-workplace/web/workplace.tsx, apps/agent-workplace/web/workplace-world.tsx, components/session-state/src/protocol.ts, components/session-state/src/runtime.ts
 Verify: apps/agent-workplace/scripts/workplace-electron-check.mjs
