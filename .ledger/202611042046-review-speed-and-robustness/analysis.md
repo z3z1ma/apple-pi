@@ -71,3 +71,15 @@ Caveat: zero rejections may partly reflect that inspectors know they will be val
 5. Optional: a lower thinking level for the planner (unmeasured, perhaps 1 to 2 minutes), and automatic resume after a runtime restart once the captured artifact verifies.
 
 Expected effect of 1 to 4 on these 22 reviews: 4 of 5 failures and 4 of 9 incomplete outcomes would not have happened (16 completed instead of 8), and the typical critical path drops from about 18 to about 13 or 14 minutes. Recommended: 1 to 4 with plain removal in 4.
+
+## Measured after the change (2026-11-05)
+
+Three live reviews on the new pipeline, one sample each.
+
+| Review | Target | Running time | Cost | Outcome | Distinct findings |
+| --- | --- | --- | --- | --- | --- |
+| ce9b98dd | 9480a9f5 (the pipeline change) | 12.5 min | $6.80 | completed | 10, all valid, fixed in fa877d66 |
+| 468bcb1b | 0cd8c723 (Alloy/Lean tools), A/B against fbab8925 | 10.3 min | $5.94 | completed | 14, all real |
+| 3b9c43e6 | 9480a9f5^..d1629539 (cumulative) | 10.9 min (plus 10.4 min queued behind 468bcb1b) | $6.57 | completed | 5, all valid; 4 fixed in 8eff6bc2, 1 awaiting the operator |
+
+A/B on identical input (commit 0cd8c723). The old pipeline (fbab8925) took 18 minutes, cost $7.51, ended incomplete and reported 17 confirmed findings (16 distinct; all real, all fixed later). The new pipeline found 12 of those 16 clearly, 3 partly (open-namespace name resolution, quoted-name parsing, Lake timeout ordering) and missed 1 (Alloy receipt and exit-status checks). It also found 3 real defects that the old pipeline found only in its second and third review rounds (project kernel replay, `debug.skipKernelTC` proving False, concurrent first-use download paths). Every one of its 14 findings matches a defect that was later fixed: no false positives. One sample per pipeline; model variation between runs is not measured.
