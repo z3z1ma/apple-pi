@@ -339,7 +339,7 @@ export function duplicateToolSchema(keys: readonly string[]) {
 	);
 }
 
-export function linksFromTool(value: unknown, artifact: string, reports: ReviewReport[]): unknown {
+export function assessmentFromTool(value: unknown, artifact: string, reports: ReviewReport[]): unknown {
 	const links = checkShape(DuplicateLinksSchema, { ...(value as object), artifact });
 	return assessFindings(artifact, reports, links);
 }

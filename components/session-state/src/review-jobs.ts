@@ -5,11 +5,11 @@ import type { DatabaseSync } from "node:sqlite";
 import { captureReview, verifyArtifact } from "../../code-review/src/capture.js";
 import {
 	assessFindings,
+	assessmentFromTool,
 	checkShape,
 	duplicateToolSchema,
 	type FindingValidation,
 	findingKey,
-	linksFromTool,
 	planFromTool,
 	planPasses,
 	planToolSchema,
@@ -603,7 +603,7 @@ export class ReviewJobs {
 									cause: finding.cause,
 								})),
 							},
-							fromTool: (value) => linksFromTool(value, artifact.digest, reports),
+							fromTool: (value) => assessmentFromTool(value, artifact.digest, reports),
 							validate: (value) => validateAssessment(value, artifact.digest),
 						},
 						signal,

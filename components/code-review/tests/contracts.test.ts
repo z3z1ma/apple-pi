@@ -2,9 +2,9 @@ import { Value } from "typebox/value";
 import { expect, test } from "vitest";
 import {
 	assessFindings,
+	assessmentFromTool,
 	duplicateToolSchema,
 	findingKey,
-	linksFromTool,
 	planFromTool,
 	planPasses,
 	planToolSchema,
@@ -261,7 +261,7 @@ test("findings stand as reported, hypotheses stay unresolved, and only sound dup
 		"confirmed",
 		"unresolved",
 	]);
-	const toHypothesis = linksFromTool(
+	const toHypothesis = assessmentFromTool(
 		{ summary: "One pair.", duplicates: [{ finding: keys[0]!, duplicateOf: keys[2]!, reason: "Same defect." }] },
 		"captured-target",
 		[first],
