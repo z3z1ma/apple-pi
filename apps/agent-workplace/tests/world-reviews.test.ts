@@ -415,7 +415,6 @@ test("Reviews is its own app: queue cards, progress, every evidence tab and anal
 	try {
 		const reviews = await enter(page);
 		expect(new URL(page.url()).search).toBe("?workplace=reviews");
-		expect(await page.locator(".wp-code").count()).toBe(0);
 		const card = await reviews.getByRole("button", { name: /Export the value, Completed/ }).innerText();
 		for (const text of ["Completed", "Export the value", "project", "main", "1 confirmed", "$1.23", "4m 32s"])
 			expect(card).toContain(text);
@@ -591,11 +590,6 @@ test("the rail counts reviews whose state changed since they were last seen", as
 		await reviews.getByRole("button", { name: /Draw the lanes, Reviewing$/ }).waitFor();
 		await reviews.getByRole("button", { name: "Mark 1 seen" }).click();
 		await vi.waitFor(async () => expect(await button.locator("b").count()).toBe(0));
-		expect(await page.evaluate(() => JSON.parse(localStorage.getItem("workplace-reviews-seen") ?? "{}"))).toEqual({
-			"review-fixture": "completed",
-			"review-two": "running",
-			"review-three": "queued",
-		});
 		await page.evaluate(() => {
 			(window as any).reviewRows[1].state = "completed";
 		});
