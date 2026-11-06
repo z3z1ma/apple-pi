@@ -31,6 +31,10 @@ Two tools give a script model turns on other people. Both are callable only from
 
 Each resolves to `{ status, text, value?, error?, toolCalls }`. `context` is JSON the person reads from a file beside their task; `outputSchema` makes them return a validated `value`.
 
+## Measuring a program
+
+`compare_program({ program, tasks, samples, role?, base? })` measures whether a candidate saved program helps. For each task (what a peer is asked to do, and a shell `check` whose exit 0 means the work is correct) it runs `samples` (three or more) rounds; each round runs the task twice, in fresh git worktrees of the repository at `base`, once with the program in the worktree's `.pi/programs/` and once without, the arm that goes first alternating by round. A temporary peer (`implementation-engineer` unless `role` is given) does the task in the worktree, which it trusts (`--approve`) so the program loads; the check runs only after a completed turn. The report lists, per task and arm, how many runs were correct, then tool calls, tokens, cost and seconds for every run, and how often the peers used the program. Before running, the operator sees the run count and an estimate (the median recorded reviewer turn's cost times the runs) and must agree; a session without an interactive operator cannot start one. Managing roles, unroled roots and the capability steward may call it. A failed peer turn is that run's result; a failure to create or remove a worktree, to open or close the peer's program, or an abort ends the comparison. `/find-improvements` gives such work to a `capability-steward` (see [repository rules](repo-rules.md) for its rule evidence).
+
 ## The shell inside scripts
 
 A `bash` call that a script or program makes (its call id is `<parent>/<n>`) runs on pipes rather than a pseudo-terminal, is never rewritten by RTK and never goes to the background, so the script gets plain output. It resolves to the command's text; a failing command rejects.

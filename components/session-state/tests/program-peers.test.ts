@@ -1,11 +1,22 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { createConnection } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ROLE_ENTRY } from "../../organization/src/session-role.js";
+import { comparePrograms } from "../../programs/src/compare.js";
 import { runAgent } from "../../programs/src/peers.js";
 import { sendCommand } from "../src/client.js";
 import { statePaths } from "../src/paths.js";
@@ -176,6 +187,57 @@ test("an ordinary non-manager can run a headless role peer; closing waits for it
 	expect(readFileSync(join(state.agentDir, "peer-records", `${id}.stopped`), "utf8")).toBe("graceful shutdown");
 	cleanOwnership();
 	expect(readFileSync(join(state.agentDir, "peer-records", `${id}.jsonl`), "utf8")).toContain("Report the result.");
+});
+
+test("a peer started in a directory the program chose runs there headless and trusts it", async () => {
+	const directory = realpathSync(mkdtempSync(join(tmpdir(), "aps-peer-cwd-")));
+	const program = await programFor();
+	const id = randomUUID();
+	const receipt = await program.command(id, {
+		kind: "start",
+		role: "implementation-engineer",
+		cwd: directory,
+		goal: { by: "caller", text: "Work in the chosen copy." },
+	});
+	expect(receipt.stage, receipt.reason).toBe("applied");
+	const launch = JSON.parse(readFileSync(join(state.agentDir, "peer-records", `${id}.launch.json`), "utf8"));
+	expect(launch.args).toEqual(expect.arrayContaining(["--mode", "rpc", "--approve"]));
+	expect(query(state.dbPath, "select cwd from sessions where id = ?", id)).toEqual([{ cwd: directory }]);
+	await program.close();
+	rmSync(directory, { recursive: true, force: true });
+});
+
+test("a program comparison runs each task in fresh worktrees, with the program only in its arm, and checks each copy", async () => {
+	const repo = realpathSync(mkdtempSync(join(tmpdir(), "aps-compare-")));
+	const run = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+	run("init", "-q");
+	writeFileSync(join(repo, "README.md"), "fixture\n");
+	run("add", "README.md");
+	run("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "base");
+	const samples = await comparePrograms("caller", {
+		root: repo,
+		name: "probe",
+		source: '// @program: {"description": "Probe."}\nreturn 1;\n',
+		base: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim(),
+		role: "implementation-engineer",
+		tasks: [{ task: "Report the result.", check: "test -f .pi/programs/probe.js" }],
+		samples: 3,
+	});
+	expect(samples.map((sample) => sample.arm)).toEqual(["with", "without", "without", "with", "with", "without"]);
+	expect(samples.map((sample) => [sample.arm, sample.completed, sample.correct])).toEqual(
+		samples.map((sample) => [sample.arm, true, sample.arm === "with"]),
+	);
+	expect(execFileSync("git", ["worktree", "list"], { cwd: repo, encoding: "utf8" }).trim().split("\n")).toHaveLength(1);
+	cleanOwnership();
+	rmSync(repo, { recursive: true, force: true });
+}, 120_000);
+
+test("a peer started without a directory gets the caller's and no trust override", async () => {
+	const program = await programFor();
+	const id = await createPeer(program);
+	const launch = JSON.parse(readFileSync(join(state.agentDir, "peer-records", `${id}.launch.json`), "utf8"));
+	expect(launch.args).not.toContain("--approve");
+	await program.close();
 });
 
 test("closing a reviewer that ignores SIGTERM and its closed input kills it after the grace period", async () => {

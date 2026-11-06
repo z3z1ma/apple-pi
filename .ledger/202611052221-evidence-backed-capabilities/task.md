@@ -20,7 +20,12 @@ The operator asked for both mutation types to be scoped: rules and guards, and s
 
 ## Current State
 
-Approved by sign-off on 2026-11-05; the operator's decisions are in `proposal.md`. Ticket 02 (`replay_rule`) is done. Next: ticket 01 (the recurring-lesson report), then 03.
+Approved by sign-off on 2026-11-05; the operator's decisions are in `proposal.md`.
+
+- Done: ticket 01 (`session_evidence`), 02 (`replay_rule`), 04 (`compare_program`, peers in worktrees with `--approve`).
+- Built, awaiting their acceptance runs: 03 (role `capability-steward`, prompt `/find-improvements`), 05 and 06 (the program and retirement steps of the same role).
+- Formal models: `specs/capability-candidate.tla` (design of the steward protocol), `specs/program-comparison.tla` (comparison cleanup, as built), `specs/program-comparison.lean` (balanced arms, replay counting); each TLA model has a control that fails.
+- The runtime change for ticket 04 is live only after a runtime restart.
 
 ## Outcome
 

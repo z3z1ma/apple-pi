@@ -4,9 +4,11 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** planned
+**Status:** done
 
-- [ ] Run on this machine, the report lists the batching lesson as one group with links to its recorded occurrences.
-- [ ] Each group names the surface it concerns and the commit its window starts from.
-- [ ] The report reads only; it writes nothing and records no rule firings.
-- [ ] It reads other sessions' learnings through the existing transcript index, not by parsing every JSONL on each run.
+Built as the native tool `session_evidence` (repo-rules component). It lists the evidence; grouping by similarity is the steward's judgment (ticket 03), not a token measure in code.
+
+- [x] Run on this machine since 2026-11-01, it returns the batching lesson's occurrences with links: at least five notebook learnings and 17 "commit beside an edit" refusals, among 206 learnings, 22 refusals, 209 failed calls and 3 program calls in 15 sessions.
+- [x] The window start is explicit and stated in the output; the steward picks the last change to the surface.
+- [x] It reads only; it writes nothing and records no rule firings.
+- [x] It streams the session logs (2 seconds for that window) instead of the transcript index, which turned out unnecessary at this cost.

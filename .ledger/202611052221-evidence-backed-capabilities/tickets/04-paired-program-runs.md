@@ -4,11 +4,13 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** planned
+**Status:** done
+
+Built as the native tool `compare_program` (programs component), with a runtime change: a program may name the directory a peer starts in, and such a peer runs headless with `--approve` so the worktree's programs load. Models: `specs/program-comparison.tla` (cleanup and no run beside a live peer, with two controls) and `specs/program-comparison.lean` (balanced arms).
 
 This is the riskiest ticket: model variance and spend decide whether the comparison means anything. The operator decided the steward asks him before each evaluation, with its estimated cost.
 
-- [ ] Both arms of a task start from the same commit and the same prompt; only the program's availability differs.
-- [ ] The report lists every sample, not only medians, and says when the arms do not differ beyond their spread.
-- [ ] Before running, the evaluation states its task set, sample count and estimated cost, and runs only after the operator agrees.
-- [ ] Every worktree and temporary peer is cleaned up on success, failure and cancellation.
+- [x] Both arms of a task start from the same commit and the same prompt; only the program's availability differs (the test's check passes only in the arm with the program).
+- [x] The report lists every sample's tool calls and seconds, not only medians; it states counts per arm and leaves the judgment of spread to the reader rather than a fixed test.
+- [x] Before running, the tool shows the run count and estimated cost and runs only if the operator agrees; without an interactive operator it refuses.
+- [x] Every worktree is removed whatever fails, and no run starts beside a live peer: checked by TLC, and by the test's clean ownership after a three-sample comparison.

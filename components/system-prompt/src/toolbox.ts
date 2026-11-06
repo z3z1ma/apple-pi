@@ -31,6 +31,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
 			"context_lint",
 			"repo_rules",
 			"replay_rule",
+			"session_evidence",
 			"wiki_references",
 			"wiki_lint",
 			"notes",
@@ -50,6 +51,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
 			"Knowledge lives in homes, listed from most durable to most fleeting. When two disagree about how the system behaves, the higher one wins; what to do and how far comes from your task and whoever gave it. What you learn moves up to the most durable home that fits:",
 			"- **The repository**: code, tests, docs and `AGENTS.md` own behavior. `.pi/rules/`, when present, checks every edit and command; when you meet a mistake a machine can catch, write a rule there.",
 			"  `repo_rules` shows how often each rule fired, and `replay_rule` shows what a candidate rule would have refused in the edits and commands recorded here since a date or commit.",
+			"  `session_evidence` lists what sessions here recorded since then, to find what recurs.",
 			"- **Context files**: `.context/<path>.md` beside each source path holds what the code cannot show (invariants, hazards, why, with `Coupled:` and `Verify:` paths). A top-level read brings it along; a read inside a program does not.",
 			"  Editing the source stays blocked until the context file's current version is in front of you, and `context_lint` checks it after you change one or move its source.",
 			{
@@ -68,10 +70,20 @@ export const TOOL_GROUPS: ToolGroup[] = [
 	},
 	{
 		title: "Help you can call",
-		tools: ["explore", "research", "codemode", "search_branches", "google_search", "tool_search", "generate_image"],
+		tools: [
+			"explore",
+			"research",
+			"codemode",
+			"compare_program",
+			"search_branches",
+			"google_search",
+			"tool_search",
+			"generate_image",
+		],
 		guidance: [
 			"- **Interns** (`explore`, `research`): cheap one-shot sessions outside your context that read files, the wiki, the ledger, context files and session history. One specific question each, in parallel when independent. What they return is told, not seen: read the source yourself when the detail decides.",
 			"- **Programs** (`codemode`): JavaScript that calls any tool as `tools.<name>(args)`, in parallel when independent, and returns only the evidence you need; a failed call rejects, so check each result before using it. In a script, `tools.temporary_peer` gives one task to a temporary peer in a role and `tools.colleague` gives a turn to an awake colleague, when you staff and steer. A script saved as `.pi/programs/<name>.js`, starting with a `// @program:` line of JSON that holds its description, parameters (JSON Schemas) and required list, becomes the tool `program_<name>`; its arguments arrive as `inputs`.",
+			"  `compare_program` measures a candidate program against working without it.",
 			"- **Parallel attempts** (`search_branches`): several approaches in their own worktrees, gated by tests and scored by judge commands you write; the best that passes is applied. Protect the files the judges read.",
 			"- **The outside world**: `google_search` for the current world; confirm a summary of something recent against an official source.",
 			"- `tool_search` loads tools not yet declared, including every MCP server's.",

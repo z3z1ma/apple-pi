@@ -114,6 +114,10 @@ Verify: components/session-state/tests/channels.test.ts, components/session-stat
 
 ## symbol:Runtime.prepareProgramLaunch
 
+A program caller may name the directory a non-review peer starts in (`command.cwd`); such a peer runs headless and is launched with `--approve`, so it loads that directory's project resources. Without a named directory a peer gets the caller's directory and Pi's ordinary trust decision.
+Why: `compare_program` runs peers in fresh worktrees that no saved trust decision covers, and a headless peer cannot answer the trust prompt, so the candidate program would never load. The caller created that worktree from its own repository and already runs with the same authority.
+Verify: components/session-state/tests/program-peers.test.ts
+
 Review ownership is derived from the attempt's persisted program ID, without a parallel launcher or another wire-level permission. Recheck generation, plan revision, owner, person and role at launch; use captured source and a headless ordinary peer. Other program calls continue to inherit caller cwd/tmux. First inspections share source and questions rather than prior reports; the later validator receives those reports explicitly. Guarded program disposal still owns cleanup.
 Coupled: components/session-state/src/review-attempt.ts, components/session-state/src/review-jobs.ts
 Verify: components/session-state/tests/review-queue.test.ts, components/session-state/tests/program-peers.test.ts

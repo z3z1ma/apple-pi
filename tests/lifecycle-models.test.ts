@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
+import { runLean } from "../components/formal-verification/src/lean.js";
 import { runTlc } from "../components/formal-verification/src/tlc.js";
 
 for (const model of ["review-lifecycle", "departure-lifecycle"]) {
@@ -9,6 +11,37 @@ for (const model of ["review-lifecycle", "departure-lifecycle"]) {
 		expect(result.stats?.left).toBe(0);
 	}, 120_000);
 }
+
+test("a capability candidate reaches the main line only approved and with evidence for the version merged", async () => {
+	const spec = resolve("specs/capability-candidate.tla");
+	const config = resolve("specs/capability-candidate.cfg");
+	const result = await runTlc({ spec, config });
+	expect(result.verdict, result.output).toBe("pass");
+	expect(result.unused).toEqual([]);
+	const keptEvidence = await runTlc({ spec, config, constants: { KeepEvidenceOnRevise: "TRUE" } });
+	expect(keptEvidence).toMatchObject({ verdict: "violation", property: "EvidenceForMerged" });
+}, 120_000);
+
+test("a program comparison leaves no worktree and starts no sample beside a live peer", async () => {
+	const spec = resolve("specs/program-comparison.tla");
+	const config = resolve("specs/program-comparison.cfg");
+	const result = await runTlc({ spec, config });
+	expect(result.verdict, result.output).toBe("pass");
+	expect(result.unused).toEqual([]);
+	const leakedDirectory = await runTlc({ spec, config, constants: { CleanupOnAddFailure: "FALSE" } });
+	expect(leakedDirectory).toMatchObject({ verdict: "violation", property: "NothingLeftWhenSampleEnds" });
+	const continuedPastClose = await runTlc({ spec, config, constants: { StopOnCloseFailure: "FALSE" } });
+	expect(continuedPastClose).toMatchObject({ verdict: "violation", property: "NoNewSampleBesideALivePeer" });
+}, 120_000);
+
+test("a program comparison gives both arms of every task the same runs, and replay never counts an unevaluated job", async () => {
+	const file = resolve("specs/program-comparison.lean");
+	const result = await runLean({ file, source: readFileSync(file, "utf8") });
+	expect(result.verdict, result.message).toBe("pass");
+	expect(result.theorems.map((theorem) => theorem.name)).toEqual(
+		expect.arrayContaining(["schedule_count", "schedule_length", "replay_partition", "hits_are_evaluated"]),
+	);
+}, 300_000);
 
 test("a review wait always ends, and needs both the silence watchdog and SIGKILL escalation to", async () => {
 	const spec = resolve("specs/review-wait.tla");

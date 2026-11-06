@@ -81,6 +81,10 @@ would have refused, each with an `entry:<session>/<id>` reference that `search_s
 could not evaluate. Edits are checked on the text they added. A replay records no firings and changes nothing; calls
 made from codemode scripts are not recorded as tool calls and are not replayed.
 
+`session_evidence` finds candidates in the first place: it lists what this repository's sessions recorded since a date or
+revision (learnings agents wrote in their notebooks, refusals by rules and guards, failed tool calls other than shell
+commands that exited nonzero, and calls of saved programs), each with its entry reference.
+
 ## In every repository
 
 A commit sent in the same message as an `edit` or `write` is refused everywhere: parallel calls run concurrently, so

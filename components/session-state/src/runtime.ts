@@ -180,6 +180,7 @@ interface SessionLaunch {
 	prompt?: string;
 	tmux?: Hello["tmux"];
 	program?: { id: string; parent: string };
+	approve?: boolean;
 }
 
 interface SessionStart {
@@ -2642,14 +2643,15 @@ export class Runtime {
 		if (review && (review.person !== sessionId || review.role !== command.role))
 			return "The review attempt owns a different reviewer identity or role";
 		program.created.add(sessionId);
+		const chosen = review ? undefined : command.cwd;
 		return {
 			...command,
-			cwd: review?.source ?? caller.cwd,
+			cwd: review?.source ?? chosen ?? caller.cwd,
 			reportsTo: program.caller,
 			prompt: "",
 			goal: { by: program.caller, text: command.goal.text },
 			tmux:
-				!review && caller.tmux_socket && caller.pane_id
+				!review && !chosen && caller.tmux_socket && caller.pane_id
 					? { socket: caller.tmux_socket, pane: caller.pane_id }
 					: undefined,
 		};
@@ -2691,6 +2693,7 @@ export class Runtime {
 		if (this.starting.has(sessionId)) return fail("already starting");
 		if (program?.discarded.has(sessionId)) return fail("That peer was discarded; create a new handle");
 		if (temporaryCallers(db).has(sessionId)) return fail("Program peers cannot be reopened; create a new handle");
+		const approve = Boolean(program && !program.review && command.cwd);
 		if (program) {
 			if (row) return fail("A program must create a new peer, not take ownership of an existing person");
 			const launch = this.prepareProgramLaunch(sessionId, command, program);
@@ -2764,6 +2767,7 @@ export class Runtime {
 				(focusedTask(db, sessionId) ? "You have assigned work. Begin with your focused task." : undefined),
 			tmux: command.tmux,
 			...(programId ? { program: { id: programId, parent: programParent! } } : {}),
+			...(approve ? { approve } : {}),
 		});
 	}
 
@@ -2831,6 +2835,7 @@ export class Runtime {
 			...(reportsTo ? ["--reports-to", reportsTo] : []),
 			...(role ? ["--role", role] : []),
 			...(launch.profile ? ["--role-profile", launch.profile] : []),
+			...(launch.approve ? ["--approve"] : []),
 		];
 		const env = { [PROGRAM_ID_ENV]: programId ?? "", [PROGRAM_PARENT_ENV]: programParent ?? "" };
 		const start: SessionStart = {

@@ -9,5 +9,7 @@ Why: the CLI checks handwritten TLA+ input, not TypeScript, so retaining both te
 
 The historical pre-fix review model and its trace live in the task bundle as experiment evidence. This test runs only current source-derived models. The model specs under `specs/` are apple-pi repository content and do not ship in the package.
 
-Coupled: specs/review-wait.tla, specs/review-wait.cfg, specs/review-lifecycle.tla, specs/review-lifecycle.cfg, specs/departure-lifecycle.tla, specs/departure-lifecycle.cfg, components/formal-verification/src/tlc.ts, components/session-state/tests/review-cancel-race.test.ts
+CapabilityCandidate (design model of the steward's protocol) and ProgramComparison (derived from `compare.ts` as built) each keep a control that must violate a named property; the Lean file's theorems are checked by name.
+
+Coupled: specs/capability-candidate.tla, specs/program-comparison.tla, specs/program-comparison.lean, specs/review-wait.tla, specs/review-wait.cfg, specs/review-lifecycle.tla, specs/review-lifecycle.cfg, specs/departure-lifecycle.tla, specs/departure-lifecycle.cfg, components/formal-verification/src/tlc.ts, components/session-state/tests/review-cancel-race.test.ts
 Verify: tests/lifecycle-models.test.ts

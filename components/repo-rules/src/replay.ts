@@ -102,7 +102,7 @@ export async function replayRule(
 	return { sessions: sessions.size, evaluated, hits, notEvaluated };
 }
 
-async function windowStart(root: string, since: string): Promise<number> {
+export async function windowStart(root: string, since: string): Promise<number> {
 	if (/^\d{4}-\d{2}-\d{2}/.test(since)) {
 		const at = Date.parse(since);
 		if (Number.isNaN(at)) throw new Error(`${since} is not a date`);
@@ -113,7 +113,7 @@ async function windowStart(root: string, since: string): Promise<number> {
 	return Date.parse(committed);
 }
 
-async function repositoryRoot(cwd: string): Promise<string> {
+export async function repositoryRoot(cwd: string): Promise<string> {
 	return rulesRootOf(join(cwd, "x")) ?? ((await git(cwd, ["rev-parse", "--show-toplevel"]).catch(() => "")) || cwd);
 }
 
@@ -122,7 +122,7 @@ export function createReplayTool() {
 		name: REPLAY_RULE_TOOL_NAME,
 		label: "Replay rule",
 		description:
-			"Check a candidate rule against what agents actually did in this repository: a GritQL code rule against the text that recorded edits and writes added, or an action rule's pattern against recorded shell commands, in every session here since a date or commit. Lists what it would have refused, with entry references search_session can open, and what it could not evaluate. Records no firings and changes nothing. Edits are checked on their added text, not the whole file; calls made from scripts are not recorded as tool calls.",
+			"Replay a candidate rule over this repository's recorded sessions since a date or commit: a GritQL rule on the text edits and writes added, or an action pattern on shell commands. Lists what it would have refused, with search_session entry references, and what it could not evaluate. Records no firings.",
 		parameters: Type.Object(
 			{
 				grit: Type.Optional(
@@ -142,8 +142,7 @@ export function createReplayTool() {
 				),
 				since: Type.String({
 					minLength: 1,
-					description:
-						"Window start: a date (2026-11-04) or a git revision, usually the last commit that changed what the rule guards.",
+					description: "Window start: a date or a git revision, usually the last change to what the rule guards.",
 				}),
 				limit: Type.Integer({ minimum: 1, description: "How many refused actions to list." }),
 			},

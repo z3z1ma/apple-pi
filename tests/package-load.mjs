@@ -218,6 +218,8 @@ try {
 		"context_lint",
 		"repo_rules",
 		"replay_rule",
+		"session_evidence",
+		"compare_program",
 		"tlc_check",
 		"tla_symbolic_check",
 		"alloy_check",
@@ -427,7 +429,11 @@ try {
 	assert.deepEqual(promptDiagnostics, []);
 	assert.deepEqual(
 		promptTemplates.map((template) => template.name),
-		["interrogate", "promote"],
+		["find-improvements", "interrogate", "promote"],
+	);
+	assert.match(
+		expandPromptTemplate("/find-improvements review findings", promptTemplates),
+		/focused on: review findings[\s\S]*capability-steward/,
 	);
 	const promoteTemplate = promptTemplates.find((template) => template.name === "promote");
 	assert(promoteTemplate);

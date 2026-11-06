@@ -12,6 +12,14 @@ npx vitest run tests/formal-verification.test.ts tests/lifecycle-models.test.ts 
 | --- | --- | --- |
 | `review-wait.tla` | TLC, with weak fairness | `read_review` with `wait` always returns: through runtime crashes (bounded) and restarts, reviewer turns that stall forever, and reviewer processes that ignore SIGTERM, every attempt fails or completes, each pass is retried once, and the job settles. It assumes a turn that keeps showing activity eventually ends. Turning off either the silence watchdog (`WatchdogOn`) or SIGKILL escalation (`KillEscalation`) gives a temporal violation; its test requires both. |
 
+## Evidence-backed capabilities
+
+| Model | Engine | Claim |
+| --- | --- | --- |
+| `capability-candidate.tla` | TLC, with weak fairness | Design model of one candidate under `roles/capability-steward.md`: nothing reaches the main line unless the operator approved that exact version; what reaches it was proven and challenged unbroken in that exact version; a declined candidate never reaches it; with bounded revisions every candidate closes. `KeepEvidenceOnRevise = TRUE` (a steward that keeps an old version's evidence after revising) violates `EvidenceForMerged`; its test requires that. The steward's discipline is prose in its role, not code: the pass covers the protocol, not an agent obeying it. |
+| `program-comparison.tla` | TLC, with weak fairness | `runSample`/`comparePrograms` in `components/programs/src/compare.ts`, as built: whatever fails (worktree add, program open, the turn, an abort, close, removal), no worktree or temporary directory outlives its run, and no run starts while a peer of an earlier run may be alive. The two first drafts (`CleanupOnAddFailure`, `StopOnCloseFailure` set to FALSE) each violate one property. |
+| `program-comparison.lean` | Lean | The comparison schedule gives both arms of every task exactly `samples` runs (`schedule_count`) and `2 * samples * tasks` runs in all (`schedule_length`); replay counting partitions jobs into evaluated and not evaluated (`replay_partition`) and counts only evaluated jobs as hits (`hits_are_evaluated`). Hand transcriptions; the order and counts are tied to the code by `program-peers.test.ts` and `replay.test.ts`. |
+
 ## The verification tools themselves
 
 | Model | Engine | Claim |

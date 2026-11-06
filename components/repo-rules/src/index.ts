@@ -6,6 +6,7 @@ import { setSystemPromptSection } from "../../shared/src/system-prompt-section.j
 import { resolveToolPath } from "../../shared/src/tool-path.js";
 import { ruleFileRefusal } from "./checks.js";
 import { addedComments } from "./comments.js";
+import { createEvidenceTool } from "./evidence.js";
 import { firingsIn, recordFirings } from "./firings.js";
 import { runRules } from "./grit.js";
 import { gritPath, loadRepoRules, RULES_DIR, rulesFor, rulesRootOf } from "./policy.js";
@@ -132,6 +133,7 @@ export function installRepoRules(pi: ExtensionAPI): void {
 	const writingBatches = new Set<string>();
 	pi.registerTool(createRulesTool());
 	pi.registerTool(createReplayTool());
+	pi.registerTool(createEvidenceTool());
 	pi.on("before_agent_start", (event, ctx) => {
 		const optedIn = existsSync(join(ctx.cwd, RULES_DIR));
 		setSystemPromptSection(event.systemPromptOptions, REPO_RULES_PROMPT_TAG, optedIn ? OPTED_IN : NOT_OPTED_IN);

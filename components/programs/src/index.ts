@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { installCompareTool } from "./compare.js";
 import { installPeerTools } from "./peers.js";
 import { installPrograms } from "./programs.js";
 
@@ -13,4 +14,5 @@ export default function installProgramsExtension(pi: ExtensionAPI): void {
 	pi.on("before_agent_start", () => activateCodemode(pi));
 	installPrograms(pi);
 	installPeerTools(pi);
+	installCompareTool(pi);
 }
