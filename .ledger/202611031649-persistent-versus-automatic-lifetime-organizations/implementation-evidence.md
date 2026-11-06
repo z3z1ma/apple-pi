@@ -62,3 +62,9 @@ The lifetime cases use isolated real Runtime/SQLite/socket/file cleanup and owne
 No full repository suite, paid provider turn, installed-tarball execution, native CLI flag parsing, physical terminal-window close, production process kill or live migration was run. Pack inclusion is inventory, not installation proof. The finite TLC pass/control is design safety evidence, not implementation refinement or eventual cleanup proof.
 
 Tadhg must rebuild/commit the UI and dist, complete integrated review, and own any approved runtime restart. Activation must verify the retained live rsi/Tadhg, fq-squad/Nana and reporting/Bram roots as incorporated, including at-home organizations, then reload bridges and reopen Workplace as needed. These source checks do not claim that activation happened.
+
+## Maintainer follow-up: production unchanged
+
+After source cut 4a7ba521, strengthened the lifetime tests without changing production code. The migration fixture now makes sleeping-report an actual report. Busy/assigned coverage first observes idle-with-held-work before testing reopen cancellation. Stale dissolution is refused through the socket command with its transcript retained, rather than directly calling an internal guard. Replaying an applied incorporation after a merge must leave the new target unincorporated; the flag reconnect case likewise asserts visible status instead of an internal marker count. The SDK test name now states its actual boundary rather than implying native CLI parsing.
+
+Fresh lifecycle plus event-index checks: **17 passed, two files, 26.63s**. Both TypeScript configurations and git diff --check passed. The earlier 74-test and 64-test runs above remain evidence for their source cut; this follow-up reran the changed test area, not those entire sets. Model/checkpoint prose now records the landed source cut. Integrated review and activation remain Tadhg's responsibility.

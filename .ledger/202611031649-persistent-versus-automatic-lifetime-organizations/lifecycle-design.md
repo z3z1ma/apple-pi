@@ -1,6 +1,6 @@
 # Organization lifetime: source trace and design model
 
-This is a pre-implementation design model, not a proof of the runtime. It was refined to the operator's settled decisions in task-thread message 13518. Runtime implementation and focused tests are now in progress; source mapping below names the implemented seams without claiming refinement proof or live activation.
+This is a pre-implementation design model, not a proof of the runtime. It was refined to the operator's settled decisions in task-thread message 13518. Runtime/backend implementation and focused verification landed in source cut 4a7ba521; integrated app review and activation remain. The source mapping below names the implemented seams without claiming refinement proof or live activation.
 
 ## Required property
 
@@ -82,6 +82,6 @@ The control is deliberately faulty design, not an implementation defect. Model c
 
 ## Next steps and owners
 
-Niamh completes focused runtime/bridge/API and regression checks, then commits her owned whole files. Tadhg owns the Workplace menu, final bundled app build and shared runtime activation after that commit. This model neither authorizes a restart nor establishes that the live migration ran. The live migration must still verify all three named existing roots as incorporated.
+Niamh committed the runtime/bridge/API source cut as 4a7ba521 with focused and regression evidence in implementation-evidence.md. Tadhg owns the Workplace menu, final bundled app build, integrated review and shared runtime activation. This model neither authorizes a restart nor establishes that the live migration ran. The live migration must still verify all three named existing roots as incorporated.
 
 Reproduce the normal check with `tlc_check({spec: ".ledger/202611031649-persistent-versus-automatic-lifetime-organizations/organization-lifecycle.tla", workers: 2, timeLimit: 90})`. Repeat with `constants: {UnsafeCommit: "TRUE"}` for the deliberately faulty control. The retained text files are tool verdicts for these configurations, not ordinary runtime test output. Refresh both and their counts above if the model or configuration changes.

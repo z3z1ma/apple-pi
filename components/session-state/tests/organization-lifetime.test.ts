@@ -8,7 +8,7 @@ import type { WorldSnapshot } from "../../../apps/agent-workplace/src/world.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import bridge from "../src/bridge.js";
 import { sendCommand } from "../src/client.js";
-import { organizationLifetime, requireDissolution } from "../src/organization-lifetime.js";
+import { organizationLifetime } from "../src/organization-lifetime.js";
 import { statePaths } from "../src/paths.js";
 import { lineReader } from "../src/protocol.js";
 import { Runtime } from "../src/runtime.js";
@@ -24,6 +24,8 @@ afterEach(() => {
 
 async function fixture() {
 	const state = tempStateDir();
+	writeFileSync(join(state.agentDir, "pi"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+	vi.stubEnv("PATH", `${state.agentDir}:${process.env.PATH}`);
 	const paths = statePaths();
 	const runtime = new Runtime(paths);
 	expect(await runtime.start()).toBe(true);
@@ -109,6 +111,9 @@ test("migration protects every existing identity including sleeping roots and la
 			db.prepare(
 				"insert into sessions (id,kind,cwd,run_state,generation,source,updated_at) values (?, 'root', '/tmp','idle',0,'test',0)",
 			).run(id);
+		db.prepare("update sessions set reports_to = ? where id = 'sleeping-report'").run(
+			"01a18155-0ec7-71f5-9809-638184a366dd",
+		);
 		migrate(db);
 		expect(
 			db.prepare("select count(*) as n from sessions where incorporated = 1 and closing_generation is null").get(),
@@ -157,15 +162,37 @@ test("busy and assigned people stay, while reopening cancels remaining departure
 	await vi.waitFor(() => expect(f.departed("idle")).toBeDefined(), { timeout: 6000 });
 	expect(f.departed("busy")).toBeUndefined();
 	expect(organizationLifetime(f.db, "root").waiting.find((p) => p.person === "busy")?.reason).toMatch(/turn/);
+	busy.send({ type: "run", run: "idle" });
+	await vi.waitFor(() =>
+		expect(organizationLifetime(f.db, "root").waiting.find((p) => p.person === "busy")?.reason).toMatch(
+			/held assignments/,
+		),
+	);
+	await new Promise((resolve) => setTimeout(resolve, 1400));
+	expect(f.departed("busy")).toBeUndefined();
 	const reopened = await f.person("root");
 	expect(organizationLifetime(f.db, "root").closing).toBe(false);
-	busy.send({ type: "run", run: "idle" });
 	f.db.prepare("update assignments set ended_at = 1 where person = 'busy'").run();
 	await new Promise((resolve) => setTimeout(resolve, 1400));
 	expect(f.departed("busy")).toBeUndefined();
 	expect(f.departed("root")).toBeUndefined();
 	expect(f.departed("idle")).toBeDefined();
-	expect(() => requireDissolution(f.db, "busy", "root", 1)).toThrow(/no longer current/);
+	expect(
+		(
+			await sendCommand(
+				"busy",
+				{
+					kind: "retire",
+					by: "operator",
+					handoff: false,
+					reason: "Delayed cleanup from the closed incarnation",
+					dissolution: { root: "root", generation: 1 },
+				},
+				{ socketPath: f.paths.socket },
+			)
+		).stage,
+	).toBe("failed");
+	expect(existsSync(busy.file)).toBe(true);
 	reopened.socket.destroy();
 }, 15000);
 
@@ -185,6 +212,21 @@ test("incorporating while waiting cancels cleanup and is idempotent through the 
 	worker.send({ type: "run", run: "idle" });
 	await new Promise((resolve) => setTimeout(resolve, 1400));
 	expect(f.departed("worker")).toBeUndefined();
+	await f.person("target");
+	expect(
+		(
+			await sendCommand(
+				"operator",
+				{
+					kind: "organization_move",
+					person: "root",
+					manager: "target",
+					branch: ["root", "worker"],
+				},
+				{ socketPath: f.paths.socket },
+			)
+		).stage,
+	).toBe("applied");
 	expect(
 		(
 			await sendCommand(
@@ -194,9 +236,7 @@ test("incorporating while waiting cancels cleanup and is idempotent through the 
 			)
 		).stage,
 	).toBe("applied");
-	expect(f.db.prepare("select count(*) as n from events where type = 'organization_incorporated'").get()).toEqual({
-		n: 1,
-	});
+	expect(organizationLifetime(f.db, "root")).toMatchObject({ root: "target", incorporated: false });
 }, 10000);
 
 test.each(["new", "resume", "reload", "fork", "quit"])(
@@ -290,7 +330,7 @@ test("process loss and runtime restart without deliberate closing retain interac
 	expect(existsSync(root.file)).toBe(true);
 });
 
-test("native flag consumption and /incorporate command need no model turn", async () => {
+test("SDK startup flag consumption and /incorporate command need no model turn", async () => {
 	const f = await fixture();
 	const flagged = await fauxSession(
 		[
@@ -344,13 +384,6 @@ test("a flagged process reconnect cannot incorporate a later merge target", asyn
 		expect(f.db.prepare("select name from sessions where id = 'flagged'").get()).toEqual({ name: "Reconnected" }),
 	);
 	expect(organizationLifetime(f.db, "flagged")).toMatchObject({ root: "target", incorporated: false });
-	expect(
-		f.db
-			.prepare(
-				"select count(*) as n from events where session_id = 'flagged' and type = 'organization_startup_incorporated'",
-			)
-			.get(),
-	).toEqual({ n: 1 });
 });
 
 test("Workplace lifetime adapter reads current blockers and sends only the fixed operator mutation", async () => {

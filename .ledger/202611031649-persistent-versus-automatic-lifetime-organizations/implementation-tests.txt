@@ -35,3 +35,17 @@ Scoped source comments: exit 0.
 git diff --check: exit 0.
 context_lint: Context lint passed: 661 context files.
 Package dry-run: 2809 entries. organization-lifetime.ts, bridge.ts and docs/organization.md included.
+
+Maintainer follow-up (production unchanged)
+Command: NODE_OPTIONS="--import=$PWD/components/session-state/src/register.mjs" timeout -k 5 150 ./node_modules/.bin/vitest run components/session-state/tests/organization-lifetime.test.ts components/session-state/tests/event-index.test.ts --maxWorkers=1
+
+ RUN  v4.1.10 /Users/alexanderbut/code_projects/personal/apple-pi
+
+ Test Files  2 passed (2)
+      Tests  17 passed (17)
+   Start at  15:40:08
+   Duration  26.63s (transform 410ms, setup 25ms, import 1.54s, tests 24.87s, environment 0ms)
+
+> apple-pi@0.1.0 typecheck
+> tsc --noEmit && tsc --noEmit -p tsconfig.web.json
+Exit 0.
