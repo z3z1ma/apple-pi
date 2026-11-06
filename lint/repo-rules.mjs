@@ -60,7 +60,7 @@ for (const batch of scriptBatches) {
 		const { file, scripted } = batch[index];
 		scriptFiles.add(file);
 		for (const rule of scripted) {
-			const outcome = row[rule.id];
+			const outcome = row.get(rule.id);
 			const problems = !outcome ? [] : "error" in outcome ? [`could not run: ${outcome.error}`] : outcome.reasons;
 			for (const problem of problems) {
 				count++;

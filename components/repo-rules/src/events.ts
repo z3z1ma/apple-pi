@@ -10,7 +10,7 @@ export interface CallFacts {
 	input: Record<string, unknown>;
 	path: string | null;
 	paths: string[];
-	words: string[] | null;
+	commands: string[][] | null;
 }
 
 export interface CallEvent extends CallFacts {
@@ -61,45 +61,40 @@ function shellWord(command: string, index: number): { value: string; end: number
 	return quote ? undefined : { value, end: index };
 }
 
-export function shellWords(command: string): string[] | null {
+export function shellCommands(command: string): string[][] | null {
 	if (/[`$]|<<|\\\n/.test(command)) return null;
-	const words: string[] = [];
+	const commands: string[][] = [[]];
 	let index = 0;
 	while (index < command.length) {
 		const char = command[index]!;
 		if (/[ \t\r\n;&|<>]/.test(char)) {
-			if (/[\n;&|]/.test(char) && words.at(-1) !== ";") words.push(";");
+			if (/[\n;&|]/.test(char) && commands.at(-1)!.length) commands.push([]);
 			index++;
 			continue;
 		}
 		if (char === "#") break;
 		const word = shellWord(command, index);
 		if (!word) return null;
-		words.push(word.value);
+		commands.at(-1)!.push(word.value);
 		index = word.end;
 	}
-	return words;
+	return commands.filter((words) => words.length);
 }
 
 export function shellPaths(command: string, cwd: string): string[] {
-	const words = shellWords(command);
-	if (!words) return [];
+	const commands = shellCommands(command);
+	if (!commands) return [];
 	const paths: string[] = [];
-	let commandStart = true;
-	let directoryArgument = false;
-	for (const word of words) {
-		if (word === ";") {
-			if (directoryArgument) return [];
-			commandStart = true;
-			continue;
+	for (const words of commands) {
+		const start = words.findIndex((word) => !/^[A-Za-z_]\w*=/.test(word));
+		if (start < 0) continue;
+		if (words[start] === "cd") {
+			const target = words[start + 1];
+			if (target === undefined || resolve(cwd, target) !== resolve(cwd)) return [];
 		}
-		if (directoryArgument && resolve(cwd, word) !== resolve(cwd)) return [];
-		directoryArgument = commandStart && word === "cd";
-		if (commandStart && /^[A-Za-z_]\w*=/.test(word)) continue;
-		commandStart = false;
-		paths.push(resolve(cwd, word));
+		for (const word of words.slice(start)) paths.push(resolve(cwd, word));
 	}
-	return directoryArgument ? [] : paths;
+	return paths;
 }
 
 export function shown(base: string, path: string): string {
@@ -118,10 +113,10 @@ export function callFacts(call: RecordedCall, cwd: string, base: string): CallFa
 		}
 	}
 	const command = call.name === "bash" && typeof input.command === "string" ? input.command : undefined;
-	const words = command === undefined ? null : shellWords(command);
+	const commands = command === undefined ? null : shellCommands(command);
 	const paths =
 		command === undefined ? (path ? [path] : []) : shellPaths(command, cwd).map((each) => shown(base, each));
-	return { id: call.id, tool: call.name, input, path, paths, words };
+	return { id: call.id, tool: call.name, input, path, paths, commands };
 }
 
 export function callEvent(

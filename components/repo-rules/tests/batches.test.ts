@@ -79,6 +79,8 @@ test.each([
 	"npx vitest run ./batch-a.ts --maxWorkers=1",
 	"./node_modules/.bin/biome check --write batch-a.ts",
 	`cd '${repo}' && cat batch-a.ts`,
+	"printf '%s' ';' cd other && cat batch-a.ts",
+	'echo "a;b" | cat batch-a.ts',
 ])("a literal same-file shell consumer is refused: %s", async (command) => {
 	const f = fixture();
 	f.message([edit, { id: "b", name: "bash", arguments: { command } }]);
@@ -132,6 +134,8 @@ test.each([
 	['a"b.ts', String.raw`cat "a\"b.ts"`],
 	["a=b.ts", "cat 'a=b.ts'"],
 	["-a.ts", "cat -- -a.ts"],
+	[";", "cat ';'"],
+	[";", String.raw`cat \;`],
 	["batch-a.ts", "grep cd batch-a.ts"],
 ])("literal shell decoding preserves %s in %s", async (path, command) => {
 	const f = fixture();

@@ -7,7 +7,7 @@ import { canonical, sessionEntries, within } from "../../shared/src/session-logs
 import { resolveToolPath } from "../../shared/src/tool-path.js";
 import { addedTexts, callEvent, editEvent, type RecordedCall, type RuleEvent } from "./events.js";
 import { runRules } from "./grit.js";
-import { includedBy, ruleSetsFor, rulesRootOf, type ScriptRule, scriptPath } from "./policy.js";
+import { gritPath, includedBy, ruleSetsFor, rulesRootOf, type ScriptRule, scriptPath } from "./policy.js";
 import { runScripts } from "./scripts.js";
 
 export const REPLAY_RULE_TOOL_NAME = "replay_rule";
@@ -118,8 +118,11 @@ export async function replayRule(
 				continue;
 			}
 			if (typeof args.path !== "string") continue;
-			const lexical = resolveToolPath(args.path, session.cwd);
-			const absolute = join(canonical(dirname(lexical)), basename(lexical));
+			const absolute = recordedPath(args.path, session.cwd);
+			if (typeof absolute !== "string") {
+				notEvaluated.push({ at, ref, file: session.file, path: args.path, reason: absolute.reason });
+				continue;
+			}
 			if (!within(root, absolute)) continue;
 			const path = relative(root, absolute);
 			if (!includedBy(candidate.includes, path)) continue;
@@ -160,19 +163,17 @@ function recordedEvents(
 		);
 	if ((candidate.on ?? "call") === "call")
 		return calls.map((call) => ({ event: callEvent(call, calls, cwd, root, false) }));
-	return calls.flatMap((call) => {
+	return calls.flatMap((call): ({ event: RuleEvent } | { path: string; reason: string })[] => {
 		const args = call.arguments ?? {};
 		if ((call.name !== "edit" && call.name !== "write") || typeof args.path !== "string") return [];
-		const lexical = resolveToolPath(args.path, cwd);
-		const absolute = join(canonical(dirname(lexical)), basename(lexical));
+		const absolute = recordedPath(args.path, cwd);
+		if (typeof absolute !== "string") return [{ path: args.path, reason: absolute.reason }];
 		const path = relative(root, absolute);
 		if (!within(root, absolute) || !includedBy(candidate.includes, path)) return [];
 		const added = addedTexts(call.name, args);
-		return [
-			"reason" in added
-				? { path, reason: added.reason }
-				: { event: editEvent(call.name, absolute, root, null, added.texts) },
-		];
+		if ("reason" in added) return [{ path, reason: added.reason }];
+		const content = call.name === "write" ? added.texts[0]! : null;
+		return [{ event: editEvent(call.name, absolute, root, content, added.texts) }];
 	});
 }
 
@@ -199,7 +200,7 @@ async function replayScript(
 		);
 		for (const [index, row] of rows.entries()) {
 			const { at, ref, file, event } = batch[index]!;
-			const outcome = row.candidate;
+			const outcome = row.get("candidate");
 			const path = event.on === "edit" ? event.path : (event.path ?? "");
 			if (!outcome) continue;
 			if ("error" in outcome) {
@@ -244,22 +245,38 @@ async function replayScript(
 	return { sessions: sessions.size, evaluated, hits, notEvaluated };
 }
 
-function existingRule(cwd: string, id: string): ReplayCandidate {
+function recordedPath(path: string, cwd: string): string | { reason: string } {
+	try {
+		const lexical = resolveToolPath(path, cwd);
+		return join(canonical(dirname(lexical)), basename(lexical));
+	} catch (error) {
+		return { reason: `its path does not resolve: ${(error as Error).message}` };
+	}
+}
+
+export function existingRule(cwd: string, wanted: string): ReplayCandidate & { source: string } {
+	const [level, id] = /^(user|project):/.test(wanted) ? wanted.split(/:(.*)/s) : [undefined, wanted];
+	const found: (ReplayCandidate & { source: string })[] = [];
 	for (const set of ruleSetsFor(join(cwd, "x"))) {
+		if (level && set.level !== level) continue;
+		const source = `${set.level}:${id}`;
 		const grit = (set.policy.rules ?? []).find((rule) => rule.grit === id || rule.grit === `${id}.grit`);
-		if (grit) return { grit: readFileSync(join(set.dir, grit.grit), "utf8"), includes: grit.includes };
+		if (grit) found.push({ source, grit: readFileSync(gritPath(set, grit), "utf8"), includes: grit.includes });
 		const action = (set.policy.actions ?? []).find((rule) => rule.id === id);
-		if (action) return { pattern: action.pattern };
+		if (action) found.push({ source, pattern: action.pattern });
 		const script = (set.policy.scripts ?? []).find((rule) => rule.id === id);
 		if (script)
-			return {
+			found.push({
+				source,
 				script: readFileSync(scriptPath(set, script), "utf8"),
 				on: script.on,
 				includes: script.includes,
 				message: script.message,
-			};
+			});
 	}
-	throw new Error(`No rule ${id} applies here; repo_rules lists them.`);
+	if (found.length === 1) return found[0]!;
+	if (!found.length) throw new Error(`No rule ${wanted} applies here; repo_rules lists them.`);
+	throw new Error(`${wanted} names ${found.length} rules; choose one: ${found.map((each) => each.source).join(", ")}.`);
 }
 
 export async function windowStart(root: string, since: string): Promise<number> {
@@ -285,7 +302,12 @@ export function createReplayTool() {
 			"Replay one rule over this repository's recorded sessions since a date or commit: an existing rule by id, or a candidate (GritQL, action pattern, or script). Lists what it would have refused, with entry references, and what it could not evaluate. Records no firings.",
 		parameters: Type.Object(
 			{
-				rule: Type.Optional(Type.String({ minLength: 1, description: "Id of an existing rule." })),
+				rule: Type.Optional(
+					Type.String({
+						minLength: 1,
+						description: "Id of an existing rule; user:<id> or project:<id> picks a level.",
+					}),
+				),
 				grit: Type.Optional(Type.String({ minLength: 1, description: "GritQL query with its language line." })),
 				pattern: Type.Optional(Type.String({ minLength: 1, description: "Action rule regular expression." })),
 				script: Type.Optional(Type.String({ minLength: 1, description: "Script rule body." })),
@@ -302,7 +324,8 @@ export function createReplayTool() {
 			{ additionalProperties: false },
 		),
 		async execute(_id, params, _signal, _update, ctx) {
-			const candidate: ReplayCandidate = params.rule ? existingRule(ctx.cwd, params.rule) : params;
+			const existing = params.rule ? existingRule(ctx.cwd, params.rule) : undefined;
+			const candidate: ReplayCandidate = existing ?? params;
 			const kinds = [candidate.grit, candidate.pattern, candidate.script].filter((each) => each !== undefined);
 			if (kinds.length !== 1) throw new Error("Give exactly one of rule, grit, pattern or script.");
 			const root = await repositoryRoot(ctx.cwd);
@@ -316,7 +339,12 @@ export function createReplayTool() {
 						: "shell commands";
 			const listed = report.hits.slice(0, params.limit);
 			const lines = [
-				`Replayed over ${report.evaluated} recorded ${what} in ${report.sessions} sessions of ${root} since ${new Date(since).toISOString()} (${params.since}).`,
+				`Replayed ${existing ? `${existing.source} ` : ""}over ${report.evaluated} recorded ${what} in ${report.sessions} sessions of ${root} since ${new Date(since).toISOString()} (${params.since}).`,
+				...(candidate.script !== undefined && candidate.on === "edit"
+					? [
+							"Recorded edits carry no file, so `content` was null for edits and the written text for writes; a rule that needs `content` judged writes only.",
+						]
+					: []),
 				`Would have refused ${report.hits.length}${listed.length < report.hits.length ? `, first ${listed.length} listed` : ""}:`,
 				...listed.map(
 					(hit) =>

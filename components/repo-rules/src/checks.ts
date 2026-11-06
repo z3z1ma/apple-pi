@@ -1,17 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 import { callEvent, editEvent, type RecordedCall, type RuleEvent } from "./events.js";
 import { runRules } from "./grit.js";
 import {
 	type ActionRule,
 	type CodeRule,
 	gritPath,
+	loadRuleSet,
 	type RulePolicy,
 	type RuleSet,
-	ruleSetsFor,
+	rulesDirOfFile,
 	type ScriptRule,
 	scriptPath,
-	userRulesDir,
 } from "./policy.js";
 import { runScripts } from "./scripts.js";
 
@@ -77,6 +77,8 @@ export function sampleEvent(on: ScriptRule["on"], sample: unknown): RuleEvent | 
 	};
 	const self = asCall(value, 0);
 	if (typeof self === "string") return self;
+	if (value.nested === true && Array.isArray(value.batch) && value.batch.length)
+		return "a nested call sample has no batch: a nested call sees only itself";
 	const siblings = Array.isArray(value.batch) ? value.batch.map((each, index) => asCall(each, index + 1)) : [];
 	const broken = siblings.find((each) => typeof each === "string");
 	if (typeof broken === "string") return broken;
@@ -100,7 +102,7 @@ async function scriptProblems(set: Pick<RuleSet, "dir">, rule: ScriptRule, propo
 	const outcomes = await runScripts([{ id: rule.id, on: rule.on, body }], samples as RuleEvent[]);
 	const problems: string[] = [];
 	for (const [index, row] of outcomes.entries()) {
-		const outcome = row[rule.id];
+		const outcome = row.get(rule.id);
 		const fires = index < rule.fires.length;
 		const label = fires ? `"fires" sample ${index + 1}` : `"passes" sample ${index - rule.fires.length + 1}`;
 		if (!outcome) problems.push(`${name} did not run on its ${label}`);
@@ -126,18 +128,10 @@ async function policyProblems(set: Pick<RuleSet, "dir">, policy: RulePolicy, cha
 	return problems;
 }
 
-export function ruleSetOfFile(path: string): Pick<RuleSet, "level" | "dir" | "policy"> | undefined {
-	const dir = dirname(path);
-	const set = ruleSetsFor(path).find((each) => each.dir === dir);
-	if (set) return set;
-	if (dir === userRulesDir()) return { level: "user", dir, policy: {} };
-	if (basename(dir) === "rules" && basename(dirname(dir)) === ".pi") return { level: "project", dir, policy: {} };
-	return undefined;
-}
-
 export async function ruleFileRefusal(path: string, proposed: string): Promise<string | undefined> {
-	const set = ruleSetOfFile(path);
-	if (!set) return undefined;
+	const found = rulesDirOfFile(path);
+	if (!found) return undefined;
+	const set = loadRuleSet(found);
 	const name = basename(path);
 	let problems: string[];
 	if (name === "policy.json") {

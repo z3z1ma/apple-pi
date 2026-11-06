@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, matchesGlob, relative } from "node:path";
+import { basename, dirname, join, matchesGlob, relative } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { canonical } from "../../shared/src/session-logs.js";
 
 export const RULES_DIR = join(".pi", "rules");
 
@@ -37,14 +38,16 @@ export interface RulePolicy {
 	scripts?: ScriptRule[];
 }
 
-export interface RuleSet {
+export interface RulesDir {
 	level: "project" | "user";
 	root: string;
 	dir: string;
-	policy: RulePolicy;
 }
 
-export type RepoRules = RuleSet;
+export interface RuleSet extends RulesDir {
+	policy: RulePolicy;
+	error?: string;
+}
 
 export function rulesRootOf(path: string): string | undefined {
 	for (let dir = dirname(path); ; dir = dirname(dir)) {
@@ -69,23 +72,42 @@ export function scriptPath(set: Pick<RuleSet, "dir">, rule: ScriptRule): string 
 	return join(set.dir, rule.script);
 }
 
-function readPolicy(dir: string): RulePolicy {
-	const file = policyPath(dir);
-	return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as RulePolicy) : {};
+export function rulesDirsFor(path: string): RulesDir[] {
+	const dirs: RulesDir[] = [];
+	const user = userRulesDir();
+	if (existsSync(policyPath(user))) dirs.push({ level: "user", root: user, dir: user });
+	const root = rulesRootOf(path);
+	if (root) dirs.push({ level: "project", root, dir: join(root, RULES_DIR) });
+	return dirs;
+}
+
+export function loadRuleSet(found: RulesDir): RuleSet {
+	const file = policyPath(found.dir);
+	if (!existsSync(file)) return { ...found, policy: {} };
+	try {
+		return { ...found, policy: JSON.parse(readFileSync(file, "utf8")) as RulePolicy };
+	} catch (error) {
+		return { ...found, policy: {}, error: `${file} does not load: ${(error as Error).message}` };
+	}
 }
 
 export function loadRepoRules(root: string): RuleSet {
-	const dir = join(root, RULES_DIR);
-	return { level: "project", root, dir, policy: readPolicy(dir) };
+	const set = loadRuleSet({ level: "project", root, dir: join(root, RULES_DIR) });
+	if (set.error) throw new Error(set.error);
+	return set;
 }
 
 export function ruleSetsFor(path: string): RuleSet[] {
-	const sets: RuleSet[] = [];
+	return rulesDirsFor(path).map(loadRuleSet);
+}
+
+export function rulesDirOfFile(path: string): RulesDir | undefined {
+	const dir = dirname(canonical(path));
 	const user = userRulesDir();
-	if (existsSync(policyPath(user))) sets.push({ level: "user", root: user, dir: user, policy: readPolicy(user) });
-	const root = rulesRootOf(path);
-	if (root) sets.push(loadRepoRules(root));
-	return sets;
+	if (dir === canonical(user)) return { level: "user", root: user, dir: user };
+	if (basename(dir) === "rules" && basename(dirname(dir)) === ".pi")
+		return { level: "project", root: dirname(dirname(dir)), dir };
+	return undefined;
 }
 
 export function includedBy(globs: string[] | undefined, relativePath: string): boolean {

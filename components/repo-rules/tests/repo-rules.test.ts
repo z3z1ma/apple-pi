@@ -153,7 +153,7 @@ test("a script rule is checked when written, and refuses edits and batches it na
 	writeFileSync(join(rulesDir, "no-todo.js"), 'return event.added.some((text) => text.includes("TODO"));\n');
 	writeFileSync(
 		join(rulesDir, "no-ls-and-read.js"),
-		'if (event.tool === "ls" && event.batch.some((call) => call.tool === "read" && matches(call.path, event.path + "/**")))\n\treturn "list " + event.path + " or read inside it, not both";\n',
+		'if (event.tool === "ls" && event.batch.some((call) => call.tool === "read" && call.path.startsWith(event.path + "/")))\n\treturn "list " + event.path + " or read inside it, not both";\n',
 	);
 	const policy = {
 		comments: "forbid",

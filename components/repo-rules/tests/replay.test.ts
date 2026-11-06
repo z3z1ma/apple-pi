@@ -101,6 +101,40 @@ test("an edit script is replayed on the text recorded edits added, within its in
 	const broken = await replayRule({ script: "return event.x.y;", on: "edit" }, { root, since, sessionsDir });
 	expect(broken.evaluated).toBe(0);
 	expect(broken.notEvaluated.length).toBe(4);
+	const content = await replayRule(
+		{ script: 'return event.content !== null && event.content.includes("console");', on: "edit" },
+		{ root, since, sessionsDir },
+	);
+	expect(content.hits.map((hit) => hit.path)).toEqual(["src/a.js"]);
+});
+
+test("a recorded path that does not resolve is not evaluated, and the rest of the replay goes on", async () => {
+	const logs = mkdtempSync(join(tmpdir(), "repo-rules-badpath-"));
+	try {
+		const lines = [
+			{ type: "session", version: 3, id: "bad", timestamp: "2026-11-01T00:00:00Z", cwd: root },
+			{
+				type: "message",
+				id: "e",
+				timestamp: "2026-11-05T10:00:00Z",
+				message: {
+					role: "assistant",
+					content: [
+						call("write", { path: "file://other-host/a.js", content: "console.log(1);" }),
+						{ ...call("write", { path: "src/ok.js", content: "console.log(2);" }), id: "ok" },
+					],
+				},
+			},
+		];
+		writeFileSync(join(logs, "bad.jsonl"), `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`);
+		for (const candidate of [{ script: "return true;", on: "edit" as const }, { grit: consoleRule }]) {
+			const report = await replayRule(candidate, { root, since, sessionsDir: logs });
+			expect(report.notEvaluated).toMatchObject([{ path: "file://other-host/a.js" }]);
+			expect(report.hits.map((hit) => hit.path)).toEqual(["src/ok.js"]);
+		}
+	} finally {
+		rmSync(logs, { recursive: true, force: true });
+	}
 });
 
 test("text the rule cannot evaluate is listed as not evaluated, never as allowed", async () => {
