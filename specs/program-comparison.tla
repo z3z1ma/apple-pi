@@ -26,7 +26,7 @@ vars == <<sample, phase, dir, peer, failed, ended, closeFailed>>
 Init == sample = 1 /\ phase = "make" /\ dir = "none" /\ peer = "none" /\ failed = FALSE /\ ended = FALSE /\ closeFailed = FALSE
 
 Go(p) == phase' = p
-Keep == UNCHANGED <<sample, peer, failed, ended>>
+Keep == UNCHANGED <<sample, peer, failed, ended, closeFailed>>
 
 Make == phase = "make" /\ ~ended /\ dir' = "empty" /\ Go("add") /\ Keep
 
@@ -34,40 +34,42 @@ Add == phase = "add" /\ dir' = "worktree" /\ Go("open") /\ Keep
 AddFails ==
     /\ phase = "add"
     /\ IF CleanupOnAddFailure THEN Go("remove") ELSE Go("end")
-    /\ failed' = TRUE /\ UNCHANGED <<sample, dir, peer, ended>>
+    /\ failed' = TRUE /\ UNCHANGED <<sample, dir, peer, ended, closeFailed>>
 
-Open == phase = "open" /\ Go("turn") /\ UNCHANGED <<sample, dir, peer, failed, ended>>
-OpenFails == phase = "open" /\ Go("remove") /\ failed' = TRUE /\ UNCHANGED <<sample, dir, peer, ended>>
+Open == phase = "open" /\ Go("turn") /\ UNCHANGED <<sample, dir, peer, failed, ended, closeFailed>>
+OpenFails == phase = "open" /\ Go("remove") /\ failed' = TRUE /\ UNCHANGED <<sample, dir, peer, ended, closeFailed>>
 
-Turn == phase = "turn" /\ peer' = "alive" /\ Go("close") /\ UNCHANGED <<sample, dir, failed, ended>>
-TurnFailsBeforeStart == phase = "turn" /\ Go("close") /\ UNCHANGED <<sample, dir, peer, failed, ended>>
+Turn == phase = "turn" /\ peer' = "alive" /\ Go("close") /\ UNCHANGED <<sample, dir, failed, ended, closeFailed>>
+TurnFailsBeforeStart ==
+    phase = "turn" /\ Go("close") /\ UNCHANGED <<sample, dir, peer, failed, ended, closeFailed>>
 Abort == phase \in {"turn", "check"} /\ Go(IF phase = "turn" THEN "close" ELSE "remove") /\ failed' = TRUE
-         /\ UNCHANGED <<sample, dir, peer, ended>>
+         /\ UNCHANGED <<sample, dir, peer, ended, closeFailed>>
 
 Close == phase = "close" /\ peer' = "none" /\ Go(IF failed THEN "remove" ELSE "check")
-         /\ UNCHANGED <<sample, dir, failed, ended>>
+         /\ UNCHANGED <<sample, dir, failed, ended, closeFailed>>
 CloseFails ==
     /\ phase = "close"
+    /\ closeFailed' = TRUE
     /\ IF StopOnCloseFailure
           THEN failed' = TRUE /\ Go("end")
           ELSE UNCHANGED failed /\ Go("remove")
     /\ UNCHANGED <<sample, dir, peer, ended>>
 
-Check == phase = "check" /\ Go("remove") /\ UNCHANGED <<sample, dir, peer, failed, ended>>
+Check == phase = "check" /\ Go("remove") /\ UNCHANGED <<sample, dir, peer, failed, ended, closeFailed>>
 
 Remove == phase = "remove" /\ dir' = "none" /\ Go("end") /\ Keep
-RemoveFails == phase = "remove" /\ dir' = "none" /\ Go("end") /\ failed' = TRUE /\ UNCHANGED <<sample, peer, ended>>
+RemoveFails ==
+    phase = "remove" /\ dir' = "none" /\ Go("end") /\ failed' = TRUE /\ UNCHANGED <<sample, peer, ended, closeFailed>>
 
 End ==
     /\ phase = "end"
     /\ IF failed \/ sample = Samples
           THEN ended' = TRUE /\ UNCHANGED <<sample, phase>>
           ELSE sample' = sample + 1 /\ phase' = "make" /\ UNCHANGED ended
-    /\ UNCHANGED <<dir, peer, failed>>
+    /\ UNCHANGED <<dir, peer, failed, closeFailed>>
 
-Next == (CloseFails /\ closeFailed' = TRUE)
-        \/ ((Make \/ Add \/ AddFails \/ Open \/ OpenFails \/ Turn \/ TurnFailsBeforeStart \/ Abort
-            \/ Close \/ Check \/ Remove \/ RemoveFails \/ End) /\ UNCHANGED closeFailed)
+Next == Make \/ Add \/ AddFails \/ Open \/ OpenFails \/ Turn \/ TurnFailsBeforeStart \/ Abort
+        \/ Close \/ CloseFails \/ Check \/ Remove \/ RemoveFails \/ End
 
 Spec == Init /\ [][Next]_vars /\ WF_vars(Next)
 

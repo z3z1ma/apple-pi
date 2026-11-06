@@ -6,6 +6,8 @@ These are apple-pi's own formal models of its runtime and of its verification to
 npx vitest run tests/formal-verification.test.ts tests/lifecycle-models.test.ts tests/verification-models.test.ts --maxWorkers=1
 ```
 
+Keep every action a named disjunct of `Next`, each stating `UNCHANGED` for what it does not change: TLC reports actions that never took a step only by name, so wrapping actions in one combined `Next` makes that check pass vacuously.
+
 ## Waiting for a review
 
 | Model | Engine | Claim |
