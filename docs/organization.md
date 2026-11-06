@@ -287,7 +287,7 @@ The package's roles are listed below; their files own the current model recommen
 | --- | --- | --- | --- | --- | --- |
 | `accessibility-specialist` | Accessibility Specialist | Find keyboard, screen reader, semantic, inclusive failures | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `architecture-prosecutor` | Architecture Prosecutor | Build the strongest evidence that the design is wrong | `anthropic/claude-opus-5-5`, `openai/gpt-6-astra` | high | advises |
-| `capability-steward` | Capability Steward | Turn what keeps going wrong into rules, guards and programs proven by evidence, and retire the ones that stopped helping | `coding` profile, then the role's concrete recommendations | profile or recommendation | writes |
+| `capability-steward` | Capability Steward | Turn what keeps going wrong into rules and programs proven by evidence, and retire the ones that stopped helping | `coding` profile, then the role's concrete recommendations | profile or recommendation | writes |
 | `chaos-engineering-specialist` | Chaos Engineering Specialist | Design failure injection, partial outage, retry, degradation | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |
 | `chief-architect` | Chief Architect | Judge boundaries, invariants, evolution, coherence | `anthropic/claude-opus-5-5`, `openai/gpt-6-astra` | high | advises |
 | `code-review-specialist` | Code Review Specialist | Find real defects, regressions, maintainability problems in diffs | `openai/gpt-6.1-sol`, `anthropic/claude-sonnet-5-5` | medium | advises |

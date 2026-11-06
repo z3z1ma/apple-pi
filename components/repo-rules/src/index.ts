@@ -1,132 +1,61 @@
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { forkCwd, forkMessages } from "../../shared/src/fork-context.js";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { resolveToolPath } from "../../shared/src/tool-path.js";
-import { type BatchCall, batchConflicts } from "./batches.js";
-import { ruleFileRefusal } from "./checks.js";
-import { addedComments } from "./comments.js";
+import { COMMENT_RULE, checkCall, checkEdit } from "./engine.js";
+import type { RecordedCall } from "./events.js";
 import { createEvidenceTool } from "./evidence.js";
-import { firingsIn, recordFirings } from "./firings.js";
-import { runRules } from "./grit.js";
-import { gritPath, loadRepoRules, RULES_DIR, rulesFor, rulesRootOf } from "./policy.js";
+import { firingsIn } from "./firings.js";
+import { RULES_DIR, ruleSetsFor, userRulesDir } from "./policy.js";
 import { createReplayTool } from "./replay.js";
+
+export { checkCall, checkEdit } from "./engine.js";
 
 export const REPO_RULES_PROMPT_TAG = "repo-rules";
 export const REPO_RULES_TOOL_NAME = "repo_rules";
-const COMMENT_RULE = "comments";
 
-const OPTED_IN = `This repository keeps its rules in \`.pi/rules/\`, and the harness checks every edit and write against them before the change lands; a refusal names the rule, so fix the change and retry.
-- \`policy.json\` lists the code rules with the paths they apply to and the message shown when one fires, the action rules for shell commands, and whether source comments are forbidden.
-- A code rule is a GritQL query in a \`*.grit\` file. It works for any language GritQL supports: start it with a \`language\` line (\`js\` for JavaScript and TypeScript, \`css\`, \`json\`, \`python\`, \`go\`, \`rust\`, \`java\`, \`kotlin\`, \`csharp\`, \`ruby\`, \`php\`, \`sql\`, \`yaml\`, \`toml\`, \`hcl\`, \`markdown\`, \`elixir\`, \`solidity\`). Every match is a violation; the message lives in \`policy.json\`.
-- When comments are forbidden, put what a comment would say elsewhere: rationale, invariants and hazards in \`.context/<path>.md\`, intent in a better name, behavior in a test.
-- Add rules liberally: whenever you meet a mistake a machine can detect (in review, while fixing a bug, from a lesson or a user correction), write a rule instead of prose. Write the \`.grit\` file, then list it in \`policy.json\` with its paths, a \`fires\` sample it must flag and a \`passes\` sample it must allow; the harness refuses a rule that does not load or does not behave on its samples. A shell-command pattern becomes an \`actions\` entry with \`fires\` and \`passes\` commands. Then fix what the new rule flags.
-- \`repo_rules\` lists each rule with how often it fired; narrow a rule that blocks good code and question one that never fires.`;
+const RULES_GUIDE = `Rules in \`.pi/rules/\` (this repository) and \`~/.pi/agent/rules/\` (yours, everywhere) check every tool call and edit before it runs; a refusal names the rule, so change the call and retry. Each \`policy.json\` lists:
+- \`rules\`: GritQL queries (\`*.grit\`, first line \`language\` then \`js\` for JavaScript and TypeScript, \`css\`, \`json\`, \`python\`, \`go\`, \`rust\`, \`java\`, \`kotlin\`, \`csharp\`, \`ruby\`, \`php\`, \`sql\`, \`yaml\`, \`toml\`, \`hcl\`, \`markdown\`, \`elixir\` or \`solidity\`) over edited files matching \`includes\`; every match is a violation.
+- \`actions\`: a regular expression over shell commands.
+- \`scripts\`: a JavaScript function body (\`*.js\`) for anything else. \`on: "call"\` sees \`event.tool\`, \`input\`, \`path\`, a command's literal \`paths\` and \`words\`, \`nested\`, and \`batch\` (the calls of the same parallel message); \`on: "edit"\` sees \`path\`, the new \`content\` and the \`added\` text. Return a reason, \`true\` for its \`message\`, or nothing; \`matches(path, glob)\` helps.
+- \`comments: "forbid"\` refuses new source comments; rationale goes to \`.context/<path>.md\`.
+A rule must refuse its \`fires\` samples and allow its \`passes\` samples (texts, commands, or events), or writing it is refused. A rule guards every later session: when a mistake is machine-detectable, write the rule instead of prose, replay it, then fix what it flags. \`replay_rule\` shows what a rule would have refused in recorded work; \`repo_rules\` how often each fired.`;
 
-const NOT_OPTED_IN = `With \`.pi/rules/\`, the harness checks edits against GritQL/comment rules and shell commands against action rules. This repository has none. Offer rules for repeated detectable mistakes; create them after user agreement because contributors share them.`;
+const NOT_OPTED_IN = `Rules in \`.pi/rules/\` (GritQL over edits, regular expressions over shell commands, JavaScript over any tool call) would be checked before every call; this repository has none. Offer rules for repeated detectable mistakes, and create them after user agreement, because contributors share them; rules for you alone go in \`~/.pi/agent/rules/\`.`;
 
-const COMMITS = /\bgit\s+(add|commit)\b/;
-const BATCH_GUIDANCE = `Check edits next message; other paths stay parallel. Same-file reads/literal shell checks and both colliding writers are refused. Sibling edits may run. Shell matching is heuristic; await script dependencies.`;
-
-function executingBatch(ctx: ExtensionContext, callId: string): BatchCall[] {
+function executingBatch(ctx: ExtensionContext, callId: string): RecordedCall[] {
 	const messages =
 		forkMessages(ctx.sessionManager.getSessionId()) ?? ctx.sessionManager.buildSessionProjection().messages;
 	const message = messages.findLast(
 		(each) => each.role === "assistant" && each.content.some((part) => part.type === "toolCall" && part.id === callId),
 	);
 	if (message?.role !== "assistant") return [];
-	return message.content.filter((part) => part.type === "toolCall") as BatchCall[];
-}
-
-function proposedContent(path: string, input: Record<string, unknown>, toolName: string): string | undefined {
-	if (toolName === "write") return typeof input.content === "string" ? input.content : undefined;
-	const edits = input.edits as { oldText?: unknown; newText?: unknown }[] | undefined;
-	if (!Array.isArray(edits) || !existsSync(path)) return undefined;
-	const original = readFileSync(path, "utf8");
-	const placed: { at: number; oldText: string; newText: string }[] = [];
-	for (const edit of edits) {
-		if (typeof edit.oldText !== "string" || typeof edit.newText !== "string" || !edit.oldText) return undefined;
-		const at = original.indexOf(edit.oldText);
-		if (at < 0 || original.indexOf(edit.oldText, at + 1) >= 0) return undefined;
-		placed.push({ at, oldText: edit.oldText, newText: edit.newText });
-	}
-	placed.sort((a, b) => a.at - b.at);
-	let result = "";
-	let cursor = 0;
-	for (const edit of placed) {
-		if (edit.at < cursor) return undefined;
-		result += original.slice(cursor, edit.at) + edit.newText;
-		cursor = edit.at + edit.oldText.length;
-	}
-	return result + original.slice(cursor);
-}
-
-export async function editRefusal(
-	path: string,
-	toolName: string,
-	input: Record<string, unknown>,
-): Promise<string | undefined> {
-	const root = rulesRootOf(path);
-	if (!root) return undefined;
-	const after = proposedContent(path, input, toolName);
-	if (after === undefined) return undefined;
-	const rules = loadRepoRules(root);
-	const problems: string[] = [];
-	const fired: string[] = [];
-	if (rules.policy.comments === "forbid") {
-		const before = existsSync(path) ? readFileSync(path, "utf8") : "";
-		const comments = addedComments(path, before, after);
-		for (const comment of comments)
-			problems.push(`line ${comment.line}: comment ${JSON.stringify(comment.text.split("\n")[0]!.slice(0, 80))}`);
-		if (comments.length) {
-			fired.push(COMMENT_RULE);
-			problems.push(
-				"This repository forbids comments in source (.pi/rules/policy.json). Put rationale, invariants and hazards in .context/<path>.md, intent in a better name, behavior in a test.",
-			);
-		}
-	}
-	const matching = rulesFor(rules, path);
-	const runs = await runRules(
-		matching.map((rule) => ({ query: readFileSync(gritPath(root, rule), "utf8"), path, content: after })),
-	);
-	for (const [index, run] of runs.entries()) {
-		const rule = matching[index]!;
-		if (run.failure) problems.push(`rule ${rule.grit} could not run: ${run.failure}`);
-		if (run.lines.length) fired.push(rule.grit);
-		for (const line of run.lines) problems.push(`line ${line}: ${rule.message}`);
-	}
-	const ruleFile = await ruleFileRefusal(root, path, after);
-	recordFirings(root, fired);
-	if (ruleFile) return problems.length ? `${ruleFile}\n${problems.join("\n")}` : ruleFile;
-	return problems.length ? `Refused by ${RULES_DIR}:\n${problems.join("\n")}` : undefined;
-}
-
-export function commandRefusal(cwd: string, command: string): string | undefined {
-	const root = rulesRootOf(join(cwd, "x"));
-	if (!root) return undefined;
-	const rule = (loadRepoRules(root).policy.actions ?? []).find((each) => new RegExp(each.pattern).test(command));
-	if (!rule) return undefined;
-	recordFirings(root, [rule.id]);
-	return `Refused by action rule ${rule.id} (${RULES_DIR}/policy.json): ${rule.reason}`;
+	return message.content.filter((part) => part.type === "toolCall") as RecordedCall[];
 }
 
 export function rulesReport(cwd: string): string {
-	const root = rulesRootOf(join(cwd, "x"));
-	if (!root) return `No ${RULES_DIR}/ here; this repository has not opted in to repository rules.`;
-	const { policy } = loadRepoRules(root);
-	const counts = firingsIn(root);
-	const line = (kind: string, id: string) => {
-		const seen = counts.get(id);
-		return `- ${kind} ${id}: ${seen ? `fired ${seen.count} times, last ${seen.last}` : "never fired"}`;
-	};
-	return [
-		`Rules in ${root}/${RULES_DIR}:`,
-		...(policy.comments === "forbid" ? [line("policy", COMMENT_RULE)] : []),
-		...(policy.rules ?? []).map((rule) => line("code", rule.grit)),
-		...(policy.actions ?? []).map((action) => line("action", action.id)),
-	].join("\n");
+	const sets = ruleSetsFor(join(cwd, "x"));
+	if (!sets.length)
+		return `No rules here: neither ${RULES_DIR}/ in this repository nor ${userRulesDir()} has a policy.json.`;
+	return sets
+		.flatMap((set) => {
+			const counts = firingsIn(set.root);
+			const line = (kind: string, id: string, extra = "") => {
+				const seen = counts.get(id);
+				return `- ${kind} ${id}${extra}: ${seen ? `fired ${seen.count} times, last ${seen.last}` : "never fired"}`;
+			};
+			const { policy } = set;
+			return [
+				`${set.level === "user" ? "Your rules" : "Repository rules"} in ${set.dir}:`,
+				...(policy.comments === "forbid" ? [line("policy", COMMENT_RULE)] : []),
+				...(policy.rules ?? []).map((rule) => line("code", rule.grit)),
+				...(policy.actions ?? []).map((action) => line("action", action.id)),
+				...(policy.scripts ?? []).map((rule) => line("script", rule.id, ` (on ${rule.on}, ${rule.script})`)),
+			];
+		})
+		.join("\n");
 }
 
 function createRulesTool() {
@@ -134,7 +63,7 @@ function createRulesTool() {
 		name: REPO_RULES_TOOL_NAME,
 		label: "Repository rules",
 		description:
-			"Read-only: list this repository's rules in .pi/rules/ (comment policy, GritQL code rules, action rules) with how many times each has refused a change or command and when it last did. Use it to narrow a rule that blocks good code or retire one that never fires.",
+			"Read-only: list the rules that apply here (this repository's .pi/rules/ and your ~/.pi/agent/rules/: comment policy, GritQL, action and script rules) with how many times each has refused a call or edit and when it last did. Use it to narrow a rule that blocks good work or retire one that never fires.",
 		parameters: Type.Object({}),
 		async execute(_id, _params, _signal, _update, ctx) {
 			return { content: [{ type: "text" as const, text: rulesReport(ctx.cwd) }], details: undefined };
@@ -147,37 +76,20 @@ export function installRepoRules(pi: ExtensionAPI): void {
 	pi.registerTool(createReplayTool());
 	pi.registerTool(createEvidenceTool());
 	pi.on("before_agent_start", (event, ctx) => {
-		const optedIn = existsSync(join(ctx.cwd, RULES_DIR));
-		setSystemPromptSection(
-			event.systemPromptOptions,
-			REPO_RULES_PROMPT_TAG,
-			`${optedIn ? OPTED_IN : NOT_OPTED_IN}\n\n${BATCH_GUIDANCE}`,
-		);
+		const ruled = ruleSetsFor(join(ctx.cwd, "x")).length > 0;
+		setSystemPromptSection(event.systemPromptOptions, REPO_RULES_PROMPT_TAG, ruled ? RULES_GUIDE : NOT_OPTED_IN);
 	});
 	pi.on("tool_call", async (event, ctx) => {
 		const input = event.input as Record<string, unknown>;
 		const cwd = forkCwd() ?? ctx.cwd;
-		const batch = event.parentToolCallId ? [] : executingBatch(ctx, event.toolCallId);
-		const conflict = batchConflicts(batch, cwd).find((each) => each.callId === event.toolCallId);
-		if (conflict)
-			return {
-				block: true,
-				reason: `Refused: this parallel batch edits ${conflict.path} and also ${conflict.kind === "duplicate-write" ? "edits it again" : "reads or uses it"}. Send the dependent call in the next message; a refused edit does not stop the other calls.`,
-			};
-		if (event.toolName === "edit" || event.toolName === "write") {
-			if (typeof input.path !== "string" || event.parentToolCallId) return undefined;
-			const reason = await editRefusal(resolveToolPath(input.path, ctx.cwd), event.toolName, input);
-			return reason ? { block: true, reason } : undefined;
+		const nested = Boolean(event.parentToolCallId);
+		const call: RecordedCall = { id: event.toolCallId, name: event.toolName, arguments: input };
+		if (!nested && (event.toolName === "edit" || event.toolName === "write") && typeof input.path === "string") {
+			const reason = await checkEdit(resolveToolPath(input.path, cwd), event.toolName, input);
+			if (reason) return { block: true, reason };
 		}
-		if (event.toolName !== "bash") return undefined;
-		const command = String(input.command ?? "");
-		if (batch.some((call) => call.name === "edit" || call.name === "write") && COMMITS.test(command))
-			return {
-				block: true,
-				reason:
-					"Refused: this message also edits files, and parallel calls run concurrently, so this commit would take the files before the edits land. Commit in a later message.",
-			};
-		const reason = commandRefusal(ctx.cwd, command);
+		const batch = nested ? [call] : executingBatch(ctx, event.toolCallId);
+		const reason = await checkCall(call, batch.length ? batch : [call], cwd, nested);
 		return reason ? { block: true, reason } : undefined;
 	});
 }

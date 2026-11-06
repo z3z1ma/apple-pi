@@ -1,5 +1,5 @@
 ---
-description: Start a capability steward run that finds what keeps recurring here and brings proven rules, guards and programs for sign-off
+description: Start a capability steward run that finds what keeps recurring here and brings proven rules and programs for sign-off
 argument-hint: "[focus]"
 ---
 Start a capability steward run for this repository, focused on: ${ARGUMENTS:-everything recorded since the last relevant change}.

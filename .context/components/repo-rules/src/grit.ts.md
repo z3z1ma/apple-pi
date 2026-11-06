@@ -11,6 +11,6 @@ The query's `language` line alone selects the parser; the job's path and its ext
 A query that does not compile either throws (reported as a rule failure) or silently matches nothing. The second case is caught only by the rule's `fires` sample, which `checks.ts` requires for every rule.
 Coupled: components/repo-rules/src/checks.ts, components/repo-rules/src/grit-runner.mjs
 
-`grit.ts` and `policy.ts` import only Node built-ins, so `lint/repo-rules.mjs` can import them with Node's own type stripping.
-Coupled: lint/repo-rules.mjs, package.json, .pi/rules/policy.json
+`lint/repo-rules.mjs` imports these modules with Node's own type stripping, through the session-state `register.mjs` hook that maps `.js` imports to `.ts` (set in `package.json`'s `lint` script), so the module graph must stay erasable TypeScript.
+Coupled: lint/repo-rules.mjs, package.json, .pi/rules/policy.json, components/session-state/src/register.mjs
 Verify: components/repo-rules/tests/repo-rules.test.ts

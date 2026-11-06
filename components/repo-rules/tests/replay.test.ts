@@ -78,6 +78,31 @@ test("an action rule's pattern is replayed on recorded shell commands", async ()
 	expect(report.evaluated).toBe(2);
 });
 
+test("a call script is replayed on every recorded call with the rest of its batch", async () => {
+	const script =
+		'if (event.tool === "bash" && event.batch.some((call) => call.tool === "write" && call.path === "src/a.js")) return "beside " + event.input.command;';
+	const report = await replayRule({ script, on: "call" }, { root, since, sessionsDir });
+	expect(report.hits.map((hit) => hit.reasons)).toEqual([["beside git push origin main"], ["beside git status"]]);
+	expect(report.hits[0]).toMatchObject({ ref: "entry:here/batch", command: "git push origin main" });
+	expect(report.evaluated).toBe(6);
+});
+
+test("an edit script is replayed on the text recorded edits added, within its includes", async () => {
+	const script = 'return event.added.some((text) => text.includes("console"));';
+	const report = await replayRule(
+		{ script, on: "edit", includes: ["src/**"], message: "no console" },
+		{ root, since, sessionsDir },
+	);
+	expect(report.hits.map((hit) => [hit.path, hit.reasons])).toEqual([
+		["src/a.js", ["no console"]],
+		["src/b.js", ["no console"]],
+	]);
+	expect(report.evaluated).toBe(3);
+	const broken = await replayRule({ script: "return event.x.y;", on: "edit" }, { root, since, sessionsDir });
+	expect(broken.evaluated).toBe(0);
+	expect(broken.notEvaluated.length).toBe(4);
+});
+
 test("text the rule cannot evaluate is listed as not evaluated, never as allowed", async () => {
 	const report = await replayRule({ grit: "language js\n\n`console.log(" }, { root, since, sessionsDir });
 	expect(report.hits).toEqual([]);

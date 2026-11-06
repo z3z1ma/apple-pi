@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { cpSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolCall } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
@@ -13,6 +13,8 @@ const call = (id: string, name: string, args: ToolCall["arguments"]) => ({
 	name,
 	arguments: args,
 });
+const withRules = (cwd: string) =>
+	cpSync(join(import.meta.dirname, "../../../.pi/rules"), join(cwd, ".pi/rules"), { recursive: true });
 const reply = (...calls: ReturnType<typeof call>[]) => ({
 	...fauxAssistantMessage(""),
 	content: calls,
@@ -55,6 +57,7 @@ test("finalized message replacements, not intermediate message_end values, defin
 		["write", "read"],
 	);
 	try {
+		withRules(f.cwd);
 		await f.session.prompt("Run the transformed batch");
 		const result = f.session.messages.find((m) => m.role === "toolResult" && m.toolCallId === "added");
 		expect(result).toMatchObject({ isError: true });
@@ -79,6 +82,7 @@ test("a real fork inspects its own batch and a later parent read remains indepen
 		["write", "read"],
 	);
 	try {
+		withRules(f.cwd);
 		await f.session.prompt("Settle the parent");
 		const fork = await startFork(f.session, {
 			messages: structuredClone(f.session.sessionManager.buildSessionProjection().messages),
@@ -118,6 +122,7 @@ test("host checks are refused after a failed writer, and later messages may retr
 		["edit", "read"],
 	);
 	try {
+		withRules(f.cwd);
 		await f.session.prompt("Run and retry");
 		const results = f.session.messages.filter((m) => m.role === "toolResult");
 		expect(results.find((m) => m.toolCallId === "edit")?.isError).toBe(true);

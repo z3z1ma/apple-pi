@@ -2,7 +2,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { commandRefusal, editRefusal, installRepoRules, rulesReport } from "../src/index.js";
+import { checkCall, checkEdit as editRefusal, rulesReport } from "../src/index.js";
+
+const commandRefusal = (cwd: string, command: string) =>
+	checkCall({ id: "c", name: "bash", arguments: { command } }, [], cwd, false);
 
 const NO_SELECT = "language js\n\n`<select $attrs>$children</select>`\n";
 const SELECT_RULE = {
@@ -122,42 +125,124 @@ test("outside an opted-in repository nothing is checked", async () => {
 	const plain = mkdtempSync(join(tmpdir(), "repo-rules-plain-"));
 	try {
 		expect(await editRefusal(join(plain, "a.ts"), "write", { content: "// fine here\n" })).toBeUndefined();
-		expect(commandRefusal(plain, "git rm a.ts")).toBeUndefined();
-		expect(rulesReport(plain)).toMatch(/has not opted in/);
+		expect(await commandRefusal(plain, "git rm a.ts")).toBeUndefined();
+		expect(rulesReport(plain)).toMatch(/No rules here/);
 	} finally {
 		rmSync(plain, { recursive: true, force: true });
 	}
 });
 
-test("action rules refuse matching commands, and a commit beside an edit is refused in any repository", async () => {
-	expect(commandRefusal(repo, "git rm web/view.tsx")).toMatch(/no-git-rm/);
-	expect(rulesReport(repo)).toMatch(/action no-git-rm: fired 1 times/);
-	const handlers = new Map<string, (event: any, ctx?: any) => any>();
-	installRepoRules({
-		on: (name: string, handler: any) => handlers.set(name, handler),
-		registerTool: () => undefined,
-	} as never);
-	let content = [
-		{ type: "toolCall", id: "e1", name: "edit" },
-		{ type: "toolCall", id: "b1", name: "bash" },
-	];
-	const ctx = {
-		cwd: tmpdir(),
-		sessionManager: {
-			getSessionId: () => "rules-test",
-			buildSessionProjection: () => ({ messages: [{ role: "assistant", content }] }),
-		},
-	};
-	const commit = await handlers.get("tool_call")!(
-		{ toolName: "bash", toolCallId: "b1", input: { command: "git commit -m x" } },
-		ctx,
+const TODO_SCRIPT = {
+	id: "no-todo",
+	on: "edit",
+	script: "no-todo.js",
+	includes: ["web/**"],
+	message: "Finish the work or file it; no TODO markers.",
+	fires: [{ path: "web/a.tsx", added: ["export const a = 1; // TODO"] }],
+	passes: [{ path: "web/a.tsx", added: ["export const a = 1;"] }],
+};
+const LS_SCRIPT = {
+	id: "no-ls-and-read",
+	on: "call",
+	script: "no-ls-and-read.js",
+	fires: [{ tool: "ls", input: { path: "web" }, batch: [{ tool: "read", input: { path: "web/view.tsx" } }] }],
+	passes: [{ tool: "ls", input: { path: "web" } }],
+};
+
+test("a script rule is checked when written, and refuses edits and batches it names", async () => {
+	writeFileSync(join(rulesDir, "no-todo.js"), 'return event.added.some((text) => text.includes("TODO"));\n');
+	writeFileSync(
+		join(rulesDir, "no-ls-and-read.js"),
+		'if (event.tool === "ls" && event.batch.some((call) => call.tool === "read" && matches(call.path, event.path + "/**")))\n\treturn "list " + event.path + " or read inside it, not both";\n',
 	);
-	expect(commit?.block).toBe(true);
-	content = [{ type: "toolCall", id: "b2", name: "bash" }];
+	const policy = {
+		comments: "forbid",
+		rules: [SELECT_RULE, PRINT_RULE],
+		actions: [GIT_RM],
+		scripts: [TODO_SCRIPT, LS_SCRIPT],
+	};
+	expect(await editRefusal(policyFile, "write", { content: JSON.stringify(policy) })).toBeUndefined();
+	writeFileSync(policyFile, JSON.stringify(policy));
+	const lazy = await editRefusal(join(rulesDir, "no-todo.js"), "write", { content: "return false;\n" });
+	expect(lazy).toMatch(/script no-todo does not refuse its "fires" sample 1/);
+	const throwing = await editRefusal(join(rulesDir, "no-todo.js"), "write", { content: "return event.nope.x;\n" });
+	expect(throwing).toMatch(/script no-todo fails on its "fires" sample 1: .*undefined/);
+	const syntax = await editRefusal(join(rulesDir, "no-todo.js"), "write", { content: "return (;\n" });
+	expect(syntax).toMatch(/script no-todo fails on its "fires" sample 1/);
+	const unsampled = await editRefusal(policyFile, "write", {
+		content: JSON.stringify({ scripts: [{ ...TODO_SCRIPT, passes: [] }] }),
+	});
+	expect(unsampled).toMatch(/give it "fires" events it must refuse and "passes" events/);
+	const twice = await editRefusal(policyFile, "write", {
+		content: JSON.stringify({ actions: [{ ...GIT_RM, id: "no-todo" }], scripts: [TODO_SCRIPT] }),
+	});
+	expect(twice).toMatch(/two rules share the id no-todo/);
+
 	expect(
-		await handlers.get("tool_call")!(
-			{ toolName: "bash", toolCallId: "b2", input: { command: "git commit -m x" } },
-			ctx,
-		),
-	).toBeUndefined();
+		await editRefusal(file, "edit", {
+			edits: [{ oldText: "export const b = 2;", newText: "export const b = 3; /* TODO */" }],
+		}),
+	).toMatch(/\[no-todo\] Finish the work or file it/);
+	expect(await editRefusal(join(repo, "other.ts"), "write", { content: "export const TODO = 1;\n" })).toBeUndefined();
+	const ls = { id: "l", name: "ls", arguments: { path: "web" } };
+	const read = { id: "r", name: "read", arguments: { path: "web/view.tsx" } };
+	expect(await checkCall(ls, [ls, read], repo, false)).toMatch(/\[no-ls-and-read\] list web or read inside it/);
+	expect(await checkCall(ls, [ls], repo, false)).toBeUndefined();
+	expect(rulesReport(repo)).toMatch(/script no-todo \(on edit, no-todo\.js\): fired 1 times/);
+});
+
+test("a script that fails at run time refuses with the rule to fix, and a rules-file edit can repair it", async () => {
+	writeFileSync(join(rulesDir, "no-ls-and-read.js"), "return event.input.path.missing.x;\n");
+	const ls = { id: "l", name: "ls", arguments: { path: "web" } };
+	expect(await checkCall(ls, [ls], repo, false)).toMatch(/\[no-ls-and-read\] could not run: .*fix the rule in/);
+	const repair = { id: "w", name: "write", arguments: { path: join(rulesDir, "no-ls-and-read.js") } };
+	expect(await checkCall(repair, [repair], repo, false)).toBeUndefined();
+	writeFileSync(join(rulesDir, "no-ls-and-read.js"), "return;\n");
+});
+
+test("rules that refuse everything cannot lock the agent out of fixing them", async () => {
+	const todo = join(rulesDir, "no-todo.js");
+	const ls = join(rulesDir, "no-ls-and-read.js");
+	writeFileSync(todo, 'return "no";\n');
+	writeFileSync(ls, 'return "no";\n');
+	try {
+		const read = { id: "r", name: "read", arguments: { path: "web/view.tsx" } };
+		expect(await checkCall(read, [read], repo, false)).toMatch(/\[no-ls-and-read\] no/);
+		const fix = { id: "w", name: "write", arguments: { path: ".pi/rules/no-ls-and-read.js" } };
+		expect(await checkCall(fix, [fix], repo, false)).toBeUndefined();
+		const fixed = await editRefusal(ls, "write", { content: "return;\n" });
+		expect(fixed).toMatch(/script no-ls-and-read does not refuse its "fires" sample 1/);
+		expect(fixed).not.toMatch(/\[no-todo\]|\[no-ls-and-read\] no/);
+	} finally {
+		writeFileSync(todo, 'return event.added.some((text) => text.includes("TODO"));\n');
+		writeFileSync(ls, "return;\n");
+	}
+});
+
+test("your own rules in the agent directory apply in every repository", async () => {
+	const plain = mkdtempSync(join(tmpdir(), "repo-rules-user-"));
+	try {
+		mkdirSync(join(agent, "rules"), { recursive: true });
+		writeFileSync(join(agent, "rules/policy.json"), JSON.stringify({ actions: [{ ...GIT_RM, id: "mine" }] }));
+		expect(await commandRefusal(plain, "git rm a")).toMatch(/\[mine\] Use plain rm/);
+		const both = await commandRefusal(repo, "git rm a");
+		expect(both).toMatch(/\[mine\]/);
+		expect(both).toMatch(/\[no-git-rm\]/);
+		expect(rulesReport(plain)).toMatch(/Your rules in .*\n- action mine: fired 2 times/);
+		const broken = await editRefusal(join(agent, "rules/policy.json"), "write", {
+			content: JSON.stringify({ actions: [{ ...GIT_RM, passes: "git rm b" }] }),
+		});
+		expect(broken).toMatch(/action no-git-rm refuses its "passes" command/);
+	} finally {
+		rmSync(join(agent, "rules/policy.json"), { force: true });
+		rmSync(plain, { recursive: true, force: true });
+	}
+});
+
+test("action rules refuse matching commands, also inside scripts, and their firings are counted", async () => {
+	expect(await commandRefusal(repo, "git rm web/view.tsx")).toMatch(/\[no-git-rm\] Use plain rm/);
+	expect(await checkCall({ id: "n", name: "bash", arguments: { command: "git rm a" } }, [], repo, true)).toMatch(
+		/no-git-rm/,
+	);
+	expect(rulesReport(repo)).toMatch(/action no-git-rm: fired \d+ times/);
 });

@@ -66,5 +66,35 @@
       "fires": "gh pr comment 3 --body-file /tmp/comment.md",
       "passes": "gh pr view 3 --json title"
     }
+  ],
+  "scripts": [
+    {
+      "id": "parallel-dependents",
+      "on": "call",
+      "script": "parallel-dependents.js",
+      "fires": [
+        { "tool": "read", "input": { "path": "a.ts" }, "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }] },
+        { "tool": "bash", "input": { "command": "npx biome check a.ts" }, "batch": [{ "tool": "write", "input": { "path": "./a.ts" } }] },
+        { "tool": "edit", "input": { "path": "a.ts" }, "batch": [{ "tool": "write", "input": { "path": "a.ts" } }] }
+      ],
+      "passes": [
+        { "tool": "read", "input": { "path": "b.ts" }, "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }] },
+        { "tool": "bash", "input": { "command": "npx biome check $FILE a.ts" }, "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }] },
+        { "tool": "read", "input": { "path": "a.ts" }, "batch": [{ "tool": "read", "input": { "path": "a.ts" } }] }
+      ]
+    },
+    {
+      "id": "commit-beside-edit",
+      "on": "call",
+      "script": "commit-beside-edit.js",
+      "message": "This message also edits files, and parallel calls run concurrently, so this commit would take the files before the edits land. Commit in a later message.",
+      "fires": [
+        { "tool": "bash", "input": { "command": "git add a.ts && git commit -m fix" }, "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }] }
+      ],
+      "passes": [
+        { "tool": "bash", "input": { "command": "git commit -m fix -- a.ts" } },
+        { "tool": "bash", "input": { "command": "git status" }, "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }] }
+      ]
+    }
   ]
 }

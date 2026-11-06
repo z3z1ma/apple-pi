@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test } from "vitest";
 import { runRules } from "../components/repo-rules/src/grit.js";
@@ -133,7 +133,7 @@ async function lintHot(source: string, hot = true) {
 	const path = join(repository, "components/example", hot ? "read.hot.ts" : "setup.ts");
 	const matching = rulesFor(rules, path);
 	const runs = await runRules(
-		matching.map((rule) => ({ query: readFileSync(gritPath(repository, rule), "utf8"), path, content: source })),
+		matching.map((rule) => ({ query: readFileSync(gritPath(rules, rule), "utf8"), path, content: source })),
 	);
 	return runs.flatMap((run, index) => {
 		expect(run.failure).toBeUndefined();

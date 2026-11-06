@@ -1,6 +1,6 @@
 ## file
 
-`replay_rule` evaluates a candidate rule against what agents actually did here: a GritQL rule against the text each recorded `edit` added (every `newText`) and each `write`'s content, or an action pattern against recorded `bash` commands, in sessions whose working directory is this repository, from `since` on. It calls `runRules` and the regular expression directly, never `editRefusal`/`commandRefusal`, so a replay records no firings; a job the engine cannot run is listed as not evaluated, never counted as allowed.
+`replay_rule` evaluates a rule (an existing one by id, or a candidate) against what agents actually did here: a GritQL rule or edit script against the text each recorded `edit` added (every `newText`) and each `write`'s content, an action pattern against recorded `bash` commands, or a call script against every recorded call with its whole recorded batch, in sessions whose working directory is this repository, from `since` on. It calls the engines (`runRules`, the regular expression, `runScripts`) directly, never the engine's `checkCall`/`checkEdit`, so a replay records no firings; a job an engine cannot run is listed as not evaluated, never counted as allowed. Edit scripts see `content` as `null`, since the file as it stood is not recorded.
 Why: a rule's evidence is what it would have refused in real work, and the firing counts `repo_rules` reports must stay counts of real refusals. Checking only added text matches the mistake being made, not violations already in the file, which the live check (whole file) would also flag; a match spanning text outside the edit is missed.
 
 `since` is explicit (a date or a revision, resolved to its commit time) and the report states it.
@@ -11,5 +11,5 @@ Recorded paths resolve as the live tools resolve them (`resolveToolPath`: `@`, `
 
 Paths match a candidate's `includes` with `includedBy`, the same function the live check uses for `policy.json` rules, so a replay and the adopted rule cover the same files.
 
-Coupled: components/repo-rules/src/policy.ts, components/shared/src/session-logs.ts, components/repo-rules/src/grit.ts, components/system-prompt/src/toolbox.ts, tests/package-load.mjs
+Coupled: components/repo-rules/src/events.ts, components/repo-rules/src/scripts.ts, components/repo-rules/src/policy.ts, components/shared/src/session-logs.ts, components/repo-rules/src/grit.ts, components/system-prompt/src/toolbox.ts, tests/package-load.mjs
 Verify: components/repo-rules/tests/replay.test.ts

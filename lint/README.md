@@ -27,12 +27,14 @@ harness's detector (`components/repo-rules/src/comments.ts`), so it reports exac
 
 ## Rules
 
-apple-pi opts in to the harness's repository rules (`components/repo-rules`) with `.pi/rules/`. The harness checks
-every `edit` and `write` against them before the change lands, and every shell command against the action rules;
-`npm run lint` runs the same GritQL rules over every tracked file they apply to, through the same engine
-(`lint/repo-rules.mjs`).
+apple-pi opts in to the harness's rules (`components/repo-rules`) with `.pi/rules/`. The harness checks every tool
+call and edit against them before it runs; `npm run lint` runs the same GritQL rules and edit scripts over every
+tracked file they apply to, through the same engines (`lint/repo-rules.mjs`).
 
-- `policy.json`: `"comments": "forbid"`, the GritQL rules with the paths they apply to, and the action rules, each with `fires` and `passes` samples (see `docs/repo-rules.md`).
+- `policy.json`: `"comments": "forbid"`, the GritQL rules with the paths they apply to, the action rules and the script rules, each with `fires` and `passes` samples (see `docs/repo-rules.md`).
+- `parallel-dependents.js`: refuses a read or shell command that names a file a sibling call in the same message
+  edits, and both of two writes to one file; parallel calls run concurrently.
+- `commit-beside-edit.js`: refuses `git add` or `git commit` in a message that also edits files.
 - `no-native-select.grit`: Workplace uses `Select` and `Recipients`, not native dropdowns.
 - `workplace-palette.grit`: Workplace stylesheets take colors from `--wp-*` theme variables; white and black overlays
   are allowed. `workplace.css` is excluded because it defines the house palette itself.
