@@ -1,10 +1,10 @@
-import { join, matchesGlob, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { defineTool, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { git } from "../../shared/src/git.js";
 import { sessionEntries, within } from "../../shared/src/session-logs.js";
 import { runRules } from "./grit.js";
-import { rulesRootOf } from "./policy.js";
+import { includedBy, rulesRootOf } from "./policy.js";
 
 export const REPLAY_RULE_TOOL_NAME = "replay_rule";
 
@@ -40,16 +40,6 @@ interface ToolCall {
 	type?: string;
 	name?: string;
 	arguments?: Record<string, unknown>;
-}
-
-function included(includes: string[] | undefined, path: string): boolean {
-	const globs = includes ?? [];
-	const wanted = globs.filter((glob) => !glob.startsWith("!"));
-	const unwanted = globs.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1));
-	return (
-		(!wanted.length || wanted.some((glob) => matchesGlob(path, glob))) &&
-		!unwanted.some((glob) => matchesGlob(path, glob))
-	);
 }
 
 function addedTexts(call: ToolCall): string[] {
@@ -91,7 +81,7 @@ export async function replayRule(
 			const absolute = resolve(session.cwd, args.path);
 			if (!within(options.root, absolute)) continue;
 			const path = relative(options.root, absolute);
-			if (!included(candidate.includes, path)) continue;
+			if (!includedBy(candidate.includes, path)) continue;
 			for (const content of addedTexts(call)) jobs.push({ at, ref, path, content });
 		}
 	}
@@ -162,7 +152,6 @@ export function createReplayTool() {
 		async execute(_id, params, _signal, _update, ctx) {
 			if ((params.grit === undefined) === (params.pattern === undefined))
 				throw new Error("Give either grit (a code rule) or pattern (an action rule).");
-			if (params.pattern !== undefined) new RegExp(params.pattern);
 			const root = await repositoryRoot(ctx.cwd);
 			const since = await windowStart(root, params.since);
 			const report = await replayRule(params, { root, since, sessionsDir: join(getAgentDir(), "sessions") });

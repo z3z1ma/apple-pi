@@ -7,5 +7,7 @@ Why: a rule's evidence is what it would have refused in real work, and the firin
 Why: usage before the last change to what a rule guards describes an older harness (operator correction, 2026-11-05); the caller picks the window rather than a default spanning old behaviour.
 
 Calls made from codemode scripts are recorded as the script's tool result, not as tool calls, so they are not replayed. A replay over this repository's sessions since 2026-11-04 (four sessions, 1,414 shell commands) took 1.4 seconds and found the refused `gh pr comment` that led to `github-writes`.
-Coupled: components/shared/src/session-logs.ts, components/repo-rules/src/grit.ts, components/system-prompt/src/toolbox.ts, tests/package-load.mjs
+Paths match a candidate's `includes` with `includedBy`, the same function the live check uses for `policy.json` rules, so a replay and the adopted rule cover the same files.
+
+Coupled: components/repo-rules/src/policy.ts, components/shared/src/session-logs.ts, components/repo-rules/src/grit.ts, components/system-prompt/src/toolbox.ts, tests/package-load.mjs
 Verify: components/repo-rules/tests/replay.test.ts

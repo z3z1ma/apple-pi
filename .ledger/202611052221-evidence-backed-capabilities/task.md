@@ -20,7 +20,7 @@ The operator asked for both mutation types to be scoped: rules and guards, and s
 
 ## Current State
 
-Planning: proposal and tickets written, awaiting the operator's sign-off.
+Approved by sign-off on 2026-11-05; the operator's decisions are in `proposal.md`. Ticket 02 (`replay_rule`) is done. Next: ticket 01 (the recurring-lesson report), then 03.
 
 ## Outcome
 

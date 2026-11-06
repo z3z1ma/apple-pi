@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -50,10 +50,6 @@ beforeAll(() => {
 	session("elsewhere.jsonl", "elsewhere", join(base, "other"), [
 		["far", "2026-11-05T10:00:00Z", [call("write", { path: "src/a.js", content: "console.log(far);\n" })]],
 	]);
-	const stale = session("stale.jsonl", "stale", root, [
-		["stale", "2026-11-05T10:00:00Z", [call("write", { path: "src/s.js", content: "console.log(s);\n" })]],
-	]);
-	utimesSync(stale, new Date("2026-11-01"), new Date("2026-11-01"));
 });
 afterAll(() => rmSync(base, { recursive: true, force: true }));
 

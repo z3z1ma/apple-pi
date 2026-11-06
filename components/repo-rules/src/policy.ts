@@ -51,15 +51,16 @@ export function loadRepoRules(root: string): RepoRules {
 	return { root, policy };
 }
 
+export function includedBy(globs: string[] | undefined, relativePath: string): boolean {
+	const wanted = (globs ?? []).filter((glob) => !glob.startsWith("!"));
+	const unwanted = (globs ?? []).filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1));
+	return (
+		(!wanted.length || wanted.some((glob) => matchesGlob(relativePath, glob))) &&
+		!unwanted.some((glob) => matchesGlob(relativePath, glob))
+	);
+}
+
 export function rulesFor(rules: RepoRules, path: string): CodeRule[] {
 	const relativePath = relative(rules.root, path);
-	return (rules.policy.rules ?? []).filter((rule) => {
-		const globs = rule.includes ?? [];
-		const wanted = globs.filter((glob) => !glob.startsWith("!"));
-		const unwanted = globs.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1));
-		return (
-			(!wanted.length || wanted.some((glob) => matchesGlob(relativePath, glob))) &&
-			!unwanted.some((glob) => matchesGlob(relativePath, glob))
-		);
-	});
+	return (rules.policy.rules ?? []).filter((rule) => includedBy(rule.includes, relativePath));
 }
