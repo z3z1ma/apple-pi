@@ -144,6 +144,7 @@ async function openLifecycle(appearance: "light" | "dark" = "light", width = 144
 			organizationLifetime: async (root: string) => ({ ...w.lifetime, root }),
 			incorporateOrganization: async (root: string) => {
 				w.incorporations.push(root);
+				if (w.holdIncorporation) return new Promise((resolve) => (w.releaseIncorporation = resolve));
 				w.lifetime = { ...w.lifetime, incorporated: true, closing: false, waiting: [] };
 				return { ok: true };
 			},
@@ -594,6 +595,38 @@ test("the workspace menu shows a dissolving organization's blockers and incorpor
 			await page.keyboard.press("Escape");
 			expect(shown).toBe(1);
 		});
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("an incorporation that settles after a workspace switch changes nothing in the new workspace", async () => {
+	const snapshot = world();
+	snapshot.characters.push(awake("zoe", "Zoe", null));
+	const { page, errors } = await openLifecycle("light", 1440, snapshot);
+	try {
+		const switcher = page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ });
+		const menu = page.getByRole("menu", { name: "Actions", exact: true });
+		await page.evaluate(() => {
+			(window as any).holdIncorporation = true;
+		});
+		await switcher.click();
+		await menu
+			.getByRole("menuitem", { name: "Incorporate this organization (stops it dissolving)", exact: true })
+			.click();
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).incorporations)).toEqual(["ada"]));
+		await switcher.click();
+		await menu.getByRole("menuitem", { name: /^Zoe organization/ }).click();
+		await page.getByRole("button", { name: "Workspace: Zoe organization. Switch workspace", exact: true }).waitFor();
+		await page.evaluate(() => (window as any).releaseIncorporation({ ok: false, reason: "Ada request was refused" }));
+		await page.evaluate(
+			() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+		);
+		await switcher.click();
+		await menu.getByRole("menuitem", { name: /^Incorporate this organization/ }).waitFor();
+		expect(await menu.getByRole("menuitem", { name: /Incorporating failed/ }).count()).toBe(0);
+		await page.keyboard.press("Escape");
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

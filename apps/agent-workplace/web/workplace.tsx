@@ -359,8 +359,10 @@ function Workplace() {
 	const [leavingOpen, setLeavingOpen] = useState(false);
 	const [leavingUnsettled, setLeavingUnsettled] = useState(false);
 	const [lifetime, setLifetime] = useState<Awaited<ReturnType<typeof api.organizationLifetime>>>();
-	const [incorporateError, setIncorporateError] = useState<string>();
+	const [incorporateError, setIncorporateError] = useState<{ root: string; reason: string }>();
 	const workspaceId = workspace?.id;
+	const shownWorkspace = useRef(workspaceId);
+	shownWorkspace.current = workspaceId;
 	// biome-ignore lint/correctness/useExhaustiveDependencies: every snapshot can change the organization's lifetime.
 	useEffect(() => {
 		if (!workspaceId) return;
@@ -443,22 +445,26 @@ function Workplace() {
 			lifetimeItems.push({
 				label: `Incorporate this organization${lifetime.closing ? " (stops it dissolving)" : ""}`,
 				onSelect: () => {
+					const root = workspace.id;
+					const stillShown = () => shownWorkspace.current === root;
 					setIncorporateError(undefined);
 					void api
-						.incorporateOrganization(workspace.id)
+						.incorporateOrganization(root)
 						.then((result) => {
-							if (!result.ok) setIncorporateError(result.reason);
-							return api.organizationLifetime(workspace.id);
+							if (!result.ok) setIncorporateError({ root, reason: result.reason });
+							return api.organizationLifetime(root);
 						})
-						.then(setLifetime)
-						.catch((error) => setIncorporateError(String(error)));
+						.then((value) => {
+							if (stillShown()) setLifetime(value);
+						})
+						.catch((error) => setIncorporateError({ root, reason: String(error) }));
 				},
 			});
 		if (lifetime.closing && lifetime.waiting.length)
 			note(
 				`Dissolving; waiting on ${lifetime.waiting.map(({ person, reason }) => `${nameOf(person)} (${reason})`).join(", ")}`,
 			);
-		if (incorporateError) note(`Incorporating failed: ${incorporateError}`);
+		if (incorporateError?.root === workspace.id) note(`Incorporating failed: ${incorporateError.reason}`);
 	}
 	const workspaceMenu = [
 		...allWorkspaces.map((each) => {
