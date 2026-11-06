@@ -1,0 +1,2 @@
+TLC 1.7.4 on .ledger/202611031649-persistent-versus-automatic-lifetime-organizations/organization-lifecycle.tla: PASS. Model checking completed. No error has been found.
+5901719 states generated, 715752 distinct, 0 left on queue, depth 34.

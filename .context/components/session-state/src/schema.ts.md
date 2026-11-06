@@ -1,5 +1,9 @@
 ## file
 
+Migration54 adds incorporated (default zero for new rows), closing_generation and incarnation interactive metadata. It marks every pre-existing sessions row incorporated, including sleeping roots, reports and pre-migration admissions. It creates no closing intent and never classifies an existing incarnation's old quit as a new close. Keep all physical columns in historical-schema.ts's rewind list. Existing bridges remain admitted; missing interactive metadata does not authorize uncertain quit-based dissolution.
+Coupled: components/session-state/src/organization-lifetime.ts, components/session-state/src/bridge.ts
+Verify: components/session-state/tests/organization-lifetime.test.ts, components/session-state/tests/event-index.test.ts
+
 Migration53 adds nullable review_attempts.fork_offset. Existing worker attempts retain null: their inherited-history boundary is unknown and their logs are withheld rather than guessed. A new fork bridge reports the offset of its identity-bound transcript marker. Keep the physical column in historical-schema.ts's rewind list; earlier migrations stay unchanged.
 Coupled: components/session-state/src/program-fork.ts, components/session-state/src/protocol.ts, components/session-state/src/review-read.ts
 Verify: components/session-state/tests/event-index.test.ts, components/session-state/tests/review-workers.test.ts

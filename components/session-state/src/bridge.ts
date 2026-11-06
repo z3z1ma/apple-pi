@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import {
 	installOrganization,
+	organizationOf,
 	SELF_CHANNEL,
 	type SelfChange,
 	sessionRole,
@@ -15,7 +16,7 @@ import { OPERATOR_PAGE_CHANNEL, type OpenOperatorPage } from "../../shared/src/o
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { mainToolArgument } from "../../shared/src/tool-activity.js";
 import type { TurnProgress, TurnResult } from "../../shared/src/turn-observer.js";
-import { RETRY_MS, spawnRuntime } from "./client.js";
+import { RETRY_MS, sendCommand, spawnRuntime } from "./client.js";
 import { installCoordinator } from "./coordinator.js";
 import { deliverMail, installMail, mailRecordedIn } from "./mail.js";
 import { statePaths } from "./paths.js";
@@ -301,6 +302,8 @@ function helloFor(
 			file: sessions.getSessionFile(),
 			cwd: ctx.cwd,
 			name: sessions.getSessionName(),
+			interactive: ctx.hasUI,
+			incorporate: pi.getFlag("incorporate") === true,
 			...(fork ? { forkOffset: fork.offset } : {}),
 			...(process.env[PROGRAM_ID_ENV] && process.env[PROGRAM_PARENT_ENV]
 				? { program: { id: process.env[PROGRAM_ID_ENV]!, parent: process.env[PROGRAM_PARENT_ENV]! } }
@@ -461,7 +464,25 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		type: "string",
 		description: "Inference profile that selects the role's mind at its first start, in place of the role's own",
 	});
+	pi.registerFlag("incorporate", {
+		type: "boolean",
+		description: "Keep this organization after its root closes; otherwise a new organization is temporary",
+	});
 	if (process.env.PI_SESSION_STATE_DISABLED === "1") return;
+	pi.registerCommand("incorporate", {
+		description: "Keep this organization after its root closes and stop pending automatic departures",
+		handler: async (_args, ctx) => {
+			const person = ctx.sessionManager.getSessionId();
+			const root = organizationOf(person).root;
+			const receipt = await sendCommand(root, { kind: "incorporate", by: person });
+			ctx.ui.notify(
+				receipt.stage === "applied"
+					? "This organization is incorporated."
+					: (receipt.reason ?? "Incorporation failed."),
+				receipt.stage === "applied" ? "info" : "error",
+			);
+		},
+	});
 	installMail(pi);
 
 	installOrganization(pi, { reflects: !process.env[PROGRAM_ID_ENV] });

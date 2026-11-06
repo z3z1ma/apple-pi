@@ -205,6 +205,12 @@ const api: AgentWorkplaceApi = {
 	recruit: (request) => ipcRenderer.invoke("world:recruit", request) as Promise<RecruitReceipt>,
 	rename: (characterId, name) => ipcRenderer.invoke("world:rename", characterId, name) as Promise<CommandReceipt>,
 	roles: () => ipcRenderer.invoke("world:roles") as Promise<RoleChoice[]>,
+	organizationLifetime: (root) =>
+		ipcRenderer.invoke("world:organization-lifetime", root) as ReturnType<AgentWorkplaceApi["organizationLifetime"]>,
+	incorporateOrganization: (root) =>
+		ipcRenderer.invoke("world:incorporate-organization", root) as ReturnType<
+			AgentWorkplaceApi["incorporateOrganization"]
+		>,
 	orgMove: (request) => ipcRenderer.invoke("world:org-move", request) as Promise<OrgMoveResult>,
 	orgStart: (request) => ipcRenderer.invoke("world:org-start", request) as Promise<OrgStartProgress>,
 	onOrgStart(listener) {

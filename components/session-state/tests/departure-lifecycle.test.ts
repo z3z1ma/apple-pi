@@ -269,6 +269,7 @@ test.each([
 		const manager = native ? await organization() : undefined;
 		const worker = await person(manager?.id ?? null);
 		if (asleep) {
+			if (!manager) await command(worker.id, { kind: "incorporate", by: "operator" });
 			await command(worker.id, { kind: "close" });
 			await vi.waitFor(() => expect(worker.child.exitCode).toBe(0));
 		}

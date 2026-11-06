@@ -1,5 +1,13 @@
 ## file
 
+Organization lifetime uses the current root's incorporated flag and an incarnation-bound closing_generation. Observe only a current interactive quit or a recorded delivered/applied close; lost sockets, supersession, unknown headless quit and runtime restart create no closing intent. Admission/reopen clears pending intent. Incarnation end and closing intent commit together, so a crash cannot retain an ended incarnation while losing its recognized close job. Startup incorporation records its per-incarnation application atomically with the root flag, including an already-incorporated source; reconnect after moving cannot reapply an old launch flag to the merge target. Incorporation and its command result commit together, so replay cannot incorporate a later merged target. A split retains the old current root's flag; merges use the new root, and the moved head's old close request is cleared.
+
+Automatic departure runs through the existing retire journal with operator authority, handoff:false and a dissolution root/generation proof. departureCandidate checks that proof and current idle/work/report/program blockers both before acceptance and at permanent commit. Root-last waits for report cleanup, not only their permanent markers. Already committed departures still finish file cleanup after cancellation. Automatic notices address only the operator: mailing on-call managers in the closing tree would start turns or reopen the root with its own cleanup reports. Unassigned backlog remains in the task store by explicit operator choice.
+
+admitOrganization keeps the lifecycle writes outside hello's already-near-limit cognitive boundary; adding its branches inline measured 53 against 50. This is a cohesive admission seam, not a reason to raise the limit. The liveness timer drives pending dissolution without another timer or a separate journal. Startup resumes the existing permanent cleanup path and pending root records.
+Coupled: components/session-state/src/organization-lifetime.ts, components/session-state/src/schema.ts, components/session-state/src/bridge.ts
+Verify: components/session-state/tests/organization-lifetime.test.ts
+
 Process start observations from ps have one-second resolution; an unavailable process check is unknown, not proof of death. Reconnect gaps begin at the bridge's last reported event, not later runtime liveness checks; hello restores the current snapshot without inventing outage events. Parent/predecessor file references resolve once the corresponding session is known and resolve again when the reference changes.
 Why: observed liveness and reporting history have different precision and provenance; treating runtime checks as session activity would hide outages.
 

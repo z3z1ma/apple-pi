@@ -79,6 +79,7 @@ import { type ExternalCommand, type ExternalCommit, ExternalThreads } from "./ex
 import { mayReadEntry, maySearchTask, reconstructSpans, taskSpans } from "./focus-spans.js";
 import { recordLink, resolveLink } from "./links.js";
 import { removeNote, writeNote } from "./notes.js";
+import { dissolutionBlocker, incorporateOrganization, requireDissolution } from "./organization-lifetime.js";
 import { discardProgramPeople, programDescendants, temporaryCallers } from "./program-peers.js";
 import { entryReaction, react, reactionsOf } from "./reactions.js";
 import { type ReplySubscriber, relayReply } from "./reply-relay.hot.js";
@@ -99,6 +100,7 @@ import {
 } from "./tmux.js";
 import { type SearchHit, TranscriptIndexer } from "./transcript-index.hot.js";
 import { readTranscriptEntries } from "./transcript-read.hot.js";
+import { rootOf } from "./tree.js";
 import {
 	changeWork,
 	cleanMovedBundles,
@@ -293,6 +295,7 @@ export class Runtime {
 	private readonly peerDescendants = new Map<string, Map<string, { pid: number; startedAt: number }>>();
 	private programTimer?: NodeJS.Timeout;
 	private cleaningPrograms = false;
+	private dissolving = false;
 
 	private readonly dispatched = new Map<string, Connection>();
 	private readonly connections = new Set<Connection>();
@@ -338,6 +341,10 @@ export class Runtime {
 		this.recoverWorkCommands();
 		this.recoverWorkRecords();
 		this.recoverRetirements();
+		for (const row of this.db
+			.prepare("select command_id, session_id, command from commands where kind = 'incorporate' and stage = 'accepted'")
+			.all() as { command_id: string; session_id: string; command: string }[])
+			this.finishIncorporation(row.command_id, row.session_id, JSON.parse(row.command));
 		for (const row of this.db.prepare("select session_id as id from program_peers").all() as { id: string }[])
 			this.discarding.add(row.id);
 		rmSync(this.paths.socket, { force: true });
@@ -350,6 +357,7 @@ export class Runtime {
 		chmodSync(this.paths.socket, 0o600);
 		this.timer = setInterval(() => {
 			this.checkLiveness();
+			void this.dissolveOrganizations();
 			this.checkFriction();
 			this.fireSchedules();
 		}, 1000);
@@ -668,6 +676,7 @@ export class Runtime {
 
 		const seedManager = stored.reports_to === null && Boolean(reportsTo) && !latest && !reportingRecorded;
 		this.applyFacts(session.id, generation, seedManager ? { ...facts, reportsTo } : facts, true);
+		this.admitOrganization(hello, generation);
 		if (hello.execution)
 			this.event("bridge", session.id, generation, "execution", { ...hello.execution, phase: "resume" });
 
@@ -697,6 +706,31 @@ export class Runtime {
 			if (start.prompt) this.issue(connection, { kind: "steer", text: start.prompt });
 			this.setCommandStage(start.commandId, "applied");
 		}
+	}
+
+	private admitOrganization(hello: Hello, generation: number): void {
+		const db = this.db!;
+		const { session } = hello;
+		db.prepare("update incarnations set interactive = ? where session_id = ? and generation = ?").run(
+			session.interactive === true ? 1 : 0,
+			session.id,
+			generation,
+		);
+		db.prepare("update sessions set closing_generation = null where id = ?").run(session.id);
+		if (
+			session.incorporate === true &&
+			!db
+				.prepare(
+					"select 1 from events where session_id = ? and generation = ? and type = 'organization_startup_incorporated'",
+				)
+				.get(session.id, generation)
+		)
+			this.atomically(() => {
+				incorporateOrganization(db, session.id, session.id);
+				this.event("runtime", session.id, generation, "organization_startup_incorporated", {
+					root: rootOf(db, session.id),
+				});
+			});
 	}
 
 	private command(client: Connection, request: CommandRequest): void {
@@ -778,6 +812,11 @@ export class Runtime {
 		if (command.kind === "organization_move") {
 			receipt("accepted");
 			this.finishOrganizationMove(commandId, sessionId, command);
+			return;
+		}
+		if (command.kind === "incorporate") {
+			receipt("accepted");
+			this.finishIncorporation(commandId, sessionId, command);
 			return;
 		}
 		if (command.kind === "retire") {
@@ -1040,6 +1079,16 @@ export class Runtime {
 
 	private departureCandidate(commandId: string, sessionId: string, command: Extract<Command, { kind: "retire" }>) {
 		const db = this.db!;
+		if (command.dissolution) {
+			if (
+				command.by !== OPERATOR ||
+				command.handoff !== false ||
+				typeof command.dissolution.root !== "string" ||
+				!Number.isSafeInteger(command.dissolution.generation)
+			)
+				throw new Error("Invalid automatic dissolution request");
+			requireDissolution(db, sessionId, command.dissolution.root, command.dissolution.generation);
+		}
 		if (typeof command.reason !== "string" || !command.reason.trim()) throw new Error("retire needs a reason");
 		if (command.handoff !== undefined && typeof command.handoff !== "boolean")
 			throw new Error("handoff must be a boolean");
@@ -1234,7 +1283,7 @@ export class Runtime {
 		manager?: string | null,
 	) {
 		const db = this.db!;
-		const to = [...new Set([manager, command.by ?? OPERATOR])].filter(
+		const to = [...new Set([command.dissolution ? null : manager, command.by ?? OPERATOR])].filter(
 			(id): id is string =>
 				Boolean(id) &&
 				(id === OPERATOR ||
@@ -1985,11 +2034,13 @@ export class Runtime {
 		if (stranded.length) return `unfinished work would leave its organization: ${stranded.join(", ")}`;
 		const now = Date.now();
 		this.atomically(() => {
-			db.prepare("update sessions set reports_to = ?, updated_at = ? where id = ?").run(
-				command.manager,
-				now,
-				command.person,
-			);
+			const source = rootOf(db, command.person);
+			const status = db.prepare("select incorporated from sessions where id = ?").get(source) as {
+				incorporated: number;
+			};
+			db.prepare(
+				"update sessions set reports_to = ?, incorporated = ?, closing_generation = null, updated_at = ? where id = ?",
+			).run(command.manager, status.incorporated, now, command.person);
 			if (command.manager)
 				db.prepare(
 					"insert into manager_changes (session_id, from_manager, to_manager, by, at) values (?, ?, ?, 'operator', ?)",
@@ -2741,6 +2792,7 @@ export class Runtime {
 		if ((row && row.retired_at !== null) || departureOf(db, sessionId))
 			return fail("People who were let go cannot be reopened; hire a new person.");
 		if (live) return fail("already running");
+		db.prepare("update sessions set closing_generation = null where id = ?").run(sessionId);
 		if (this.starting.has(sessionId)) return fail("already starting");
 		if (program?.discarded.has(sessionId)) return fail("That peer was discarded; create a new handle");
 		if (temporaryCallers(db).has(sessionId)) return fail("Program peers cannot be reopened; create a new handle");
@@ -3522,11 +3574,16 @@ export class Runtime {
 		source: string,
 		reason: string,
 	): void {
-		this.setProcessState(sessionId, generation, state, source);
-		const ended = this.db!.prepare(
-			"update incarnations set ended_at = ?, end_reason = ? where session_id = ? and generation = ? and ended_at is null",
-		).run(Date.now(), reason, sessionId, generation);
-		if (ended.changes) this.event(source, sessionId, generation, "incarnation_ended", { reason });
+		this.atomically(() => {
+			this.setProcessState(sessionId, generation, state, source);
+			const ended = this.db!.prepare(
+				"update incarnations set ended_at = ?, end_reason = ? where session_id = ? and generation = ? and ended_at is null",
+			).run(Date.now(), reason, sessionId, generation);
+			if (ended.changes) {
+				this.event(source, sessionId, generation, "incarnation_ended", { reason });
+				this.observeOrganizationClose(sessionId, generation, reason);
+			}
+		});
 	}
 
 	private checkLiveness(): void {
@@ -3558,6 +3615,98 @@ export class Runtime {
 				this.failedChecks.add(key);
 				this.event("runtime", row.session_id, row.generation, "process_check_failed", { pid: row.pid });
 			}
+		}
+	}
+
+	private finishIncorporation(
+		commandId: string,
+		person: string,
+		command: Extract<Command, { kind: "incorporate" }>,
+	): void {
+		const db = this.db!;
+		try {
+			const receipt = db.prepare("select result from commands where command_id = ?").get(commandId) as {
+				result: string | null;
+			};
+			if (!receipt.result)
+				this.atomically(() => {
+					if (rootOf(db, person) !== person || (command.by !== OPERATOR && rootOf(db, command.by) !== person))
+						throw new Error("Select the current organization root to incorporate it");
+					incorporateOrganization(db, person, command.by);
+					db.prepare("update commands set result = ? where command_id = ?").run(
+						JSON.stringify({ root: person }),
+						commandId,
+					);
+				});
+			this.setCommandStage(commandId, "applied");
+		} catch (error) {
+			this.setCommandStage(commandId, "failed", error instanceof Error ? error.message : String(error));
+		}
+	}
+
+	private observeOrganizationClose(person: string, generation: number, reason: string): void {
+		const db = this.db!;
+		if (!this.isCurrent(person, generation) || (reason !== "quit" && reason !== "process gone")) return;
+		const explicit = db
+			.prepare(
+				"select 1 from commands where session_id = ? and generation = ? and kind = 'close' and stage in ('delivered', 'applied')",
+			)
+			.get(person, generation);
+		const interactive = db
+			.prepare("select interactive from incarnations where session_id = ? and generation = ?")
+			.get(person, generation) as { interactive: number };
+		if (!explicit && !(reason === "quit" && interactive.interactive === 1)) return;
+		if (temporaryCallers(db).has(person)) return;
+		this.atomically(() => {
+			const changed = db
+				.prepare(`update sessions set closing_generation = ? where id = ? and generation = ?
+				and reports_to is null and incorporated = 0 and closing_generation is null and retired_at is null`)
+				.run(generation, person, generation);
+			if (changed.changes) this.event("runtime", person, generation, "organization_closing", { reason });
+		});
+	}
+
+	private async dissolveOrganizations(): Promise<void> {
+		const db = this.db;
+		if (!db || this.dissolving) return;
+		this.dissolving = true;
+		try {
+			const roots = db
+				.prepare(`select id, closing_generation as generation from sessions
+				where reports_to is null and incorporated = 0 and closing_generation is not null and retired_at is null`)
+				.all() as { id: string; generation: number }[];
+			if (!roots.length) return;
+			const temporary = temporaryCallers(db);
+			for (const root of roots) {
+				for (const { id } of db
+					.prepare("select id from sessions where kind = 'root' and retired_at is null order by id")
+					.all() as { id: string }[]) {
+					if (temporary.has(id) || rootOf(db, id) !== root.id || dissolutionBlocker(db, id)) continue;
+					const command: Extract<Command, { kind: "retire" }> = {
+						kind: "retire",
+						by: OPERATOR,
+						handoff: false,
+						reason: "The unincorporated organization's root closed",
+						dissolution: { root: root.id, generation: root.generation },
+					};
+					try {
+						this.departureCandidate("", id, command);
+					} catch {
+						continue;
+					}
+					await sendCommand(id, command, {
+						socketPath: this.paths.socket,
+						until: "accepted",
+						signal: this.stopping.signal,
+					});
+					if (this.db !== db) return;
+				}
+			}
+		} catch (error) {
+			if (this.db === db && !this.stopping.signal.aborted)
+				console.error(`Organization cleanup failed: ${String(error)}`);
+		} finally {
+			this.dissolving = false;
 		}
 	}
 

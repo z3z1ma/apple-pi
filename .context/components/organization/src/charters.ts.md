@@ -1,5 +1,9 @@
 ## file
 
+The shared organization guidance teaches that closing an unincorporated root removes its idle, work-free tree and the operator can keep it with /incorporate. Keep that lifecycle distinct from closing an ordinary member's process or explicitly letting someone go. Prompt-budget compliance comes from concise equivalent wording, not higher ceilings. Retain the direct-work/delegation choice and separate reporting/task/decision responsibilities when shortening staffing prose.
+Coupled: components/session-state/src/organization-lifetime.ts, components/session-state/src/bridge.ts
+Verify: tests/prompt-budgets.test.ts, components/organization/tests/roles.test.ts
+
 The universal `<org>` text holds the person's facts (name, id, place, team channels) and collaboration norms. Tool mechanics are not here: the composer's toolbox (`components/system-prompt/src/toolbox.ts`) teaches every active tool, and tool descriptions own arguments. The departure contract (acceptance before cleanup, optional handoff) lives in the `let_go` description, which every caller holding it sees.
 Why: the old `<org>` repeated tool mechanics for mail, channels, inspection and departure that the tool descriptions also carried, and the toolbox now teaches them once.
 Managing roles and unroled recorded roots also receive concise staffing norms, peer APIs and the role catalog, grouped by posture; the full delegation-first `<manager>` job charter remains exclusive to managing roles. An unroled root keeps its chosen model, thinking and normal coding posture. The same `managesPeople` gate drives native activation and peer delegation, and codemode peer tools enforce it on each call, even when a script can discover their schemas. Prompt tests exercise delivery to unroled roots, nonmanaging roles and managing roles; native work tests cover an actual inspect/assign/reinspect sequence. Registration and activation remain separate executable contracts in the session-state tools.

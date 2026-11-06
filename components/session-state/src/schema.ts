@@ -497,6 +497,11 @@ const MIGRATIONS = [
 	alter table review_attempts add column fork_file text;`,
 
 	`alter table review_attempts add column fork_offset integer;`,
+
+	`alter table sessions add column incorporated integer not null default 0;
+	update sessions set incorporated = 1;
+	alter table sessions add column closing_generation integer;
+	alter table incarnations add column interactive integer not null default 0;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

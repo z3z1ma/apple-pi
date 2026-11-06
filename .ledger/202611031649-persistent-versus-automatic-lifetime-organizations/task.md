@@ -1,4 +1,4 @@
-Status: ready
+Status: in-progress
 Created: 2026-10-30
 Updated: 2026-11-06
 
@@ -16,11 +16,12 @@ Settled with the operator (2026-11-06):
 - **Existing people are grandfathered** as incorporated by the migration.
 - Leaving an organization by hand is already shipped (Workplace "Leave <organization>…", 55ac49c0).
 
-Open, to settle in design (raise with the operator if a choice changes what he sees):
+Additional operator decisions (2026-11-06, task-thread message 13518):
 
-- Which endings of a root's process count as "closes" (quit, window close, `end_session`) versus a crash or runtime restart, which must not dissolve anything.
-- Whether reopening an unincorporated root before cleanup finishes cancels the dissolution (expected: yes).
-- Whether a person moved into an incorporated organization from an unincorporated one keeps the target's status (expected: status belongs to the root's organization, not the person).
+- **Closing means quit or end only:** TUI quit, window close, or explicit end/send-home from Workplace or a manager. `/new`, `/resume`, reload, crashes, lost sockets, runtime restarts and a headless stop without a recorded end preserve the organization. When uncertain, keep it.
+- **Reopen or incorporate while waiting** stops further automatic departures. People already let go stay gone; the root goes last.
+- **Splits retain incorporation:** a person moved out of an incorporated organization to stand alone stays incorporated. Merging adopts the target organization's status.
+- **Backlog remains:** an unassigned unfinished task anchored to the root does not block cleanup and stays in the task store. Held work, owned unfinished reviews, reports and program scopes still block through the existing departure guards.
 
 ## Acceptance
 
@@ -32,7 +33,7 @@ Open, to settle in design (raise with the operator if a choice changes what he s
 
 ## Current State
 
-Assigned to Niamh Virtanen (runtime task work-2706768c-b5c4-4d27-89fb-1774ffc63e70), owned by Tadhg Marinescu. Next: she traces how a root's process ending is observed and the existing departure path, models cleanup with `tlc_check`, and sends recommendations on the open points to Tadhg, who settles them with the operator before anything irreversible is built. Tadhg builds the Workplace menu item once the runtime API exists, and owns runtime restart and activation.
+Assigned to Niamh Virtanen (runtime task work-2706768c-b5c4-4d27-89fb-1774ffc63e70), owned by Tadhg Marinescu. The five-person lifecycle model was refined to the settled split policy: 715,752 distinct states/depth 34 passed; the deliberate stale-selection control violates at depth 7. Runtime/schema54/bridge/flag/command and Workplace backend/types are implemented. API handed to Tadhg; he reports his menu/fixture work ready for the source commit and final rebuild. Focused checks passed 74/74; existing departure/liveness/program regressions passed 64/64 after adopting the retained-root fixture. Both TypeScript configurations, loader, scoped formatting/comments/whitespace and 661 context files passed; pack inventory includes the new helper. See [implementation-evidence.md](implementation-evidence.md) for commands, failed checks/corrections and limits. Next: Niamh commits her source cut; Tadhg owns the UI/dist rebuild, integrated review, approved runtime restart and live three-organization verification. No shared restart or live migration has been performed by Niamh.
 
 ## Outcome
 

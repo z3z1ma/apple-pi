@@ -3,6 +3,7 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { organizationLifetime } from "../../../../components/session-state/src/organization-lifetime.js";
 import type { OrgMoveRequest, OrgMoveResult, OrgStartProgress, OrgStartRequest } from "../org.js";
 import type { CommandResult, WorldSnapshot } from "../world.js";
 import type { Commands } from "./commands.js";
@@ -512,6 +513,15 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 		}
 	}
 	return {
+		organizationLifetime(person: string) {
+			const db = new DatabaseSync(paths.db, { readOnly: true });
+			try {
+				return organizationLifetime(db, person);
+			} finally {
+				db.close();
+			}
+		},
+		incorporateOrganization: (root: string) => commands.send(root, { kind: "incorporate", by: "operator" }),
 		orgMove: (request: OrgMoveRequest) => move(request),
 		orgStart(request: OrgStartRequest): Promise<OrgStartProgress> {
 			const active = running.get(request.id);

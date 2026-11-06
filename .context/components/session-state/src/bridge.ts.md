@@ -1,5 +1,12 @@
 ## file
 
+--incorporate remains registered even with the bridge disabled, matching Pi's flag-discovery boundary. A current bridge reports interactive mode and the flag; runtime admission applies the flag once per new incarnation, after resolving the recorded reporting tree. /incorporate resolves the current root and sends the fixed mutation; the runtime rechecks it so a stale selected head cannot incorporate a later merge target.
+
+Pi's host disposal emits quit for RPC stdin EOF and SIGTERM as well as ordinary exit. interactive metadata and recorded close commands distinguish authorized closing from runtime-owned headless loss; the reason string alone is insufficient. Reload/new/resume/fork are not dissolution intent. A runtime restart remains the owner's action; missing close provenance stays conservative.
+Why: installed host source established this shared disposal path, not a fresh physical exit experiment. Inferring destructive intent from its reason string would conflate operator closing with headless parent/runtime loss.
+Coupled: components/session-state/src/organization-lifetime.ts, components/session-state/src/protocol.ts, components/session-state/src/runtime.ts
+Verify: components/session-state/tests/organization-lifetime.test.ts, tests/package-load.mjs
+
 Only a program-owned fork at startup records its identity-bound inherited-history marker before hello. sessionCost counts new entries after that marker on every hello/settlement; reloads retain it and do not reset genuine work to a new baseline. Report optional forkOffset with hello for the runtime's log boundary. A fresh temp has no parent transcript/marker and keeps its prior zero-baseline accounting. A legacy already-running bridge without a marker remains readable and does not invent one on reload; new forks require current bridge code.
 Why: bridge cost previously summed copied assistant usage, and the program launch's deliberate zero event made that historical spend look newly incurred.
 Coupled: components/session-state/src/program-fork.ts

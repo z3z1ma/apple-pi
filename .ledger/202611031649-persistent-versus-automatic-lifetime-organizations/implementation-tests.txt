@@ -1,0 +1,37 @@
+Focused final run
+Command: NODE_OPTIONS="--import=$PWD/components/session-state/src/register.mjs" timeout -k 5 180 ./node_modules/.bin/vitest run components/session-state/tests/organization-lifetime.test.ts components/organization/tests/roles.test.ts tests/prompt-budgets.test.ts components/session-state/tests/event-index.test.ts --maxWorkers=1
+
+ RUN  v4.1.10 /Users/alexanderbut/code_projects/personal/apple-pi
+
+ Test Files  4 passed (4)
+      Tests  74 passed (74)
+   Start at  15:26:35
+   Duration  29.78s (transform 486ms, setup 22ms, import 2.34s, tests 27.05s, environment 0ms)
+
+Regression final run (after retained-root fixture adoption)
+Command: NODE_OPTIONS="--import=$PWD/components/session-state/src/register.mjs" timeout -k 5 300 ./node_modules/.bin/vitest run components/session-state/tests/departure-lifecycle.test.ts components/session-state/tests/departures.test.ts components/session-state/tests/organization-move.test.ts components/session-state/tests/liveness.test.ts components/session-state/tests/runtime.test.ts components/session-state/tests/program-peers.test.ts --maxWorkers=1
+
+ RUN  v4.1.10 /Users/alexanderbut/code_projects/personal/apple-pi
+
+ Test Files  6 passed (6)
+      Tests  64 passed (64)
+   Start at  15:29:49
+   Duration  101.82s (transform 401ms, setup 25ms, import 3.04s, tests 98.20s, environment 0ms)
+
+Typecheck (repeated after fixture adoption)
+> apple-pi@0.1.0 typecheck
+> tsc --noEmit && tsc --noEmit -p tsconfig.web.json
+Exit 0.
+
+Loader
+> apple-pi@0.1.0 test:loader
+> node tests/package-load.mjs
+apple-pi: all extension entrypoints loaded
+Exit 0.
+
+Other checks
+Scoped Biome: Checked 14 files in 84ms. No fixes applied. Found 1 info (existing useTemplate suggestion at tests/package-load.mjs:542).
+Scoped source comments: exit 0.
+git diff --check: exit 0.
+context_lint: Context lint passed: 661 context files.
+Package dry-run: 2809 entries. organization-lifetime.ts, bridge.ts and docs/organization.md included.

@@ -158,6 +158,7 @@ try {
 		"notify-test",
 		"pi-sessions",
 		"org",
+		"incorporate",
 		"stash",
 		"edit-prompt",
 		"inspect-tool",
@@ -165,6 +166,10 @@ try {
 	]) {
 		assert(commands.has(command), `missing /${command}`);
 	}
+	assert(
+		result.extensions.some((extension) => extension.flags.get("incorporate")?.type === "boolean"),
+		"missing boolean --incorporate flag",
+	);
 	assert(!commands.has("branch-search"), "branch search is the model's tool; there is no /branch-search command");
 	assert(!commands.has("work") && !commands.has("tasks"), "the combined work panel is retired");
 	assert(!commands.has("world"), "/workplace opens the app; World is its tab, not a command");

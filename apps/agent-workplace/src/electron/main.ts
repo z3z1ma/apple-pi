@@ -189,6 +189,15 @@ function start() {
 		if (!isRetirePeopleRequest(request)) throw new Error("A confirmed selection and reason are required.");
 		return departures.retirePeople(request);
 	});
+	ipcMain.handle("world:organization-lifetime", (_event, root: unknown) => {
+		if (typeof root !== "string" || !root) throw new Error("An organization root is required.");
+		return org.organizationLifetime(root);
+	});
+	ipcMain.handle("world:incorporate-organization", (_event, root: unknown) =>
+		typeof root === "string" && root
+			? org.incorporateOrganization(root)
+			: { ok: false, reason: "An organization root is required." },
+	);
 	ipcMain.handle("world:org-move", (_event, request: unknown) =>
 		isOrgMoveRequest(request)
 			? org.orgMove(request)

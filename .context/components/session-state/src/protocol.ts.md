@@ -1,5 +1,9 @@
 ## file
 
+Hello.session.interactive and incorporate are optional for older-bridge admission. Missing interactive provenance keeps unknown quit observations conservative. incorporate is an explicit root-targeted runtime mutation with actor identity; its durable result freezes successful application across replay. retire.dissolution is the root/incarnation proof for runtime-owned automatic cleanup, not a waiver for normal departure responsibility and writer-safety checks.
+Coupled: components/session-state/src/organization-lifetime.ts, components/session-state/src/runtime.ts, components/session-state/src/bridge.ts
+Verify: components/session-state/tests/organization-lifetime.test.ts
+
 Hello.session.forkOffset is optional, identity-bound fork metadata from the bridge, not a requested source path. A new runtime accepts older hellos without it and withholds worker logs lacking a recorded boundary; an older runtime ignores the added field. Cost remains the existing Facts.cost field, already normalized by a current fork bridge to newly generated entries. Fresh-temp hellos and their cost convention are unchanged.
 Coupled: components/session-state/src/program-fork.ts, components/session-state/src/review-read.ts
 Verify: components/session-state/tests/peer-history.test.ts, components/session-state/tests/review-workers.test.ts

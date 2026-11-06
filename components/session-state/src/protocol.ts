@@ -201,7 +201,14 @@ export type Command =
 	| { kind: "close" }
 	| { kind: "transfer"; manager: string; by: string }
 	| { kind: "organization_move"; person: string; manager: string | null; branch: string[] }
-	| { kind: "retire"; reason: string; by?: string; handoff?: boolean }
+	| { kind: "incorporate"; by: string }
+	| {
+			kind: "retire";
+			reason: string;
+			by?: string;
+			handoff?: boolean;
+			dissolution?: { root: string; generation: number };
+	  }
 	| { kind: "mark_seen" }
 	| { kind: "set_preference"; key: string; value: unknown };
 
@@ -277,6 +284,8 @@ export interface Hello {
 		name?: string;
 		program?: { id: string; parent: string };
 		forkOffset?: number;
+		interactive?: boolean;
+		incorporate?: boolean;
 	};
 	process: { pid: number; startedAt: number };
 

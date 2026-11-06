@@ -1,5 +1,9 @@
 ## symbol:openOrg
 
+organizationLifetime is a query-only projection of the runtime's current root, incorporation, pending close and blockers. incorporateOrganization sends only the fixed operator command for the selected root; runtime validation rejects a stale head that has merged elsewhere. Status reads can resolve a member to its current root, while mutation intentionally cannot follow a moving target. The old schema reads as kept; it does not implement the new mutation or prove activated cleanup.
+Coupled: components/session-state/src/organization-lifetime.ts, apps/agent-workplace/src/electron/preload.ts, apps/agent-workplace/src/world.ts
+Verify: components/session-state/tests/organization-lifetime.test.ts
+
 The controller reads the runtime database query-only and sends all writes through the existing Commands client. `orgMove` extracts only person, manager and branch from the renderer request; runtime `organization_move` retains validation, stale-branch checks and work authority. Startup's planned-tree/work checks are preflight, not authorization: each applied move is validated again by the runtime.
 
 Whole-team channel presence is checked before any preparation. A live old daemon may still lack current channel behavior despite a newer checkout; the controller returns an actionable restart warning rather than spawning people first. It never restarts the runtime itself.

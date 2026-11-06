@@ -498,6 +498,10 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 	rename(characterId: string, name: string): Promise<CommandReceipt>;
 	roles(): Promise<RoleChoice[]>;
+	organizationLifetime(
+		root: string,
+	): Promise<import("../../../components/session-state/src/organization-lifetime.js").OrganizationLifetime>;
+	incorporateOrganization(root: string): Promise<CommandResult>;
 	orgMove(request: OrgMoveRequest): Promise<OrgMoveResult>;
 	orgStart(request: OrgStartRequest): Promise<OrgStartProgress>;
 	onOrgStart(listener: (progress: OrgStartProgress) => void): () => void;
