@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { join } from "node:path";
@@ -55,6 +56,11 @@ const stop = () => {
 	for (const run of controlledRuns.values()) run.abort();
 	if (controlledRuns.size === 0) finishStop();
 };
+if (control.detachedChild) {
+	const child = spawn("sleep", ["300"], { detached: true, stdio: "ignore" });
+	child.unref();
+	writeFileSync(join(records, `${id}.child`), String(child.pid));
+}
 const stopUnlessUnresponsive = () => {
 	if (!control.unresponsive) stop();
 };

@@ -69,6 +69,22 @@ beforeAll(() => {
 				content: [{ type: "toolCall", id: "c1", name: "program_rpc_smoke", arguments: {} }],
 			},
 		},
+		{
+			type: "message",
+			id: "p2",
+			timestamp: "2026-11-05T11:30:00Z",
+			message: {
+				role: "assistant",
+				content: [
+					{
+						type: "toolCall",
+						id: "c2",
+						name: "codemode",
+						arguments: { code: "return await tools.program_rpc_smoke({ prompt: 'x' });" },
+					},
+				],
+			},
+		},
 	]);
 	session("elsewhere.jsonl", "elsewhere", join(base, "other"), [
 		{
@@ -96,7 +112,9 @@ test("learnings, refusals, failed calls and program calls in this repository's w
 		},
 		{ kind: "failure", ref: "entry:here/f2", tool: "edit", text: "Could not find the exact text to replace." },
 		{ kind: "program_call", ref: "entry:here/p1", tool: "program_rpc_smoke", text: "program_rpc_smoke" },
+		{ kind: "program_call", ref: "entry:here/p2", tool: "program_rpc_smoke", text: "program_rpc_smoke" },
 	]);
+	expect(new Set(evidence.items.map((item) => item.file))).toEqual(new Set([join(sessionsDir, "here.jsonl")]));
 });
 
 test("only the asked kinds are read", async () => {

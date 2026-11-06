@@ -72,7 +72,7 @@ function listPrograms(cwd: string): SavedProgram[] {
 		});
 }
 
-function programToolName(name: string): string {
+export function programToolName(name: string): string {
 	return `program_${name.replace(/-/g, "_")}`;
 }
 

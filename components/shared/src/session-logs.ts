@@ -1,5 +1,5 @@
-import { createReadStream, type Dirent, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { createReadStream, type Dirent, readdirSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 
 export interface LoggedSession {
@@ -27,6 +27,15 @@ function sessionFiles(dir: string): string[] {
 	});
 }
 
+export function canonical(path: string): string {
+	try {
+		return realpathSync(path);
+	} catch {
+		const parent = dirname(path);
+		return parent === path ? path : join(canonical(parent), basename(path));
+	}
+}
+
 export function within(root: string, path: string): boolean {
 	return path === root || path.startsWith(`${root}/`);
 }
@@ -45,26 +54,33 @@ export async function* sessionEntries(options: {
 	since: number;
 	wanted: (line: string) => boolean;
 }): AsyncGenerator<LoggedEntry> {
+	const root = canonical(options.root);
+	const seen = new Set<string>();
 	for (const file of sessionFiles(options.sessionsDir)) {
 		if (statSync(file).mtimeMs < options.since) continue;
-		const lines = createInterface({ input: createReadStream(file, "utf8"), crlfDelay: Number.POSITIVE_INFINITY });
+		const input = createReadStream(file, "utf8");
+		const lines = createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY });
 		let session: LoggedSession | undefined;
 		try {
 			for await (const line of lines) {
 				if (!session) {
 					const header = parsed(line);
 					if (header?.type !== "session" || typeof header.id !== "string" || typeof header.cwd !== "string") break;
-					if (!within(options.root, header.cwd)) break;
+					if (!within(root, canonical(header.cwd))) break;
 					session = { id: header.id, cwd: header.cwd, file };
 					continue;
 				}
 				if (!options.wanted(line)) continue;
 				const entry = parsed(line);
 				if (typeof entry?.timestamp !== "string" || Date.parse(entry.timestamp) < options.since) continue;
+				const identity = `${entry.id}@${entry.timestamp}`;
+				if (seen.has(identity)) continue;
+				seen.add(identity);
 				yield { session, entry };
 			}
 		} finally {
 			lines.close();
+			input.destroy();
 		}
 	}
 }

@@ -147,32 +147,36 @@ export async function runReviewAttempt(
 	};
 	try {
 		program = await openPeerProgram(job.owner, signal, { paths, id: programId });
-		const started = await program.command(
-			person,
-			{
-				kind: "start",
-				role: pass.role,
-				...(policy.profile ? { profile: policy.profile } : {}),
-				goal: { by: job.owner, text: pass.goal },
-			},
-			{ signal, commandId: `${id}:start` },
-		);
-		if (started.stage !== "applied") throw new Error(started.reason ?? "The reviewer did not start");
-		signal.throwIfAborted();
-		if (pass.thinking) await setThinking(program, person, pass.thinking, `${id}:thinking`, signal);
-		const observed = db
-			.prepare("select role, model, thinking_level as thinking, session_file as file from sessions where id = ?")
-			.get(person) as { role: string | null; model: string | null; thinking: string | null; file: string | null };
-		db.prepare(
-			"update review_attempts set model = ?, thinking = ?, session_file = ?, state = 'running' where id = ?",
-		).run(observed.model, pass.thinking ?? observed.thinking, observed.file, id);
-		if (observed.role !== pass.role || !candidates.some((candidate) => candidate.model === observed.model))
-			throw new ReviewStop("The reviewer did not select its recorded role/model policy; no review turn was sent");
-		if (JSON.stringify(resolve()) !== JSON.stringify(policy))
-			throw new ReviewStop("The review policy changed during startup; no review turn was sent");
-		const receipt = await watchedTurn(db, program, person, signal, (peer) =>
-			peer.command(person, { kind: "run_turn", ...input }, { signal, commandId: `${id}:turn`, result: saveResult }),
-		);
+		const receipt = await watchedTurn(db, program, person, signal, async (peer) => {
+			const started = await peer.command(
+				person,
+				{
+					kind: "start",
+					role: pass.role,
+					...(policy.profile ? { profile: policy.profile } : {}),
+					goal: { by: job.owner, text: pass.goal },
+				},
+				{ signal, commandId: `${id}:start` },
+			);
+			if (started.stage !== "applied") throw new Error(started.reason ?? "The reviewer did not start");
+			signal.throwIfAborted();
+			if (pass.thinking) await setThinking(peer, person, pass.thinking, `${id}:thinking`, signal);
+			const observed = db
+				.prepare("select role, model, thinking_level as thinking, session_file as file from sessions where id = ?")
+				.get(person) as { role: string | null; model: string | null; thinking: string | null; file: string | null };
+			db.prepare(
+				"update review_attempts set model = ?, thinking = ?, session_file = ?, state = 'running' where id = ?",
+			).run(observed.model, pass.thinking ?? observed.thinking, observed.file, id);
+			if (observed.role !== pass.role || !candidates.some((candidate) => candidate.model === observed.model))
+				throw new ReviewStop("The reviewer did not select its recorded role/model policy; no review turn was sent");
+			if (JSON.stringify(resolve()) !== JSON.stringify(policy))
+				throw new ReviewStop("The review policy changed during startup; no review turn was sent");
+			return peer.command(
+				person,
+				{ kind: "run_turn", ...input },
+				{ signal, commandId: `${id}:turn`, result: saveResult },
+			);
+		});
 		if (receipt.stage !== "applied" || receipt.result?.status !== "completed")
 			throw new Error(receipt.reason ?? receipt.result?.error ?? "The review turn did not complete");
 		await verified(verifyCapturedSource, artifact, signal);

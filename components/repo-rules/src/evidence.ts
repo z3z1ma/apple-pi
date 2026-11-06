@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { defineTool, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { sessionEntries } from "../../shared/src/session-logs.js";
-import { repositoryRoot, windowStart } from "./replay.js";
+import { byInstant, repositoryRoot, windowStart } from "./replay.js";
 
 export const SESSION_EVIDENCE_TOOL_NAME = "session_evidence";
 export const EVIDENCE_KINDS = ["learning", "refusal", "failure", "program_call"] as const;
@@ -14,8 +14,17 @@ export interface EvidenceItem {
 	kind: EvidenceKind;
 	at: string;
 	ref: string;
+	file: string;
 	tool?: string;
 	text: string;
+}
+
+const NESTED_PROGRAM = /\btools\.(program_[A-Za-z0-9_]+)\b/g;
+
+function programCalls(part: { name?: string; arguments?: Record<string, unknown> }): string[] {
+	if (part.name?.startsWith("program_")) return [part.name];
+	if (part.name !== "codemode" || typeof part.arguments?.code !== "string") return [];
+	return [...part.arguments.code.matchAll(NESTED_PROGRAM)].map((match) => match[1]!);
 }
 
 const NOTEBOOK = ["notebook.maintenance", "notebook.reflections.recorded"];
@@ -41,19 +50,19 @@ export async function sessionEvidence(options: {
 	const items: EvidenceItem[] = [];
 	for await (const { session, entry } of sessionEntries({
 		...options,
-		wanted: (line) =>
-			line.includes('"notebook.') || line.includes('"isError":true') || line.includes('"name":"program_'),
+		wanted: (line) => line.includes('"notebook.') || line.includes('"isError":true') || line.includes("program_"),
 	})) {
 		sessions.add(session.id);
 		const at = entry.timestamp as string;
 		const ref = `entry:${session.id}/${entry.id}`;
+		const file = session.file;
 		if (entry.type === "custom" && NOTEBOOK.includes(String(entry.customType))) {
 			if (!wanted.has("learning")) continue;
 			const data = entry.data as { reflections?: { id?: string; content?: string }[] } | undefined;
 			for (const note of data?.reflections ?? []) {
 				if (typeof note.id !== "string" || typeof note.content !== "string" || notes.has(note.id)) continue;
 				notes.add(note.id);
-				items.push({ kind: "learning", at, ref, text: clipped(note.content) });
+				items.push({ kind: "learning", at, ref, file, text: clipped(note.content) });
 			}
 			continue;
 		}
@@ -62,21 +71,22 @@ export async function sessionEvidence(options: {
 			role?: string;
 			toolName?: string;
 			isError?: boolean;
-			content?: { type?: string; name?: string }[];
+			content?: { type?: string; name?: string; arguments?: Record<string, unknown> }[];
 		};
 		if (message.role === "toolResult" && message.isError === true) {
 			const text = textOf(message.content).trim();
 			const refused = text.startsWith("Refused");
 			if (refused ? !wanted.has("refusal") : !wanted.has("failure") || message.toolName === "bash") continue;
-			items.push({ kind: refused ? "refusal" : "failure", at, ref, tool: message.toolName, text: clipped(text) });
+			items.push({ kind: refused ? "refusal" : "failure", at, ref, file, tool: message.toolName, text: clipped(text) });
 			continue;
 		}
 		if (message.role === "assistant" && wanted.has("program_call") && Array.isArray(message.content))
 			for (const part of message.content)
-				if (part?.type === "toolCall" && part.name?.startsWith("program_"))
-					items.push({ kind: "program_call", at, ref, tool: part.name, text: part.name });
+				if (part?.type === "toolCall")
+					for (const name of programCalls(part))
+						items.push({ kind: "program_call", at, ref, file, tool: name, text: name });
 	}
-	items.sort((a, b) => a.at.localeCompare(b.at));
+	items.sort(byInstant);
 	return { sessions: sessions.size, items };
 }
 
@@ -90,8 +100,7 @@ export function createEvidenceTool() {
 			{
 				since: Type.String({
 					minLength: 1,
-					description:
-						"Window start: a date or a git revision, usually the last change to the surface in question.",
+					description: "Window start: a date or a git revision, usually the last change to the surface in question.",
 				}),
 				kinds: Type.Optional(
 					Type.Array(Type.Union(EVIDENCE_KINDS.map((kind) => Type.Literal(kind))), {
@@ -119,7 +128,10 @@ export function createEvidenceTool() {
 			const lines = [
 				`${sessions} sessions of ${root} since ${new Date(since).toISOString()} (${params.since}): ${counts}.`,
 				`Items ${page.length ? `${offset + 1}-${offset + page.length}` : "none"} of ${items.length}:`,
-				...page.map((item) => `- ${item.at} ${item.kind}${item.tool ? ` ${item.tool}` : ""} ${item.ref}: ${item.text}`),
+				...page.map(
+					(item) =>
+						`- ${item.at} ${item.kind}${item.tool ? ` ${item.tool}` : ""} ${item.ref} in ${item.file}: ${item.text}`,
+				),
 			];
 			return {
 				content: [{ type: "text" as const, text: lines.join("\n") }],

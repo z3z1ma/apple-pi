@@ -112,6 +112,24 @@ type WorkRecord = Extract<Command, { kind: "task_opened" | "task_moved" | "link_
 
 const TMUX_POLL_MS = 1000;
 const PEER_KILL_GRACE_MS = 30_000;
+
+function descendantsOf(root: number): number[] {
+	const children = new Map<number, number[]>();
+	for (const line of execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" }).split("\n")) {
+		const [pid, parent] = line.trim().split(/\s+/).map(Number);
+		if (!pid || parent === undefined) continue;
+		children.set(parent, [...(children.get(parent) ?? []), pid]);
+	}
+	const found: number[] = [];
+	const pending = [root];
+	while (pending.length) {
+		const next = children.get(pending.pop()!) ?? [];
+		found.push(...next);
+		pending.push(...next);
+	}
+	return found;
+}
+
 const PAGE_TOOLS = "'explain_change', 'sign_off_code', 'sign_off_document', 'sign_off_task'";
 
 type Fields = Record<string, string | number>;
@@ -2159,10 +2177,12 @@ export class Runtime {
 				? "SIGKILL"
 				: undefined;
 		if (!signal) return;
-		try {
-			process.kill(pid, signal);
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+		for (const target of signal === "SIGKILL" ? [...descendantsOf(pid), pid] : [pid]) {
+			try {
+				process.kill(target, signal);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+			}
 		}
 		sent.add(key);
 		if (signal === "SIGTERM") this.peerTerminatedAt.set(key, Date.now());

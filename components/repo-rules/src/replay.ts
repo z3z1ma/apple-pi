@@ -1,8 +1,9 @@
-import { join, relative, resolve } from "node:path";
+import { join, relative } from "node:path";
 import { defineTool, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { git } from "../../shared/src/git.js";
-import { sessionEntries, within } from "../../shared/src/session-logs.js";
+import { canonical, sessionEntries, within } from "../../shared/src/session-logs.js";
+import { resolveToolPath } from "../../shared/src/tool-path.js";
 import { runRules } from "./grit.js";
 import { includedBy, rulesRootOf } from "./policy.js";
 
@@ -17,6 +18,7 @@ export interface ReplayCandidate {
 export interface ReplayHit {
 	at: string;
 	ref: string;
+	file: string;
 	path?: string;
 	command?: string;
 	lines?: number[];
@@ -26,12 +28,13 @@ export interface ReplayReport {
 	sessions: number;
 	evaluated: number;
 	hits: ReplayHit[];
-	notEvaluated: { at: string; ref: string; path: string; reason: string }[];
+	notEvaluated: { at: string; ref: string; file: string; path: string; reason: string }[];
 }
 
 interface Job {
 	at: string;
 	ref: string;
+	file: string;
 	path: string;
 	content: string;
 }
@@ -42,12 +45,27 @@ interface ToolCall {
 	arguments?: Record<string, unknown>;
 }
 
+function editsOf(args: Record<string, unknown>): { newText?: unknown }[] {
+	let edits = args.edits;
+	if (typeof edits === "string") {
+		try {
+			edits = JSON.parse(edits);
+		} catch {
+			edits = undefined;
+		}
+	}
+	const list = Array.isArray(edits) ? [...edits] : edits && typeof edits === "object" ? [edits] : [];
+	if (typeof args.oldText === "string" && typeof args.newText === "string") list.push({ newText: args.newText });
+	return list as { newText?: unknown }[];
+}
+
 function addedTexts(call: ToolCall): string[] {
 	const args = call.arguments ?? {};
 	if (call.name === "write") return typeof args.content === "string" ? [args.content] : [];
-	const edits = Array.isArray(args.edits) ? (args.edits as { newText?: unknown }[]) : [args];
-	return edits.flatMap((edit) => (typeof edit.newText === "string" ? [edit.newText] : []));
+	return editsOf(args).flatMap((edit) => (typeof edit.newText === "string" ? [edit.newText] : []));
 }
+
+export const byInstant = (a: { at: string }, b: { at: string }) => Date.parse(a.at) - Date.parse(b.at);
 
 export async function replayRule(
 	candidate: ReplayCandidate,
@@ -55,14 +73,36 @@ export async function replayRule(
 ): Promise<ReplayReport> {
 	const pattern = candidate.pattern === undefined ? undefined : new RegExp(candidate.pattern);
 	const wantedTools = pattern ? ["bash"] : ["edit", "write"];
+	const root = canonical(options.root);
 	const sessions = new Set<string>();
-	const jobs: Job[] = [];
 	const hits: ReplayHit[] = [];
+	const notEvaluated: ReplayReport["notEvaluated"] = [];
+	let jobs: Job[] = [];
 	let evaluated = 0;
+	const runJobs = async () => {
+		if (candidate.grit === undefined || !jobs.length) return;
+		const batch = jobs;
+		jobs = [];
+		const runs = await runRules(batch.map((job) => ({ query: candidate.grit!, path: job.path, content: job.content })));
+		for (const [index, run] of runs.entries()) {
+			const { content: _content, ...job } = batch[index]!;
+			if (run.failure) {
+				notEvaluated.push({ ...job, reason: run.failure });
+				continue;
+			}
+			evaluated++;
+			if (run.lines.length) hits.push({ ...job, lines: run.lines });
+		}
+	};
+	let file: string | undefined;
 	for await (const { session, entry } of sessionEntries({
 		...options,
 		wanted: (line) => line.includes('"toolCall"') && line.includes('"assistant"'),
 	})) {
+		if (session.file !== file) {
+			await runJobs();
+			file = session.file;
+		}
 		const message = entry.message as { role?: string; content?: ToolCall[] } | undefined;
 		if (message?.role !== "assistant" || !Array.isArray(message.content)) continue;
 		sessions.add(session.id);
@@ -74,31 +114,20 @@ export async function replayRule(
 			if (pattern) {
 				if (typeof args.command !== "string") continue;
 				evaluated++;
-				if (pattern.test(args.command)) hits.push({ at, ref, command: args.command });
+				if (pattern.test(args.command)) hits.push({ at, ref, file: session.file, command: args.command });
 				continue;
 			}
 			if (typeof args.path !== "string") continue;
-			const absolute = resolve(session.cwd, args.path);
-			if (!within(options.root, absolute)) continue;
-			const path = relative(options.root, absolute);
+			const absolute = canonical(resolveToolPath(args.path, canonical(session.cwd)));
+			if (!within(root, absolute)) continue;
+			const path = relative(root, absolute);
 			if (!includedBy(candidate.includes, path)) continue;
-			for (const content of addedTexts(call)) jobs.push({ at, ref, path, content });
+			for (const content of addedTexts(call)) jobs.push({ at, ref, file: session.file, path, content });
 		}
 	}
-	const notEvaluated: ReplayReport["notEvaluated"] = [];
-	if (candidate.grit !== undefined && jobs.length) {
-		const runs = await runRules(jobs.map((job) => ({ query: candidate.grit!, path: job.path, content: job.content })));
-		for (const [index, run] of runs.entries()) {
-			const job = jobs[index]!;
-			if (run.failure) {
-				notEvaluated.push({ at: job.at, ref: job.ref, path: job.path, reason: run.failure });
-				continue;
-			}
-			evaluated++;
-			if (run.lines.length) hits.push({ at: job.at, ref: job.ref, path: job.path, lines: run.lines });
-		}
-	}
-	hits.sort((a, b) => a.at.localeCompare(b.at));
+	await runJobs();
+	hits.sort(byInstant);
+	notEvaluated.sort(byInstant);
 	return { sessions: sessions.size, evaluated, hits, notEvaluated };
 }
 
@@ -161,7 +190,7 @@ export function createReplayTool() {
 				`Would have refused ${report.hits.length}${listed.length < report.hits.length ? `, first ${listed.length} listed` : ""}:`,
 				...listed.map(
 					(hit) =>
-						`- ${hit.at} ${hit.ref} ${hit.command !== undefined ? JSON.stringify(hit.command.slice(0, 200)) : `${hit.path} added text line ${hit.lines!.join(", ")}`}`,
+						`- ${hit.at} ${hit.ref} in ${hit.file}: ${hit.command !== undefined ? JSON.stringify(hit.command.slice(0, 200)) : `${hit.path} added text line ${hit.lines!.join(", ")}`}`,
 				),
 				...(report.notEvaluated.length
 					? [

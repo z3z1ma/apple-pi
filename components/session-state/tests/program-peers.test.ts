@@ -232,6 +232,43 @@ test("a program comparison runs each task in fresh worktrees, with the program o
 	rmSync(repo, { recursive: true, force: true });
 }, 120_000);
 
+test("aborting a comparison during its last check ends it as aborted and removes the worktree", async () => {
+	const repo = realpathSync(mkdtempSync(join(tmpdir(), "aps-compare-abort-")));
+	const run = (...args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+	run("init", "-q");
+	writeFileSync(join(repo, "README.md"), "fixture\n");
+	run("add", "README.md");
+	run("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "base");
+	const marker = join(repo, "..", `${randomUUID()}.checking`);
+	const stop = new AbortController();
+	const watching = setInterval(() => {
+		if (existsSync(marker)) stop.abort(new Error("stopped by the operator"));
+	}, 50);
+	try {
+		await expect(
+			comparePrograms(
+				"caller",
+				{
+					root: repo,
+					name: "probe",
+					source: '// @program: {"description": "Probe."}\nreturn 1;\n',
+					base: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim(),
+					role: "implementation-engineer",
+					tasks: [{ task: "Report the result.", check: `touch '${marker}'; sleep 30` }],
+					samples: 1,
+				},
+				stop.signal,
+			),
+		).rejects.toThrow("stopped by the operator");
+	} finally {
+		clearInterval(watching);
+	}
+	expect(execFileSync("git", ["worktree", "list"], { cwd: repo, encoding: "utf8" }).trim().split("\n")).toHaveLength(1);
+	cleanOwnership();
+	rmSync(repo, { recursive: true, force: true });
+	rmSync(marker, { force: true });
+}, 60_000);
+
 test("a peer started without a directory gets the caller's and no trust override", async () => {
 	const program = await programFor();
 	const id = await createPeer(program);
@@ -241,14 +278,16 @@ test("a peer started without a directory gets the caller's and no trust override
 });
 
 test("closing a reviewer that ignores SIGTERM and its closed input kills it after the grace period", async () => {
-	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ unresponsive: true }));
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ unresponsive: true, detachedChild: true }));
 	const program = await programFor();
 	const id = await createPeer(program);
 	const launch = JSON.parse(readFileSync(join(state.agentDir, "peer-records", `${id}.launch.json`), "utf8"));
+	const child = Number(readFileSync(join(state.agentDir, "peer-records", `${id}.child`), "utf8"));
 	const started = Date.now();
 	await program.close();
 	expect(Date.now() - started).toBeGreaterThanOrEqual(30_000);
 	expect(processGone(launch.pid)).toBe(true);
+	await vi.waitFor(() => expect(processGone(child)).toBe(true));
 	expect(existsSync(join(state.agentDir, "peer-records", `${id}.stopped`))).toBe(false);
 	cleanOwnership();
 }, 90_000);

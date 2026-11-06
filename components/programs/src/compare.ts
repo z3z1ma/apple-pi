@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -11,7 +11,7 @@ import { statePaths } from "../../session-state/src/paths.js";
 import { openPeerProgram, type PeerProgram } from "../../session-state/src/program-client.js";
 import { git } from "../../shared/src/git.js";
 import { runCommand } from "../../shared/src/run-command.js";
-import { parseProgram } from "./programs.js";
+import { parseProgram, programToolName } from "./programs.js";
 
 export const COMPARE_PROGRAM_TOOL_NAME = "compare_program";
 const MIN_SAMPLES = 3;
@@ -70,7 +70,7 @@ async function runSample(
 	signal: AbortSignal | undefined,
 ): Promise<Sample> {
 	const task = plan.tasks[index]!;
-	const copy = mkdtempSync(join(tmpdir(), "compare-program-"));
+	const copy = realpathSync(mkdtempSync(join(tmpdir(), "compare-program-")));
 	const sample: Sample = {
 		task: index,
 		arm,
@@ -83,12 +83,8 @@ async function runSample(
 		seconds: 0,
 	};
 	try {
-		await git(plan.root, ["worktree", "add", "--detach", copy, plan.base]);
-		const programFile = join(copy, ".pi", "programs", `${plan.name}.js`);
-		if (arm === "with") {
-			mkdirSync(join(copy, ".pi", "programs"), { recursive: true });
-			writeFileSync(programFile, plan.source);
-		} else rmSync(programFile, { force: true });
+		await git(plan.root, ["worktree", "add", "--detach", copy, plan.base], { signal });
+		placeProgram(copy, plan, arm);
 		const program = await openPeerProgram(self, signal);
 		const started = Date.now();
 		try {
@@ -100,14 +96,48 @@ async function runSample(
 			sample.seconds = Math.round((Date.now() - started) / 1000);
 			await program.close();
 		}
-		if (sample.completed) sample.correct = (await runCommand(task.check, copy, process.env, { signal })).exitCode === 0;
+		if (sample.completed) {
+			const checked = await runCommand(task.check, copy, process.env, { signal });
+			signal?.throwIfAborted();
+			sample.correct = checked.exitCode === 0;
+		}
 	} finally {
-		await git(plan.root, ["worktree", "remove", "--force", copy]).catch(async () => {
-			rmSync(copy, { recursive: true, force: true });
-			await git(plan.root, ["worktree", "prune"]);
-		});
+		await removeCopy(plan.root, copy);
 	}
 	return sample;
+}
+
+export function usedProgram(operations: { ref: string; args: Record<string, unknown> }[], name: string): boolean {
+	const tool = programToolName(name);
+	return operations.some(
+		(operation) =>
+			operation.ref === `pi.${tool}` ||
+			(operation.ref === "pi.codemode" && String(operation.args.code ?? "").includes(`tools.${tool}`)),
+	);
+}
+
+export function placeProgram(copy: string, plan: Pick<ComparisonPlan, "name" | "source">, arm: Sample["arm"]): void {
+	const directory = join(copy, ".pi", "programs");
+	if (arm === "with") mkdirSync(directory, { recursive: true });
+	if (!existsSync(directory)) return;
+	const inside = relative(realpathSync(copy), realpathSync(directory));
+	if (inside.startsWith("..") || isAbsolute(inside))
+		throw new Error(`${directory} resolves outside the comparison's worktree`);
+	const file = join(directory, `${plan.name}.js`);
+	if (arm === "with") writeFileSync(file, plan.source);
+	else rmSync(file, { force: true });
+}
+
+async function removeCopy(root: string, copy: string): Promise<void> {
+	try {
+		await git(root, ["worktree", "remove", "--force", copy]);
+	} catch {
+		rmSync(copy, { recursive: true, force: true });
+		await git(root, ["worktree", "prune"]);
+	}
+	const listed = await git(root, ["worktree", "list", "--porcelain"]);
+	if (existsSync(copy) || listed.split("\n").includes(`worktree ${copy}`))
+		throw new Error(`The comparison worktree ${copy} could not be removed`);
 }
 
 async function runTurn(
@@ -130,8 +160,8 @@ async function runTurn(
 	const result = receipt.result;
 	sample.completed = receipt.stage === "applied" && result?.status === "completed";
 	sample.toolCalls = result?.operations.length ?? 0;
-	sample.usedProgram = Boolean(result?.operations.some((operation) => operation.ref === `pi.program_${plan.name}`));
-	sample.tokens = result?.usage ? result.usage.input + result.usage.output + result.usage.cacheRead : 0;
+	sample.usedProgram = usedProgram(result?.operations ?? [], plan.name);
+	sample.tokens = result?.usage?.totalTokens ?? 0;
 	sample.cost = result?.usage?.cost.total ?? 0;
 	if (!sample.completed) sample.error = receipt.reason ?? result?.error ?? "The turn did not complete";
 }
@@ -168,9 +198,12 @@ export function comparisonReport(plan: ComparisonPlan, samples: Sample[]): strin
 			const runs = samples.filter((sample) => sample.task === index && sample.arm === arm);
 			const correct = runs.filter((sample) => sample.correct).length;
 			lines.push(
-				`  ${arm}: ${correct}/${runs.length} correct; tool calls ${runs.map((s) => s.toolCalls).join(", ")} (median ${median(runs.map((s) => s.toolCalls))}); tokens median ${median(runs.map((s) => s.tokens))}; cost $${runs.reduce((sum, s) => sum + s.cost, 0).toFixed(2)}; seconds ${runs.map((s) => s.seconds).join(", ")}${arm === "with" ? `; used the program in ${runs.filter((s) => s.usedProgram).length}` : ""}`,
+				`  ${arm}: ${correct}/${runs.length} correct; median tool calls ${median(runs.map((s) => s.toolCalls))}, tokens ${median(runs.map((s) => s.tokens))}; total cost $${runs.reduce((sum, s) => sum + s.cost, 0).toFixed(2)}`,
 			);
-			for (const failed of runs.filter((sample) => sample.error)) lines.push(`    failed: ${failed.error}`);
+			for (const run of runs)
+				lines.push(
+					`    ${run.correct ? "correct" : run.completed ? "incorrect" : "not completed"}; ${run.toolCalls} tool calls, ${run.tokens} tokens, $${run.cost.toFixed(2)}, ${run.seconds} s${arm === "with" ? `, ${run.usedProgram ? "used" : "did not use"} the program` : ""}${run.error ? `; ${run.error}` : ""}`,
+				);
 		}
 	}
 	return lines.join("\n");
@@ -221,7 +254,8 @@ export function installCompareTool(pi: ExtensionAPI): void {
 		async execute(_id, params, signal, update, ctx) {
 			if (!mayCompare(ctx))
 				throw new Error("Comparing programs needs a managing role, an unroled root or the capability steward");
-			if (!ctx.hasUI) throw new Error("Comparing programs needs the operator's agreement in an interactive session");
+			if (ctx.mode !== "tui")
+				throw new Error("Comparing programs needs the operator's agreement in an interactive terminal session");
 			const root = await git(ctx.cwd, ["rev-parse", "--show-toplevel"]);
 			const file = resolve(root, params.program);
 			const name = basename(file, ".js");

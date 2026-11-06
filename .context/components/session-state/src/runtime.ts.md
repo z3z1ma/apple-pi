@@ -193,7 +193,7 @@ Verify: components/session-state/tests/program-peers.test.ts
 
 ## symbol:Runtime.stopProgramPeer
 
-Prove OS process death before discarding ownership, including ended or superseded incarnations. A bridge shutdown can precede process exit. SIGTERM lets native Pi clean its detached tool processes; PID/start-time checks protect reused PIDs. A peer process still alive `PEER_KILL_GRACE_MS` (30 seconds) after SIGTERM gets SIGKILL (`signalProgramPeer`), once; its detached tool processes may then outlive it.
+Prove OS process death before discarding ownership, including ended or superseded incarnations. A bridge shutdown can precede process exit. SIGTERM lets native Pi clean its detached tool processes; PID/start-time checks protect reused PIDs. A peer process still alive `PEER_KILL_GRACE_MS` (30 seconds) after SIGTERM gets SIGKILL (`signalProgramPeer`), once, together with every descendant found in the process table at that moment (`descendantsOf`): Pi starts tool commands in their own process groups, so killing the peer alone left them running after its ownership was released (review `review-6d6e30ba`).
 Why: a hung peer ignores SIGTERM, and without escalation its program close, the review attempt and every wait on the review never ended. Departure writers deliberately keep waiting instead; they are not temporary peers.
 Verify: components/session-state/tests/program-peers.test.ts, tests/lifecycle-models.test.ts
 
