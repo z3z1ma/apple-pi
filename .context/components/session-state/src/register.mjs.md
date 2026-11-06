@@ -1,6 +1,6 @@
 ## file
 
-When a relative import ending in `.js` fails to resolve, this hook retries the same specifier with `.ts`.
+When a relative import ending in `.js` fails to resolve, this hook retries the same specifier with `.ts`. Only relative specifiers are retried: a scratch script that imports a module by absolute path must name the `.ts` file (rewrite a copied module's relative imports to absolute `.ts` paths), or it fails with ERR_MODULE_NOT_FOUND.
 Why: the package imports `.js` (the ESM path) while the file on disk is `.ts`. Node's type stripping does not rewrite that specifier.
 
 When a bare specifier cannot be found and `PI_HOST_PACKAGE_DIR` is set, the hook resolves it again as if imported from the Pi package that launched us.

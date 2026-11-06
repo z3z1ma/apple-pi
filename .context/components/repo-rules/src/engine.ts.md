@@ -11,6 +11,8 @@ Why: failing open lets a broken rule silently stop guarding; a rule written by s
 
 Repository-relative paths are relative to the directory holding `.pi/rules/` for the edited file, else to the cwd's (`baseOf`), so user rules keep `src/a.ts` where a repository has no rules.
 
+When this engine changes, test every state in which a rule cannot run or a path is ambiguous before review: an unparsable `policy.json`, a missing script or grit file, a pattern that does not compile, a script that throws or loops, symlinks into and out of a rules directory, object-internal ids such as `__proto__`, quoted shell separators, and edits accepted only after CRLF or fuzzy normalization. The first review found 15 defects, nearly all in these states. When rules move into or out of harness code, prove equivalence by replaying the old and the new over the same recorded batches (`sessionEntries`); the batch guard matched 229 of 229 refusals.
+
 Refusals are recorded per rules directory root and rule in `~/.pi/agent/repo-rules/firings.jsonl` (`firings.ts`), outside the repository.
 Why: rule counts are this machine's history; committing them would churn the repository.
 Coupled: components/repo-rules/src/index.ts, components/repo-rules/src/checks.ts, components/repo-rules/src/policy.ts, components/repo-rules/src/evidence.ts, docs/repo-rules.md
