@@ -194,7 +194,9 @@ try {
 	assert.equal(reviewProbe.review.state, "no-changes");
 	assert.equal(reviewProbe.replay.id, reviewProbe.review.id);
 	assert.equal(reviewProbe.queue.total, 1);
-	assert.deepEqual(reviewProbe.states, [{ id: reviewProbe.review.id, state: "no-changes" }]);
+	assert.deepEqual(reviewProbe.states, [
+		{ id: reviewProbe.review.id, state: "no-changes", requester: "operator", owner: "nav-head" },
+	]);
 	assert.deepEqual(reviewProbe.source.page.rows, ["export const answer = 1;"]);
 	assert.equal(reviewProbe.freshness.requestedTarget, "matches");
 	assert.equal(query("select id from review_attempts").length, 0);
@@ -317,11 +319,16 @@ try {
 	const codeCapture = join(tmpdir(), `workplace-electron-code-${process.pid}.png`);
 	await page.screenshot({ path: codeCapture, animations: "disabled" });
 	console.log(`Native Code capture: ${codeCapture}`);
+	const switchWorkspace = async (name) => {
+		await page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ }).click();
+		await page.getByRole("menuitem", { name: new RegExp(`^(\u2713 )?${name} organization`) }).click();
+		await page.getByRole("button", { name: `Workspace: ${name} organization. Switch workspace` }).waitFor();
+	};
 	await page.getByRole("button", { name: "Org", exact: true }).click();
-	await page.locator(".wp-org-team-card").first().waitFor();
-	assert.equal(await page.locator(".wp-org-team-card").count(), 1);
+	await switchWorkspace("Other Head");
 	const directory = page.getByRole("table", { name: "People", exact: true });
-	assert.equal(await directory.locator("tbody tr").count(), 3);
+	await directory.getByRole("button", { name: "Other Head", exact: true }).waitFor();
+	assert.equal(await directory.locator("tbody tr").count(), 1);
 	const beforeDirectory = requests.length;
 	await directory.getByRole("button", { name: "Person actions: Other Head", exact: true }).click();
 	await page.getByRole("menuitem", { name: "Let go", exact: true }).click();
@@ -339,15 +346,19 @@ try {
 			),
 		[],
 	);
-	await page.getByRole("button", { name: "Open team: Navigation Head", exact: true }).click();
+	await switchWorkspace("Navigation Head");
 	await page.locator(".wp-org-tree-node").first().waitFor();
+	assert.equal(await directory.locator("tbody tr").count(), 2);
 	assert.equal(await page.locator(".wp-org-tree-node").count(), 2);
 	const beforeProfile = requests.length;
 	const seenBefore = query("select id, seen_at from sessions order by id");
 	await page.getByRole("button", { name: "View profile: Navigation Report", exact: true }).click();
 	await page.getByLabel("Profile: Navigation Report", { exact: true }).waitFor();
 	await page.getByText("An isolated navigation fixture.", { exact: true }).waitFor();
-	await page.getByRole("button", { name: "Person actions: Navigation Report", exact: true }).click();
+	await page
+		.getByLabel("Profile: Navigation Report", { exact: true })
+		.getByRole("button", { name: "Person actions: Navigation Report", exact: true })
+		.click();
 	await page.getByRole("menuitem", { name: "Send home", exact: true }).waitFor();
 	await page.keyboard.press("Escape");
 	assert.deepEqual(query("select id, seen_at from sessions order by id"), seenBefore);
@@ -443,7 +454,7 @@ try {
 		document.body.append(link);
 	});
 	await page.locator("#org-entry-check").click();
-	await page.locator(".wp-org-team-card").first().waitFor({ timeout: 10000 });
+	await page.locator(".wp-org-tree-node").first().waitFor({ timeout: 10000 });
 	assert.match(page.url(), /workplace=org/);
 	assert.equal(await page.evaluate(() => window.workplaceCheckDocument), undefined);
 	assert.equal(new URL(page.url()).pathname, "/index.html");

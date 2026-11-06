@@ -243,6 +243,7 @@ export function WorkHistory({
 		(task) => task.closedAt === null && task.status !== "done" && task.status !== "cancelled",
 	).length;
 	const names = new Map([
+		...world.headquarters.map((headquarters) => [headquarters.id, headquarters.name] as const),
 		...world.characters.map((person) => [person.id, person.name] as const),
 		...(world.dormant ?? []).map((person) => [person.id, person.name] as const),
 	]);

@@ -8,3 +8,4 @@
 
 - `.ledger/202611042046-review-speed-and-robustness/task.md` — planning — Code review: why reviews fail, run incomplete and take long — Analyze every recorded captured review: time per phase, failure and incomplete causes, redundant or overkill steps; propose changes so review is fast, robust and still thorough.
 
+- `.ledger/202611061024-workplace-workspaces-and-review-workers/task.md` — in-progress — Workplace workspaces per organization root, and review worker pools — Each organization root is a Slack-style workspace in Workplace (switcher on the pi mark); Chat, Mail, Org, Reviews and Desk scope to the root's subtree; Org tab becomes tree + directory split; review_code takes existing workers (forked continuations) before temps, with worker/temp badges.

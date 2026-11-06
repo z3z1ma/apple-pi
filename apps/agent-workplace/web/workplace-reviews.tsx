@@ -254,19 +254,23 @@ type Confirm = { action: "cancel" | "resume"; review: ReviewSummary };
 export function WorkplaceReviews({
 	active,
 	world,
+	owners,
 	updates,
 	request,
 }: {
 	active: boolean;
 	world: WorldSnapshot;
+	owners?: Set<string>;
 	updates: ReviewUpdates;
 	request?: { id: string; key: string };
 }) {
 	const api = window.agentWorkplace.reviews;
 	const [roots, setRoots] = useState<string[]>([]);
 	const [root, setRoot] = useState("");
-	const [queueState, setQueue] = useState<{ root: string; value: ReviewQueue }>();
-	const queue = queueState?.root === root ? queueState.value : undefined;
+	const people = owners ? [...owners].sort() : undefined;
+	const scope = `${root}\n${people?.join(",") ?? ""}`;
+	const [queueState, setQueue] = useState<{ scope: string; value: ReviewQueue }>();
+	const queue = queueState?.scope === scope ? queueState.value : undefined;
 	const [selected, select] = useState<string>();
 	const [offset, setOffset] = useState(0);
 	const [limit, setLimit] = useState(1);
@@ -342,6 +346,7 @@ export function WorkplaceReviews({
 		void api
 			.queue({
 				...(root ? { cwd: root } : {}),
+				...(people ? { people } : {}),
 				limit,
 				offset,
 				hideAddressed,
@@ -349,7 +354,7 @@ export function WorkplaceReviews({
 			})
 			.then((value) => {
 				if (!live) return;
-				setQueue({ root, value });
+				setQueue({ scope, value });
 				if (value.page && value.page.offset !== offset) setOffset(value.page.offset);
 				select((id) => (value.page?.rows.some((row) => row.id === id) ? id : value.page?.rows[0]?.id));
 			})
@@ -359,7 +364,7 @@ export function WorkplaceReviews({
 		return () => {
 			live = false;
 		};
-	}, [api, active, root, offset, limit, hideAddressed, selected, version, tick]);
+	}, [api, active, scope, offset, limit, hideAddressed, selected, version, tick]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: The key holds every input; a live tick reloads log and mail under the same key.
 	useEffect(() => {
 		if (!active || !selected) return;

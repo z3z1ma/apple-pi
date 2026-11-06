@@ -218,7 +218,6 @@ async function bounded(page: Page, target: Locator) {
 }
 async function orgCard(page: Page, name: string) {
 	await page.getByRole("button", { name: "Org", exact: true }).click();
-	await page.getByRole("button", { name: "Open team: Ada", exact: true }).click();
 	return page.getByRole("button", { name: `View profile: ${name}`, exact: true });
 }
 async function sleeperDM(page: Page, name: string) {
@@ -257,18 +256,16 @@ test("VIPs group four lasting people including nested sleepers without duplicati
 		const headSection = sidebar.getByRole("region", { name: "VIPs", exact: true });
 		const heads = headSection.getByRole("heading", { name: /^VIPs/ });
 		const direct = sidebar.getByRole("heading", { name: /^Direct messages/ });
-		const channels = sidebar.getByRole("heading", { name: /^Channels/ });
 		const ada = sidebar.getByRole("button", { name: /^Ada/ });
 		const daria = sidebar.getByRole("button", { name: /^Daria/ });
+		const switchTo = async (name: string) => {
+			await page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ }).click();
+			await page.getByRole("menuitem", { name: new RegExp(`^(\u2713 )?${name} organization`) }).click();
+		};
 		await heads.waitFor();
 		await painted(page);
-		expect(await headSection.getByRole("button", { name: /^Ada/ }).count()).toBe(0);
+		expect(await page.getByRole("button", { name: "Workspace: Daria organization. Switch workspace" }).count()).toBe(1);
 		expect(await headSection.getByRole("button", { name: /^Daria/ }).count()).toBe(1);
-		expect((await channels.boundingBox())!.y).toBeLessThan((await heads.boundingBox())!.y);
-		expect((await heads.boundingBox())!.y).toBeLessThan((await direct.boundingBox())!.y);
-		expect((await ada.boundingBox())!.y).toBeGreaterThan((await direct.boundingBox())!.y);
-		expect((await daria.boundingBox())!.y).toBeGreaterThan((await heads.boundingBox())!.y);
-		expect((await daria.boundingBox())!.y).toBeLessThan((await direct.boundingBox())!.y);
 		expect(await sidebar.getByRole("button", { name: /^Daria/, includeHidden: true }).count()).toBe(1);
 		expect(
 			await sidebar
@@ -276,9 +273,20 @@ test("VIPs group four lasting people including nested sleepers without duplicati
 				.getByRole("button", { name: /^Daria/, includeHidden: true })
 				.count(),
 		).toBe(0);
-		expect((await calls(page)).conversations).toEqual([]);
-		expect((await calls(page)).profiles).toEqual([]);
-		expect((await calls(page)).tasks).toEqual([]);
+		expect(await sidebar.getByRole("button", { name: /^Ada/, includeHidden: true }).count()).toBe(0);
+		await bounded(page, heads);
+		await bounded(page, daria);
+		await shot(page, "vips-light-1440");
+		await daria.click();
+		await page.getByRole("heading", { name: "Daria", exact: true }).waitFor();
+		await vi.waitFor(async () => expect((await calls(page)).conversations).toContain("daria"));
+		expect((await calls(page)).callIn).toEqual([]);
+		expect((await calls(page)).wake).toEqual([]);
+		await switchTo("Ada");
+		await direct.waitFor();
+		expect(await headSection.count()).toBe(0);
+		expect((await ada.boundingBox())!.y).toBeGreaterThan((await direct.boundingBox())!.y);
+		expect(await sidebar.getByRole("button", { name: /^Daria/, includeHidden: true }).count()).toBe(0);
 		await ada.click();
 		const draft = page.getByRole("textbox", { name: "Reply to Ada", exact: true });
 		await draft.fill("Keep this draft while the sidebar groups change.");
@@ -289,43 +297,23 @@ test("VIPs group four lasting people including nested sleepers without duplicati
 		await publish(page, grouped);
 		await painted(page);
 		expect(await headSection.getByRole("button", { name: /^Ada/ }).count()).toBe(1);
-		expect((await ada.boundingBox())!.y).toBeGreaterThan((await heads.boundingBox())!.y);
-		expect((await ada.boundingBox())!.y).toBeLessThan((await direct.boundingBox())!.y);
 		expect(await sidebar.getByRole("button", { name: /^Ada/, includeHidden: true }).count()).toBe(1);
-		expect(await sidebar.getByRole("button", { name: /^Daria/, includeHidden: true }).count()).toBe(1);
 		expect(await ada.getAttribute("aria-pressed")).toBe("true");
 		expect(await draft.inputValue()).toBe("Keep this draft while the sidebar groups change.");
 		expect((await calls(page)).conversations).toEqual(beforeGroup.conversations);
 		expect((await calls(page)).seen).toEqual(beforeGroup.seen);
-		await bounded(page, heads);
-		await bounded(page, ada);
-		await bounded(page, daria);
-		await shot(page, "vips-light-1440");
-		await daria.click();
-		await page.getByRole("heading", { name: "Daria", exact: true }).waitFor();
-		await vi.waitFor(async () => expect((await calls(page)).conversations).toContain("daria"));
-		expect(await daria.getAttribute("aria-pressed")).toBe("true");
-		expect((await calls(page)).callIn).toEqual([]);
-		expect((await calls(page)).wake).toEqual([]);
-		await ada.click();
-		expect(await draft.inputValue()).toBe("Keep this draft while the sidebar groups change.");
-		await painted(page);
-		const beforeUngroup = await calls(page);
 		await publish(page, initial);
 		await painted(page);
+		expect(await headSection.count()).toBe(0);
 		expect((await ada.boundingBox())!.y).toBeGreaterThan((await direct.boundingBox())!.y);
 		expect(await ada.getAttribute("aria-pressed")).toBe("true");
 		expect(await draft.inputValue()).toBe("Keep this draft while the sidebar groups change.");
-		expect(await headSection.getByRole("button", { name: /^Ada/ }).count()).toBe(0);
-		expect((await calls(page)).conversations).toEqual(beforeUngroup.conversations);
-		expect((await calls(page)).seen).toEqual(beforeUngroup.seen);
 		await publish(page, grouped);
 		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
 		await page.setViewportSize({ width: 900, height: 900 });
 		await painted(page);
 		await bounded(page, heads);
 		await bounded(page, ada);
-		await bounded(page, daria);
 		await shot(page, "vips-dark-900");
 		expect((await calls(page)).profiles).toEqual([]);
 		expect((await calls(page)).tasks).toEqual([]);
@@ -539,7 +527,7 @@ test("Org select-all is explicit and uncertain batch progress retains the same r
 		for (const name of selectedNames)
 			expect(await directory.getByRole("checkbox", { name: `Select ${name}`, exact: true }).isChecked()).toBe(true);
 		const next = world();
-		next.characters.push(awake("new", "New arrival", null));
+		next.characters.push(awake("new", "New arrival", "ada"));
 		await publish(page, next);
 		expect(await directory.getByRole("checkbox", { name: "Select New arrival", exact: true }).isChecked()).toBe(false);
 		await page.getByRole("button", { name: "Let go", exact: true }).click();

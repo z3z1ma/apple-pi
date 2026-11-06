@@ -1,0 +1,8 @@
+## file
+
+Each organization root is a workspace, like being signed in to several Slack workspaces (operator, 2026-11-06). Roots are the Org chart's visible roots (`orgPeople`: lasting people whose manager is absent from the roster), so Org, Chat's VIPs and the switcher agree. Members follow every reporting line, temporary peers and retired people included, so a temp's DM and mail land in its caller's workspace. The chosen workspace is a device-local preference (`workplace-workspace`); without one, or when it disappears, the largest organization is shown.
+
+`scopeWorld` is the one place views are scoped. The shell passes the scoped snapshot to Chat, Mail, Org and the Desk, the members to Reviews, and the full snapshot to Code, Git, Issues and World. A thread, channel, mail or task belongs to every workspace one of its people (other than the operator) belongs to, or whose head it names (`scopeHead`, `organization:`/`team:` ids, task headquarters), so a conversation that crosses two organizations appears in both. The desk channel stays in every workspace; DeskView decides where it is active. `headquarters` stays unfiltered: it only names organizations, so work recorded in another organization keeps its label.
+Why: scoping each view separately would let them disagree about who belongs where; a single scoped snapshot keeps the existing views unchanged.
+Coupled: apps/agent-workplace/web/workplace.tsx, apps/agent-workplace/web/workplace-org.tsx, apps/agent-workplace/web/workplace-desk.tsx, apps/agent-workplace/web/workplace-review-updates.ts, apps/agent-workplace/web/workplace-reviews.tsx
+Verify: apps/agent-workplace/tests/world-org.test.ts

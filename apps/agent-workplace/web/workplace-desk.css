@@ -631,6 +631,17 @@
 	display: grid;
 	gap: 8px;
 }
+.wp-desk-candidates > .wp-desk-secondary {
+	padding: 8px 14px;
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+	color: var(--wp-text);
+	background: var(--wp-panel);
+	font-weight: 600;
+}
+.wp-desk-candidates > .wp-desk-secondary:hover {
+	background: var(--wp-hover);
+}
 
 .wp-threads-view,
 .wp-activity-view {

@@ -442,7 +442,9 @@ test("the queue reader separates required coverage, absent intent and findings w
 		expect(assessment.validation?.attempt).toBeNull();
 		expect(assessment.validation?.report.findings).toEqual([]);
 		expect(reviewQueue(db, "outsider", { limit: 1 }).total).toBe(0);
-		expect(reviewStates(db, "owner")).toEqual([{ id: job.id, state: "completed" }]);
+		expect(reviewStates(db, "owner")).toEqual([{ id: job.id, state: "completed", requester: "owner", owner: "owner" }]);
+		expect(reviewQueue(db, "owner", { people: ["owner"], limit: 1 }).total).toBe(1);
+		expect(reviewQueue(db, "owner", { people: ["someone-else"], limit: 1 }).total).toBe(0);
 		expect(reviewStates(db, "outsider")).toEqual([]);
 		expect(() => readReview(db, "outsider", job.id)).toThrow("another organization");
 		expect(() => reviewQueue(db, "missing-person")).toThrow();

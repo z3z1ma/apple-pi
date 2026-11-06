@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Fragment, lazy, Suspense, useContext, useEffect, useMemo, useState } from "react";
 import type {
 	Character,
 	Desk,
@@ -20,6 +20,7 @@ import { OutsideActivity } from "./workplace-outside.js";
 import { PersonAvatar, PersonName, presenceOf, sessionStatus } from "./workplace-people.js";
 import { destinations, Picker, type SwitchTarget } from "./workplace-switcher.js";
 import { ThreadPane } from "./workplace-thread.js";
+import { chooseWorkspace, WorkspaceContext, workspaceOf } from "./workplace-workspaces.js";
 import "./workplace-desk.css";
 
 const api = window.agentWorkplace;
@@ -54,15 +55,16 @@ function personIn(world: WorldSnapshot, id: string): { person: Character | Dorma
 
 function deskCandidates(world: WorldSnapshot): { id: string; name: string; away: boolean }[] {
 	const awake = world.characters
-		.filter((person) => person.facts?.title === "Coordinator" && !person.facts.reportsTo && !person.facts.temporary)
+		.filter((person) => person.facts?.title === "Coordinator" && !person.facts.temporary)
 		.map((person) => ({ id: person.id, name: person.name, away: false }));
 	const asleep = (world.dormant ?? [])
-		.filter((person) => person.title === "Coordinator" && !person.reportsTo && !person.retiredAt && !person.temporary)
+		.filter((person) => person.title === "Coordinator" && !person.retiredAt && !person.temporary)
 		.map((person) => ({ id: person.id, name: person.name, away: true }));
 	return [...awake, ...asleep];
 }
 
 function DeskSetup({ world }: { world: WorldSnapshot }) {
+	const root = useContext(WorkspaceContext).current?.id;
 	const candidates = deskCandidates(world);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
@@ -93,12 +95,22 @@ function DeskSetup({ world }: { world: WorldSnapshot }) {
 		setBusy(true);
 		setError("");
 		try {
-			const cwd = world.characters[0]?.facts?.cwd ?? world.dormant?.[0]?.cwd;
+			const head = world.characters.find((person) => person.id === root);
+			const cwd =
+				head?.facts?.cwd ??
+				world.dormant?.find((person) => person.id === root)?.cwd ??
+				world.characters[0]?.facts?.cwd ??
+				world.dormant?.[0]?.cwd;
 			if (!cwd) {
 				setError("Start any Pi session first, so the coordinator has a directory to work in.");
 				return;
 			}
-			const receipt = await api.recruit({ name: "", cwd, role: "coordinator" });
+			const receipt = await api.recruit({
+				name: "",
+				cwd,
+				role: "coordinator",
+				...(root && head && !head.facts?.temporary ? { reportsTo: root } : {}),
+			});
 			if (!receipt.ok || !receipt.sessionId) {
 				setError(receipt.ok ? "The coordinator could not start." : receipt.reason);
 				return;
@@ -261,7 +273,29 @@ export function DeskView({
 	openDM: (id: string) => void;
 }) {
 	const [tools, setTools] = useState<HTMLElement | null>(null);
-	if (!desk) return <DeskSetup world={world} />;
+	const [movingTo, setMovingTo] = useState<string>();
+	const place = useContext(WorkspaceContext);
+	const home = desk ? workspaceOf(place.all, desk.person) : undefined;
+	const elsewhere = home && place.current && home.id !== place.current.id ? home : undefined;
+	if (!desk || (elsewhere && movingTo === place.current?.id)) return <DeskSetup world={world} />;
+	if (elsewhere)
+		return (
+			<div className="wp-desk-setup">
+				<span className="wp-empty-icon">
+					<Icon name="desk" />
+				</span>
+				<h1>The desk is run from {elsewhere.name}</h1>
+				<p>There is one desk. Its coordinator works in another workspace; open it there, or run it from here.</p>
+				<div className="wp-desk-candidates">
+					<button type="button" className="wp-primary" onClick={() => chooseWorkspace(elsewhere.id)}>
+						Go there
+					</button>
+					<button type="button" className="wp-desk-secondary" onClick={() => setMovingTo(place.current?.id)}>
+						Run the desk from here
+					</button>
+				</div>
+			</div>
+		);
 	const listener = personIn(world, desk.person);
 	const channel = world.workplace?.threads.find((thread) => thread.id === desk.thread) ?? { lastSeq: 0 };
 	const awake = listener && !listener.away ? (listener.person as Character) : undefined;

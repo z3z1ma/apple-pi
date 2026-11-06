@@ -412,9 +412,16 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `aw-communications-${name}.png`), animations: "disabled" });
 }
 
+async function switchWorkspace(page: Page, name: string) {
+	await page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ }).click();
+	await page.getByRole("menuitem", { name: new RegExp(`^(\u2713 )?${name} organization`) }).click();
+	await page.getByRole("button", { name: `Workspace: ${name} organization. Switch workspace` }).waitFor();
+}
+
 test("channel discovery creates in the explicitly selected organization without reading history", async () => {
 	const { page, errors } = await openWorkplace();
 	try {
+		await switchWorkspace(page, "Ben");
 		await page.getByRole("button", { name: "Discover or create channels" }).click();
 		const dialog = page.getByRole("dialog", { name: "Discover channels", exact: true });
 		await dialog.getByRole("button", { name: "Open checkout", exact: true }).waitFor();
@@ -675,6 +682,7 @@ test("Mail keeps addressed replies and plain text while its draft survives Chat 
 test("Mail Compose recovers a lost send outcome after closing without creating a second thread", async () => {
 	const { page, errors } = await openWorkplace();
 	try {
+		await switchWorkspace(page, "Ben");
 		await page.getByRole("button", { name: "Mail", exact: true }).click();
 		await page.getByRole("button", { name: "Compose", exact: true }).click();
 		let compose = page.getByRole("dialog", { name: "New message", exact: true });

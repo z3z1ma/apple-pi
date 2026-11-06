@@ -95,19 +95,49 @@ export function PersonAvatar({
 	);
 }
 
+export function isTemporary(world: WorldSnapshot, id: string): boolean {
+	return !!(
+		world.characters.find((person) => person.id === id)?.facts?.temporary ??
+		world.dormant?.find((person) => person.id === id)?.temporary
+	);
+}
+
+export function KindBadge({ kind }: { kind: "temp" | "worker" }) {
+	return (
+		<span
+			className="wp-kind-badge"
+			data-kind={kind}
+			title={
+				kind === "temp"
+					? "Temp: started for one job and discarded after it"
+					: "Existing worker, reviewing in a fork of its own conversation"
+			}
+		>
+			{kind}
+		</span>
+	);
+}
+
 export function PersonName({ id, name, className = "" }: { id: string; name: string; className?: string }) {
 	const people = useContext(ChatPeople);
+	const temp = people && isTemporary(people.world, id) ? <KindBadge kind="temp" /> : null;
 	return people && id !== "operator" && personIn(people.world, id) ? (
-		<button
-			type="button"
-			className={`wp-name-link ${className}`}
-			title={`Open DM: ${name}`}
-			onClick={() => people.openDM(id)}
-		>
-			{name}
-		</button>
+		<>
+			<button
+				type="button"
+				className={`wp-name-link ${className}`}
+				title={`Open DM: ${name}`}
+				onClick={() => people.openDM(id)}
+			>
+				{name}
+			</button>
+			{temp}
+		</>
 	) : (
-		<span className={className}>{name}</span>
+		<>
+			<span className={className}>{name}</span>
+			{temp}
+		</>
 	);
 }
 

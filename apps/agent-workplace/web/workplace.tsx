@@ -1,4 +1,13 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useContext,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { createRoot } from "react-dom/client";
 import type { ConversationInfo } from "../src/communications.js";
 import type { Character, WorkplaceThread, WorldSnapshot } from "../src/world.js";
@@ -43,7 +52,15 @@ import {
 import { channelName, useWorkplaceNames } from "./workplace-names.js";
 import { descendants, Org, orgPeople } from "./workplace-org.js";
 import { OrganizationNameForm, OrgNameEditor } from "./workplace-org-name.js";
-import { ChatPeople, PersonAvatar, PersonName, PersonProfile, presenceOf, sessionStatus } from "./workplace-people.js";
+import {
+	ChatPeople,
+	KindBadge,
+	PersonAvatar,
+	PersonName,
+	PersonProfile,
+	presenceOf,
+	sessionStatus,
+} from "./workplace-people.js";
 import { PersonActionsButton, usePersonMenu, WorkplacePersonActions } from "./workplace-person-actions.js";
 import { usePaneResize } from "./workplace-resize.js";
 import { useReviewUpdates } from "./workplace-review-updates.js";
@@ -52,6 +69,15 @@ import { type AppearanceMode, WorkplaceSettings } from "./workplace-settings.js"
 import { QuickSwitcher, type SwitchTarget } from "./workplace-switcher.js";
 import { DEFAULT_THEME, THEMES, themeOf, themeVariables } from "./workplace-themes.js";
 import { ThreadPane } from "./workplace-thread.js";
+import {
+	chooseWorkspace,
+	currentWorkspace,
+	scopeWorld,
+	useChosenWorkspace,
+	WorkspaceContext,
+	workspaces,
+	workspaceUnread,
+} from "./workplace-workspaces.js";
 import { WorkplaceWorld } from "./workplace-world.js";
 import { worldStore } from "./world-store.js";
 import "./workplace.css";
@@ -248,8 +274,23 @@ function RailApps({ apps, view, onSelect }: { apps: RailApp[]; view: string; onS
 	);
 }
 
+function initials(name: string): string {
+	const words = name
+		.replace(/ organization$/, "")
+		.split(/[\s-]+/)
+		.filter(Boolean);
+	return (words.length > 1 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? "pi").slice(0, 2)).toUpperCase();
+}
+
 function Workplace() {
 	const world = useSyncExternalStore(store.subscribe, store.get);
+	const names = useWorkplaceNames();
+	const chosenWorkspace = useChosenWorkspace();
+	// biome-ignore lint/correctness/useExhaustiveDependencies: organization names change the workspace labels.
+	const allWorkspaces = useMemo(() => (world ? workspaces(world) : []), [world, names]);
+	const workspace = currentWorkspace(allWorkspaces, chosenWorkspace);
+	const scoped = useMemo(() => world && scopeWorld(world, workspace), [world, workspace]);
+	const place = useMemo(() => ({ current: workspace, all: allWorkspaces }), [workspace, allWorkspaces]);
 	const [mode, setModeState] = useState<AppearanceMode>(() => {
 		const saved = stored("workplace-appearance");
 		return saved === "dark" || saved === "light" ? saved : "system";
@@ -286,7 +327,7 @@ function Workplace() {
 	const [gitVisited, setGitVisited] = useState(initialView === "git");
 	const [reviewsVisited, setReviewsVisited] = useState(initialView === "reviews");
 	const [reviewRequest, setReviewRequest] = useState<{ id: string; key: string }>();
-	const reviewUpdates = useReviewUpdates(!!world?.connected);
+	const reviewUpdates = useReviewUpdates(!!world?.connected, workspace?.members);
 	const openReview = useCallback((id: string) => {
 		setReviewRequest({ id, key: crypto.randomUUID() });
 		setReviewsVisited(true);
@@ -332,7 +373,7 @@ function Workplace() {
 		setView("chat");
 		history.replaceState(null, "", "?workplace=chat");
 	};
-	const unread = world ? inboxThreads(world).reduce((sum, thread) => sum + thread.unread, 0) : 0;
+	const unread = scoped ? inboxThreads(scoped).reduce((sum, thread) => sum + thread.unread, 0) : 0;
 	const openMenu = useWorkplaceMenu();
 	const themeMenu = [
 		...THEMES.map((each) => ({
@@ -348,10 +389,17 @@ function Workplace() {
 		},
 	];
 	const silenced = new Set(muted.use().map((item) => item.key));
-	const unreadChat = world
-		? world.characters.filter((person) => person.facts?.unseen && !silenced.has(`dm:${person.id}`)).length +
-			[...channelUnreads(world)].filter(([id, count]) => count > 0 && !silenced.has(`channel:${id}`)).length
+	const unreadChat = scoped
+		? scoped.characters.filter((person) => person.facts?.unseen && !silenced.has(`dm:${person.id}`)).length +
+			[...channelUnreads(scoped)].filter(([id, count]) => count > 0 && !silenced.has(`channel:${id}`)).length
 		: 0;
+	const workspaceMenu = allWorkspaces.map((each) => {
+		const count = world && each.id !== workspace?.id ? workspaceUnread(world, each) : 0;
+		return {
+			label: `${each.id === workspace?.id ? "\u2713 " : ""}${each.name}${count ? ` (${count})` : ""}`,
+			onSelect: () => chooseWorkspace(each.id),
+		};
+	});
 	return (
 		<div
 			className={`wp-app wp-${["org", "code", "git", "reviews", "issues"].includes(view) ? `${view}-view` : view}`}
@@ -360,9 +408,17 @@ function Workplace() {
 			style={themeStyle}
 		>
 			<nav className="wp-rail" aria-label="Applications">
-				<span className="wp-brand" aria-hidden="true">
-					pi
-				</span>
+				<button
+					type="button"
+					className="wp-brand"
+					aria-label={`Workspace: ${workspace?.name ?? "pi"}. Switch workspace`}
+					title={workspace ? `${workspace.name} \u00b7 switch workspace` : undefined}
+					disabled={allWorkspaces.length === 0}
+					onClick={(event) => openMenu(event, workspaceMenu)}
+					onKeyDown={(event) => openMenu(event, workspaceMenu)}
+				>
+					{workspace ? initials(workspace.name) : "pi"}
+				</button>
 				<RailApps
 					view={view}
 					apps={[
@@ -448,7 +504,7 @@ function Workplace() {
 			<div className="wp-workspace">
 				<header className="wp-topbar">
 					<strong>
-						Workplace <span> / {VIEW_TITLES[view] ?? "Mail"}</span>
+						{workspace?.name ?? "Workplace"} <span> / {VIEW_TITLES[view] ?? "Mail"}</span>
 					</strong>
 					<button
 						type="button"
@@ -467,78 +523,83 @@ function Workplace() {
 						{world ? (world.connected ? "Runtime connected" : "Disconnected · last known state") : "Connecting…"}
 					</span>
 				</header>
-				{!world ? (
+				{!world || !scoped ? (
 					<div className="wp-empty">Loading the workplace…</div>
 				) : (
 					<div className="wp-surface" inert={!world.connected}>
-						<FileReferenceNavigation.Provider value={openFileReference}>
-							<WorkplacePersonActions world={world}>
-								<div hidden={view !== "chat"}>
-									<Chat
-										world={world}
-										active={view === "chat"}
-										requestedDM={requestedDM}
-										requestedChannel={requestedChannel}
-									/>
-								</div>
-								<div hidden={view !== "mail"}>
-									<Mail world={world} active={view === "mail"} drafts={drafts} />
-								</div>
-								{orgVisited && (
-									<div hidden={view !== "org"}>
-										<Org
-											world={world}
-											active={view === "org"}
-											openDM={openDM}
-											openChannel={openChannel}
-											onPlanChange={setPlanState}
+						<WorkspaceContext.Provider value={place}>
+							<FileReferenceNavigation.Provider value={openFileReference}>
+								<WorkplacePersonActions world={world}>
+									<div hidden={view !== "chat"}>
+										<Chat
+											world={scoped}
+											active={view === "chat"}
+											requestedDM={requestedDM}
+											requestedChannel={requestedChannel}
 										/>
 									</div>
-								)}
-								{codeVisited && (
-									<div hidden={view !== "code"}>
-										<WorkplaceCode
-											world={world}
-											active={view === "code"}
-											fileRequest={fileRequest}
-											onDirtyChange={setCodeDirty}
-											onTerminalCountChange={setTerminalCount}
-											onOpenReview={openReview}
-										/>
+									<div hidden={view !== "mail"}>
+										<Mail world={scoped} active={view === "mail"} drafts={drafts} />
 									</div>
-								)}
-								{gitVisited && (
-									<div hidden={view !== "git"}>
-										<WorkplaceGit active={view === "git"} />
-									</div>
-								)}
-								{reviewsVisited && (
-									<div hidden={view !== "reviews"}>
-										<WorkplaceReviews
-											active={view === "reviews"}
-											world={world}
-											updates={reviewUpdates}
-											request={reviewRequest}
-										/>
-									</div>
-								)}
-								{issuesVisited && (
-									<div hidden={view !== "issues"}>
-										<WorkplaceIssues world={world} active={view === "issues"} openDM={openDM} />
-									</div>
-								)}
-								{view === "settings" && (
-									<WorkplaceSettings theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} dark={dark}>
-										<Connections />
-									</WorkplaceSettings>
-								)}
-								{worldVisited && (
-									<div hidden={view !== "world"}>
-										<WorkplaceWorld active={view === "world"} />
-									</div>
-								)}
-							</WorkplacePersonActions>
-						</FileReferenceNavigation.Provider>
+									{orgVisited && (
+										<div hidden={view !== "org"}>
+											<Org
+												world={scoped}
+												everyone={world}
+												root={workspace?.id}
+												active={view === "org"}
+												openDM={openDM}
+												openChannel={openChannel}
+												onPlanChange={setPlanState}
+											/>
+										</div>
+									)}
+									{codeVisited && (
+										<div hidden={view !== "code"}>
+											<WorkplaceCode
+												world={world}
+												active={view === "code"}
+												fileRequest={fileRequest}
+												onDirtyChange={setCodeDirty}
+												onTerminalCountChange={setTerminalCount}
+												onOpenReview={openReview}
+											/>
+										</div>
+									)}
+									{gitVisited && (
+										<div hidden={view !== "git"}>
+											<WorkplaceGit active={view === "git"} />
+										</div>
+									)}
+									{reviewsVisited && (
+										<div hidden={view !== "reviews"}>
+											<WorkplaceReviews
+												active={view === "reviews"}
+												world={world}
+												owners={workspace?.members}
+												updates={reviewUpdates}
+												request={reviewRequest}
+											/>
+										</div>
+									)}
+									{issuesVisited && (
+										<div hidden={view !== "issues"}>
+											<WorkplaceIssues world={world} active={view === "issues"} openDM={openDM} />
+										</div>
+									)}
+									{view === "settings" && (
+										<WorkplaceSettings theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} dark={dark}>
+											<Connections />
+										</WorkplaceSettings>
+									)}
+									{worldVisited && (
+										<div hidden={view !== "world"}>
+											<WorkplaceWorld active={view === "world"} />
+										</div>
+									)}
+								</WorkplacePersonActions>
+							</FileReferenceNavigation.Provider>
+						</WorkspaceContext.Provider>
 					</div>
 				)}
 			</div>
@@ -558,6 +619,10 @@ function Chat({
 	requestedChannel?: { id: string; key: string };
 }) {
 	useWorkplaceNames();
+	const workspaceRoot = useContext(WorkspaceContext).current?.id;
+	const rootName =
+		world.characters.find((person) => person.id === workspaceRoot)?.name ??
+		world.dormant?.find((person) => person.id === workspaceRoot)?.name;
 	const openMenu = useWorkplaceMenu();
 	const [renameChannel, setRenameChannel] = useState<{ id: string; name: string; trigger: HTMLElement }>();
 	const channelMenu = (
@@ -813,6 +878,7 @@ function Chat({
 				<span className="wp-dm-summary">
 					<span className="wp-dm-name">
 						<strong>{agent.name}</strong>
+						{agent.facts?.temporary && <KindBadge kind="temp" />}
 						{!home && agent.facts?.status === "working" && (
 							<span className="wp-dm-working" role="img" aria-label="Working" title="Working">
 								<Icon name="activity" />
@@ -842,7 +908,11 @@ function Chat({
 				<div className="wp-chat-layout" ref={layout} style={sidebar.style}>
 					<aside className="wp-chat-sidebar" ref={sidebar.ref}>
 						<div className="wp-sidebar-heading">
-							<OrgNameEditor id="workspace" name="Your organization" defaultName="Your organization" heading="h1" />
+							{rootName && workspaceRoot ? (
+								<OrgNameEditor key={workspaceRoot} id={workspaceRoot} name={rootName} heading="h1" />
+							) : (
+								<OrgNameEditor id="workspace" name="Your organization" defaultName="Your organization" heading="h1" />
+							)}
 							<p>
 								{`${world.characters.filter((person) => person.facts?.status === "working").length} working \u00b7 ${world.characters.length} awake`}
 							</p>

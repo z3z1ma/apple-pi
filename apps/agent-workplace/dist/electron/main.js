@@ -5806,10 +5806,11 @@ function readReview(db, actor, id) {
 	};
 }
 function attemptRecord(db, review, id) {
-	const row = db.prepare(`select id, review_id as review, generation, plan_revision as planRevision, pass_id as pass, kind, person, role, state, model, thinking, session_file as sessionFile, input, policy, reuse_blocked_by as reuseBlockedBy, result, output, reason, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ? and id = ?`).get(review, id);
+	const row = db.prepare(`select id, review_id as review, generation, plan_revision as planRevision, pass_id as pass, kind, person, reviewer, role, state, model, thinking, session_file as sessionFile, input, policy, reuse_blocked_by as reuseBlockedBy, result, output, reason, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ? and id = ?`).get(review, id);
 	if (!row) throw new Error(`Unknown review attempt: ${id}`);
 	return {
 		...row,
+		reviewer: JSON.parse(row.reviewer),
 		input: JSON.parse(row.input),
 		policy: JSON.parse(row.policy),
 		result: row.result ? JSON.parse(row.result) : null,
@@ -5997,7 +5998,7 @@ function reviewStates(db, actor) {
 	return snapshot(db, () => {
 		const { where, args } = scopeClause(db, actor);
 		const filter = where.length ? `where ${where.join(" and ")}` : "";
-		return db.prepare(`select id, state from review_jobs ${filter}`).all(...args);
+		return db.prepare(`select id, state, requester, owner from review_jobs ${filter}`).all(...args);
 	});
 }
 function reviewQueue(db, actor, options = {}) {
@@ -6013,6 +6014,10 @@ function reviewQueue(db, actor, options = {}) {
 		if (options.cwd) {
 			where.push("(json_extract(artifact, '$.repository') = ? or json_extract(request, '$.cwd') = ?)");
 			args.push(options.cwd, options.cwd);
+		}
+		if (options.people) {
+			where.push("(requester in (select value from json_each(?)) or owner in (select value from json_each(?)))");
+			args.push(JSON.stringify(options.people), JSON.stringify(options.people));
 		}
 		const filter = where.length ? `where ${where.join(" and ")}` : "";
 		const groups = db.prepare(`select state, count(*) as count from review_jobs ${filter} group by state`).all(...args);
@@ -6291,8 +6296,9 @@ function readReviewPart(db, actor, id, options = {}) {
 			case "attempt":
 				if (!options.attempt) throw new Error("The attempt part requires an attempt ID");
 				return attemptRecord(db, job.id, options.attempt);
-			case "attempts": return page(db.prepare("select id, pass_id as pass, kind, role, state, model, thinking, reason, json_extract(result, '$.usage') as usage, reuse_blocked_by as reuseBlockedBy, output is not null as hasOutput, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ? order by created_at, rowid").all(job.id).map((row) => ({
+			case "attempts": return page(db.prepare("select id, pass_id as pass, kind, reviewer, role, state, model, thinking, reason, json_extract(result, '$.usage') as usage, reuse_blocked_by as reuseBlockedBy, output is not null as hasOutput, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ? order by created_at, rowid").all(job.id).map((row) => ({
 				...row,
+				reviewer: JSON.parse(row.reviewer),
 				usage: row.usage ? JSON.parse(row.usage) : null,
 				hasOutput: Boolean(row.hasOutput),
 				selected: Object.values(job.selectedAttempts).includes(row.id)
@@ -6305,6 +6311,7 @@ function readReviewPart(db, actor, id, options = {}) {
 					...entry,
 					attempt: entry.attempt ? {
 						id: entry.attempt.id,
+						reviewer: entry.attempt.reviewer,
 						state: entry.attempt.state,
 						role: entry.attempt.role,
 						model: entry.attempt.model,
@@ -6396,7 +6403,7 @@ function transcriptTail(file) {
 	}
 }
 function reviewLogs(db, review, options) {
-	const columns = "id, pass_id as pass, kind, state, model, session_file as sessionFile";
+	const columns = "id, pass_id as pass, kind, reviewer, state, model, session_file as sessionFile";
 	let rows;
 	if (options.attempt) {
 		const row = db.prepare(`select ${columns} from review_attempts where review_id = ? and id = ?`).get(review, options.attempt);
@@ -6407,9 +6414,10 @@ function reviewLogs(db, review, options) {
 		if (!rows.length) rows = db.prepare(`select ${columns} from review_attempts where review_id = ? order by created_at desc, rowid desc limit 1`).all(review);
 	}
 	const limit = options.limit ?? 20;
-	return rows.map(({ id, sessionFile, ...row }) => ({
+	return rows.map(({ id, sessionFile, reviewer, ...row }) => ({
 		attempt: id,
 		...row,
+		reviewer: JSON.parse(reviewer),
 		entries: sessionFile ? transcriptTail(sessionFile).slice(-limit) : []
 	}));
 }
@@ -7820,7 +7828,8 @@ var ReviewRequestSchema = Type.Object({
 	target: GitTargetSchema,
 	paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
 	intent: Type.Optional(Type.Union([Type.Object({ text: text$2 }, object$3), Type.Object({ path: Type.String({ minLength: 1 }) }, object$3)])),
-	lenses: Type.Optional(Type.Array(text$2))
+	lenses: Type.Optional(Type.Array(text$2)),
+	workers: Type.Optional(Type.Array(text$2))
 }, object$3);
 var ReviewOperationSchema = Type.Union([
 	Type.Object({

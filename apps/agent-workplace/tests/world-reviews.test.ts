@@ -115,7 +115,12 @@ async function openWorkplace(options: { height?: number; seen?: Record<string, s
 			const fixture = w.reviewRows[0];
 			w.agentWorkplace.reviews = {
 				states: async () =>
-					w.reviewRows.map((row: { id: string; state: string }) => ({ id: row.id, state: row.state })),
+					w.reviewRows.map((row: { id: string; state: string; owner: string }) => ({
+						id: row.id,
+						state: row.state,
+						requester: row.owner,
+						owner: row.owner,
+					})),
 				queue: async (request: { hideAddressed?: boolean; cwd?: string }) => {
 					w.reviewCalls.queues.push(request);
 					const rows = request.hideAddressed ? [] : w.reviewRows;
@@ -307,6 +312,7 @@ async function openWorkplace(options: { height?: number; seen?: Record<string, s
 								id: "attempt",
 								pass: "value-correctness",
 								kind: "focused",
+								reviewer: { kind: "temp" },
 								role: "code-review-specialist",
 								state: "completed",
 								model: "provider/strong",
@@ -315,6 +321,21 @@ async function openWorkplace(options: { height?: number; seen?: Record<string, s
 								usage: { cost: { total: 0.62 } },
 								createdAt: at,
 								finishedAt: at + 272_000,
+								selected: true,
+							},
+							{
+								id: "attempt-worker",
+								pass: "consumers",
+								kind: "integration",
+								reviewer: { kind: "worker", person: "grace", name: "Grace Hopper" },
+								role: "implementation-engineer",
+								state: "completed",
+								model: "provider/worker",
+								thinking: null,
+								reason: null,
+								usage: { cost: { total: 0.4 } },
+								createdAt: at,
+								finishedAt: at + 120_000,
 								selected: true,
 							},
 						]),
@@ -484,6 +505,14 @@ test("Reviews is its own app: queue cards, progress, every evidence tab and anal
 			await shot(page, `${theme}-findings`);
 			if (theme === "light") await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
 		}
+		await reviews.getByRole("tab", { name: "Attempts", exact: true }).click();
+		const workerRow = reviews.getByRole("row").filter({ hasText: "consumers" });
+		await workerRow.getByText("Grace Hopper").waitFor();
+		expect(await workerRow.locator(".wp-kind-badge").textContent()).toBe("worker");
+		expect(
+			await reviews.getByRole("row").filter({ hasText: "value-correctness" }).locator(".wp-kind-badge").textContent(),
+		).toBe("temp");
+		await shot(page, "dark-attempts");
 		await reviews.getByRole("tab", { name: "Summary", exact: true }).click();
 		await shot(page, "dark-summary");
 		await page.setViewportSize({ width: 900, height: 700 });

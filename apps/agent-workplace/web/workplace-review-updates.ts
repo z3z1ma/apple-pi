@@ -25,8 +25,18 @@ function writeSeen(seen: Seen) {
 	} catch {}
 }
 
-export function useReviewUpdates(connected: boolean): ReviewUpdates {
-	const [states, setStates] = useState<Record<string, string>>();
+export function useReviewUpdates(connected: boolean, members?: Set<string>): ReviewUpdates {
+	const [rows, setRows] = useState<Record<string, { state: string; people: string[] }>>();
+	const states = useMemo(
+		() =>
+			rows &&
+			Object.fromEntries(
+				Object.entries(rows)
+					.filter(([, row]) => !members || row.people.some((person) => members.has(person)))
+					.map(([id, row]) => [id, row.state]),
+			),
+		[rows, members],
+	);
 	const [seen, setSeen] = useState<Seen | null>(readSeen);
 	useEffect(() => {
 		if (!connected) return;
@@ -34,10 +44,13 @@ export function useReviewUpdates(connected: boolean): ReviewUpdates {
 		const read = () =>
 			void Promise.resolve()
 				.then(() => window.agentWorkplace.reviews.states({}))
-				.then((rows) => {
+				.then((found) => {
 					if (!live) return;
-					const next = Object.fromEntries(rows.map((row) => [row.id, row.state]));
-					setStates((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
+					const next = Object.fromEntries(found.map((row) => [row.id, row.state]));
+					const described = Object.fromEntries(
+						found.map((row) => [row.id, { state: row.state, people: [row.requester, row.owner] }]),
+					);
+					setRows((previous) => (JSON.stringify(previous) === JSON.stringify(described) ? previous : described));
 					setSeen((previous) => {
 						const kept = previous ? Object.fromEntries(Object.entries(previous).filter(([id]) => id in next)) : next;
 						if (previous && Object.keys(kept).length === Object.keys(previous).length) return previous;
@@ -74,8 +87,11 @@ export function useReviewUpdates(connected: boolean): ReviewUpdates {
 	);
 	const markAllSeen = useCallback(() => {
 		if (!states) return;
-		setSeen(states);
-		writeSeen(states);
+		setSeen((previous) => {
+			const next = { ...previous, ...states };
+			writeSeen(next);
+			return next;
+		});
 	}, [states]);
 	return { updated, markSeen, markAllSeen };
 }

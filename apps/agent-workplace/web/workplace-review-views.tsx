@@ -19,6 +19,7 @@ import type {
 	ReviewThreadMessage,
 } from "../../../components/code-review/src/results.js";
 import type { ReviewConfiguration, ReviewRequest } from "../../../components/code-review/src/types.js";
+import { KindBadge } from "./workplace-people.js";
 
 type Page<T> = { total: number; page: { offset: number; nextOffset: number | null; rows: T[] } | null };
 type Tone = "done" | "live" | "warn" | "bad" | "muted";
@@ -643,6 +644,7 @@ type AttemptRow = {
 	id: string;
 	pass: string;
 	kind: string;
+	reviewer?: { kind: "temp" } | { kind: "worker"; person: string; name: string | null };
 	role: string;
 	state: string;
 	model: string | null;
@@ -662,6 +664,7 @@ function AttemptsView({ data }: { data: Page<AttemptRow> }) {
 				<tr>
 					<th>Pass</th>
 					<th>State</th>
+					<th>Reviewer</th>
 					<th>Role and model</th>
 					<th className="num">Time</th>
 					<th className="num">Cost</th>
@@ -677,6 +680,16 @@ function AttemptsView({ data }: { data: Page<AttemptRow> }) {
 						</td>
 						<td>
 							<Pill tone={stateTone(row.state)}>{row.state}</Pill>
+						</td>
+						<td>
+							{row.reviewer?.kind === "worker" ? (
+								<>
+									{row.reviewer.name ?? row.reviewer.person}
+									<KindBadge kind="worker" />
+								</>
+							) : (
+								<KindBadge kind="temp" />
+							)}
 						</td>
 						<td>
 							{row.role}

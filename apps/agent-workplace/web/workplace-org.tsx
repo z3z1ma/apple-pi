@@ -10,6 +10,7 @@ import { OrgNameEditor } from "./workplace-org-name.js";
 import { OrgSearch } from "./workplace-org-search.js";
 import { ChatPeople, PersonProfile } from "./workplace-people.js";
 import { usePaneResize } from "./workplace-resize.js";
+import { WorkHistory } from "./workplace-work-history.js";
 import "./workplace-org.css";
 
 type Position = {
@@ -49,12 +50,16 @@ export function orgPeople(world: WorldSnapshot): Person[] {
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Owns the retained plan, profile and recruitment panels across navigation and startup receipts.
 export function Org({
 	world,
+	everyone = world,
+	root,
 	active,
 	openDM,
 	openChannel,
 	onPlanChange,
 }: {
 	world: WorldSnapshot;
+	everyone?: WorldSnapshot;
+	root?: string;
 	active: boolean;
 	openDM: (id: string) => void;
 	openChannel?: (id: string) => void;
@@ -65,7 +70,6 @@ export function Org({
 	const [notice, setNotice] = useState<string>();
 	const [selected, setSelected] = useState<string>();
 	const [parent, setParent] = useState("");
-	const [team, setTeam] = useState<string>();
 	const [addingTo, setAddingTo] = useState<string>();
 	const [recruiting, setRecruiting] = useState(false);
 	const [departing, setDeparting] = useState(false);
@@ -80,11 +84,10 @@ export function Org({
 	const [result, setResult] = useState<OrgStartProgress>();
 	const trigger = useRef<HTMLElement | null>(null);
 	const people = orgPeople(world);
+	const everybody = orgPeople(everyone);
 	const parents = new Map(people.map((person) => [person.character.id, person.parent]));
-	const teamCount = people.filter(
-		(candidate) =>
-			(!candidate.parent || !parents.has(candidate.parent)) && descendants(candidate.character.id, parents).length > 1,
-	).length;
+	const head = people.find((candidate) => candidate.character.id === root);
+	const away = people.filter((candidate) => candidate.home).length;
 	const person = people.find((candidate) => candidate.character.id === selected);
 	const currentPosition = draft?.positions.find((candidate) => candidate.id === position);
 	const recordedSpecialization = currentPosition?.existing
@@ -290,7 +293,7 @@ export function Org({
 				);
 			else if (response.kickoff) {
 				const headId = response.people.find((member) => member.id === draft.positions[0]?.id)?.person;
-				const headName = people.find((candidate) => candidate.character.id === headId)?.character.name;
+				const headName = everybody.find((candidate) => candidate.character.id === headId)?.character.name;
 				setNotice(`Sent the team task to ${headName ?? "the team head"}; they coordinate the reports.`);
 			} else setNotice(response.note ?? "Team ready for instructions.");
 		} catch (reason) {
@@ -312,7 +315,7 @@ export function Org({
 					{draft.positions.map((item, index) => {
 						const member = result?.people.find((value) => value.id === item.id);
 						const identity = member?.person ?? item.person ?? (item.existing ? item.id : undefined);
-						const actual = people.find((value) => value.character.id === identity);
+						const actual = everybody.find((value) => value.character.id === identity);
 						return (
 							<div key={item.id} className="wp-org-progress-person" data-state={member?.state ?? "pending"}>
 								<strong>
@@ -333,7 +336,7 @@ export function Org({
 					{result?.kickoff && (
 						<p>
 							Sent the team task to{" "}
-							{people.find(
+							{everybody.find(
 								(value) =>
 									value.character.id === result.people.find((member) => member.id === draft.positions[0]?.id)?.person,
 							)?.character.name ?? "the team head"}
@@ -386,27 +389,40 @@ export function Org({
 		<ChatPeople.Provider value={{ world, openDM, openProfile: (id, _name, element) => select(id, element) }}>
 			<section className="wp-org" aria-label="Organization chart">
 				<header className="wp-org-toolbar">
-					<div>
-						<span className="wp-eyebrow">PEOPLE & TEAMS</span>
-						<OrgNameEditor id="workspace" name="Your organization" defaultName="Your organization" heading="h1" />
-						<p>
-							{teamCount} teams · {people.length} people
-						</p>
-					</div>
+					{head ? (
+						<WorkHistory world={world} team={head.character.id} compact>
+							{(openWork, summary) => (
+								<div className="wp-org-identity-block">
+									<span className="wp-eyebrow">ORGANIZATION</span>
+									<OrgNameEditor
+										key={head.character.id}
+										id={head.character.id}
+										name={head.character.name}
+										heading="h1"
+										onOpenWork={openWork}
+									/>
+									<p>
+										{people.length} {people.length === 1 ? "person" : "people"}
+										{away ? ` \u00b7 ${away} away` : ""}
+									</p>
+									<div className="wp-org-team-work">{summary}</div>
+								</div>
+							)}
+						</WorkHistory>
+					) : (
+						<div>
+							<span className="wp-eyebrow">ORGANIZATION</span>
+							<h1>No organization yet</h1>
+						</div>
+					)}
 					<div className="wp-org-tools">
 						<OrgSearch
 							world={world}
-							onTeam={(id) => setTeam(id)}
+							onTeam={(id) => {
+								if (!recruiting) select(id);
+							}}
 							onPerson={(id) => {
-								if (recruiting) return;
-								let root = id;
-								const visited = new Set<string>();
-								while (parents.get(root) && parents.has(parents.get(root)!) && !visited.has(root)) {
-									visited.add(root);
-									root = parents.get(root)!;
-								}
-								setTeam(root);
-								select(id);
+								if (!recruiting) select(id);
 							}}
 						/>
 						{draft && (planHidden || selected || addingTo) && (
@@ -449,8 +465,7 @@ export function Org({
 					<OrgChart
 						world={world}
 						people={people}
-						team={team}
-						setTeam={setTeam}
+						root={root}
 						selected={selected}
 						busy={busy || recruiting}
 						manages={manages}
@@ -736,7 +751,7 @@ export function Org({
 												disabled={busy || typeof api.orgMove !== "function"}
 												options={[
 													{ value: "", label: "Independent" },
-													...people
+													...everybody
 														.filter(
 															(candidate) =>
 																manages(candidate) && !descendants(selected, parents).includes(candidate.character.id),
@@ -744,6 +759,7 @@ export function Org({
 														.map((candidate) => ({
 															value: candidate.character.id,
 															label: candidate.character.name,
+															...(parents.has(candidate.character.id) ? {} : { detail: "Another workspace" }),
 														})),
 												]}
 												onChange={(value) => {
@@ -766,7 +782,7 @@ export function Org({
 					<OrgMoveConfirm
 						name={people.find((item) => item.character.id === move.person)?.character.name ?? move.person}
 						reports={move.branch.length - 1}
-						manager={people.find((item) => item.character.id === move.manager)?.character.name}
+						manager={everybody.find((item) => item.character.id === move.manager)?.character.name}
 						error={error}
 						busy={busy}
 						onCancel={() => {

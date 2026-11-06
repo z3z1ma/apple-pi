@@ -187,6 +187,22 @@ body.workplace {
 	align-items: center;
 	gap: 3px;
 }
+.wp-rail .wp-brand {
+	display: block;
+	width: 38px;
+	padding: 0;
+	border: 0;
+	font-size: 15px;
+	letter-spacing: 0;
+	cursor: pointer;
+}
+.wp-rail .wp-brand:hover:not(:disabled) {
+	background: #ffffff26;
+}
+.wp-rail .wp-brand:focus-visible {
+	outline: 2px solid white;
+	outline-offset: 2px;
+}
 .wp-rail-icon {
 	display: grid;
 	place-items: center;
@@ -1776,6 +1792,25 @@ body.workplace {
 }
 .wp-chat-sidebar .wp-person-icon {
 	width: 30px;
+}
+.wp-kind-badge {
+	display: inline-block;
+	flex: none;
+	margin-left: 5px;
+	padding: 0 5px;
+	border: 1px solid var(--wp-border);
+	border-radius: 4px;
+	color: var(--wp-muted);
+	font-size: 10px;
+	font-weight: 600;
+	line-height: 15px;
+	text-transform: uppercase;
+	letter-spacing: 0.3px;
+	vertical-align: middle;
+}
+.wp-kind-badge[data-kind="worker"] {
+	border-color: var(--wp-accent);
+	color: var(--wp-accent);
 }
 .wp-name-link,
 .wp-thread-header .wp-name-link {

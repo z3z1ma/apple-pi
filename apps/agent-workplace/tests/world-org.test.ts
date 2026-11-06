@@ -329,7 +329,8 @@ function presenceMark(row: ReturnType<Page["locator"]>) {
 }
 
 async function openTeam(page: Page, name: string) {
-	await page.getByRole("button", { name: `Open team: ${name}`, exact: true }).click();
+	await page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ }).click();
+	await page.getByRole("menuitem", { name: new RegExp(`^(\u2713 )?${name}( organization)?( \\(\\d+\\))?$`) }).click();
 }
 
 test.each(["light", "dark"] as const)(
@@ -341,21 +342,24 @@ test.each(["light", "dark"] as const)(
 			expect(
 				await page.getByRole("button", { name: "Theme: dark mode", exact: true }).getAttribute("aria-pressed"),
 			).toBe(String(appearance === "dark"));
-			await page.getByRole("button", { name: "Open team: Ada", exact: true }).waitFor();
-			await page.getByRole("button", { name: "Open team: Daria", exact: true }).waitFor();
+			await page.getByRole("button", { name: "Workspace: Ada organization. Switch workspace", exact: true }).waitFor();
 			await shot(page, `${appearance}-overview`);
-			await openTeam(page, "Ada");
-			const navigatorHandle = page.getByRole("separator", { name: "Org team navigator width", exact: true });
+			const directoryHandle = page.getByRole("separator", { name: "Org people directory width", exact: true });
+			const directory = page.getByRole("region", { name: "People directory", exact: true });
 			if (appearance === "light") {
-				const navigator = page.getByRole("navigation", { name: "Teams", exact: true });
-				const initialWidth = (await navigator.boundingBox())!.width;
-				await navigatorHandle.focus();
-				await page.keyboard.press("ArrowRight");
-				await vi.waitFor(async () => expect((await navigator.boundingBox())!.width).toBeGreaterThan(initialWidth));
-				expect(await navigatorHandle.evaluate((node) => document.activeElement === node)).toBe(true);
+				const initialWidth = (await directory.boundingBox())!.width;
+				await directoryHandle.focus();
+				await page.keyboard.press("ArrowLeft");
+				await page.keyboard.press("ArrowLeft");
+				await vi.waitFor(async () => expect((await directory.boundingBox())!.width).not.toBe(initialWidth));
+				expect(await directoryHandle.evaluate((node) => document.activeElement === node)).toBe(true);
 			} else {
-				expect(await navigatorHandle.isVisible()).toBe(false);
+				expect(await directoryHandle.isVisible()).toBe(false);
 			}
+			const people = page.getByRole("table", { name: "People", exact: true });
+			for (const name of ["Ada", "Ben", "Cleo", "Ellis"])
+				await people.getByRole("button", { name, exact: true }).waitFor();
+			expect(await people.getByRole("button", { name: "Daria", exact: true }).count()).toBe(0);
 			for (const name of ["Ada", "Ben", "Cleo", "Ellis"])
 				await page.getByRole("button", { name: `View profile: ${name}`, exact: true }).waitFor();
 			expect(await page.getByRole("button", { name: "View profile: Former", exact: true }).count()).toBe(0);
@@ -448,9 +452,10 @@ test.each(["light", "dark"] as const)(
 			expect(await sleepingProfile.locator(".wp-avatar-tile").getAttribute("title")).toBe("Away");
 			await sleepingProfile.getByText("I verify changes before delivery. Session: ellis.", { exact: true }).waitFor();
 			await sleepingProfile.getByRole("button", { name: "Close profile", exact: true }).click();
-			await page.getByRole("button", { name: "All teams", exact: true }).click();
-			await page.getByRole("button", { name: "Open team: Ada", exact: true }).waitFor();
-			await page.getByRole("button", { name: "Open team: Daria", exact: true }).waitFor();
+			await openTeam(page, "Daria");
+			await page.getByRole("button", { name: "View profile: Daria report", exact: true }).waitFor();
+			expect(await page.getByRole("button", { name: "View profile: Ada", exact: true }).count()).toBe(0);
+			await page.getByRole("heading", { name: "Daria organization", level: 1 }).waitFor();
 			expect(await page.evaluate(() => (window as any).orgCalls.conversations)).toEqual([]);
 			expect(await page.evaluate(() => (window as any).orgCalls.seen)).toEqual([]);
 			expect(await page.evaluate(() => (window as any).orgCalls.starts)).toEqual([]);
@@ -521,33 +526,24 @@ test("DM and VIP hover highlights the whole row while selection remains distinct
 
 test("People directory and sidebar actions preserve selection, drafts and resizable profiles", async () => {
 	const snapshot = world();
-	snapshot.characters.push(person("solo", "Solo", null));
+	snapshot.characters.push(person("solo", "Solo", "ada"));
 	snapshot.characters.find((candidate) => candidate.id === "solo")!.facts!.title = null;
-	snapshot.dormant!.push({ ...snapshot.dormant![0]!, id: "home-alone", name: "Home alone", reportsTo: null });
+	snapshot.dormant!.push({ ...snapshot.dormant![0]!, id: "home-alone", name: "Home alone", reportsTo: "ada" });
 	const { page, errors } = await openOrg("light", snapshot);
 	try {
 		const directory = page.getByRole("table", { name: "People", exact: true });
 		await directory.waitFor();
-		for (const column of ["Name", "Role", "Status", "Team"])
+		for (const column of ["Name", "Status", "Reports to"])
 			await directory.getByRole("columnheader", { name: column, exact: true }).waitFor();
-		for (const name of ["Ada", "Ben", "Cleo", "Daria", "Daria report", "Ellis", "Solo", "Home alone"])
-			expect(await directory.getByRole("button", { name: `View profile: ${name}`, exact: true }).count()).toBe(1);
-		for (const name of ["Temporary peer", "Former"])
-			expect(await directory.getByRole("button", { name: `View profile: ${name}`, exact: true }).count()).toBe(0);
-		expect(await page.getByRole("button", { name: "Open team: Solo", exact: true }).count()).toBe(0);
-		expect(await page.getByRole("button", { name: "Open team: Home alone", exact: true }).count()).toBe(0);
-		const cards = page.getByRole("region", { name: "All teams", exact: true });
-		expect(await cards.getByRole("group").count()).toBe(2);
-		expect((await cards.boundingBox())!.y + (await cards.boundingBox())!.height).toBeLessThanOrEqual(
-			(await directory.boundingBox())!.y,
-		);
-		const solo = directory
-			.getByRole("row")
-			.filter({ has: page.getByRole("button", { name: "View profile: Solo", exact: true }) });
-		expect(await solo.getByRole("cell", { name: "Independent", exact: true }).count()).toBe(1);
+		for (const name of ["Ada", "Ben", "Cleo", "Ellis", "Solo", "Home alone"])
+			expect(await directory.getByRole("button", { name, exact: true }).count()).toBe(1);
+		for (const name of ["Temporary peer", "Former", "Daria", "Daria report"])
+			expect(await directory.getByRole("button", { name, exact: true }).count()).toBe(0);
+		const solo = directory.getByRole("row").filter({ has: page.getByRole("button", { name: "Solo", exact: true }) });
+		expect(await solo.getByRole("cell", { name: "Ada", exact: true }).count()).toBe(1);
 		const home = directory
 			.getByRole("row")
-			.filter({ has: page.getByRole("button", { name: "View profile: Home alone", exact: true }) });
+			.filter({ has: page.getByRole("button", { name: "Home alone", exact: true }) });
 		expect(await home.getByRole("cell", { name: "Away", exact: true }).count()).toBe(1);
 		const soloMenu = solo.getByRole("button", { name: "Person actions: Solo", exact: true });
 		await soloMenu.click();
@@ -561,8 +557,9 @@ test("People directory and sidebar actions preserve selection, drafts and resiza
 		for (const kind of ["profiles", "taskReads", "conversations", "seen", "moves", "starts"])
 			expect(calls[kind]).toEqual([]);
 		expect(await soloMenu.evaluate((node) => document.activeElement === node)).toBe(true);
-		const cardMenu = cards
-			.getByRole("group", { name: "Ada's team", exact: true })
+		const cardMenu = directory
+			.getByRole("row")
+			.filter({ has: page.getByRole("button", { name: "Ada", exact: true }) })
 			.getByRole("button", { name: "Person actions: Ada", exact: true });
 		await cardMenu.click();
 		await menu.getByRole("menuitem", { name: "Let go", exact: true }).waitFor();
@@ -571,7 +568,7 @@ test("People directory and sidebar actions preserve selection, drafts and resiza
 		expect(await page.getByRole("complementary", { name: /^Profile:/ }).count()).toBe(0);
 		expect(await page.evaluate(() => (window as any).orgCalls.profiles)).toEqual([]);
 		await shot(page, "directory-light-1440");
-		await solo.getByRole("button", { name: "View profile: Solo", exact: true }).click();
+		await solo.getByRole("button", { name: "Solo", exact: true }).click();
 		const profile = page.getByRole("complementary", { name: "Profile: Solo", exact: true });
 		await profile.getByText("I verify changes before delivery. Session: solo.", { exact: true }).waitFor();
 		const firstProfileReads = await page.evaluate(() => (window as any).orgCalls.profiles);
@@ -746,9 +743,9 @@ test("People directory and sidebar actions preserve selection, drafts and resiza
 	}
 }, 30_000);
 
-test("organization cards align their footers across varied work and explain unavailable recruitment", async () => {
+test("each organization is its own workspace with only its own tree, people and recruitment", async () => {
 	const snapshot = world();
-	snapshot.characters.push(person("solo", "Solo", null), person("solo-report", "Solo report", "solo"));
+	snapshot.characters.push(person("solo", "Solo", null));
 	snapshot.dormant!.push({
 		...snapshot.dormant![0]!,
 		id: "sleeping-head",
@@ -757,56 +754,46 @@ test("organization cards align their footers across varied work and explain unav
 		reportsTo: null,
 	});
 	snapshot.characters.push(person("sleeping-report", "Sleeping report", "sleeping-head"));
-	const longTitle =
-		"Review keyboard access, screen-reader announcements, retained editor drafts, team setup recovery, and all reporting workflows across the complete organization interface.";
-	snapshot.workplace!.workHistory = WORK.map((task, index) =>
-		index === 0 ? { ...task, title: longTitle, updatedAt: NOW + 1 } : task,
-	);
 	const { page, errors } = await openOrg("light", snapshot);
 	try {
-		const cards = page.locator(".wp-org-team-card");
-		await page.getByRole("button", { name: "Open team: Sleeping head", exact: true }).waitFor();
-		expect(await cards.count()).toBe(4);
-		for (const width of [1440, 900]) {
-			await page.setViewportSize({ width, height: 900 });
-			const geometry = await cards.evaluateAll((nodes) =>
-				nodes.map((node) => {
-					const card = node.getBoundingClientRect();
-					const footer = node.querySelector(".wp-org-team-actions")!.getBoundingClientRect();
-					return { height: card.height, footerInset: card.bottom - footer.bottom };
-				}),
-			);
-			for (const card of geometry) {
-				expect(card.height).toBeCloseTo(geometry[0]!.height, 0);
-				expect(card.footerInset).toBeCloseTo(geometry[0]!.footerInset, 0);
-			}
-			const title = page.getByText(longTitle, { exact: true });
-			expect(await title.getAttribute("title")).toBe(longTitle);
-			expect(
-				await title.evaluate(
-					(node) => node.getBoundingClientRect().height <= parseFloat(getComputedStyle(node).lineHeight) * 2 + 1,
+		const switcher = page.getByRole("button", { name: "Workspace: Ada organization. Switch workspace", exact: true });
+		await switcher.click();
+		const menu = page.getByRole("menu", { name: "Actions", exact: true });
+		expect(await menu.getByRole("menuitem").allTextContents()).toEqual([
+			"\u2713 Ada organization",
+			"Daria organization (2)",
+			"Sleeping head organization (1)",
+			"Solo organization (1)",
+		]);
+		await page.keyboard.press("Escape");
+		const directory = page.getByRole("table", { name: "People", exact: true });
+		const chart = page.locator(".wp-org-chart-canvas");
+		for (const [workspace, people, add] of [
+			["Ada", ["Ada", "Ben", "Cleo", "Ellis"], true],
+			["Daria", ["Daria", "Daria report"], true],
+			["Solo", ["Solo"], false],
+			["Sleeping head", ["Sleeping head", "Sleeping report"], false],
+		] as const) {
+			await openTeam(page, workspace);
+			await page.getByRole("heading", { name: `${workspace} organization`, level: 1 }).waitFor();
+			expect(await page.locator(".wp-topbar strong").first().textContent()).toContain(`${workspace} organization`);
+			await vi.waitFor(async () =>
+				expect((await directory.locator(".wp-org-directory-name").allTextContents()).sort()).toEqual(
+					[...people].sort(),
 				),
-			).toBe(true);
-			expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-			await shot(page, `light-card-footers-${width}`);
+			);
+			expect(await chart.getByRole("button", { name: /^View profile:/ }).count()).toBe(people.length);
+			expect(await page.getByRole("button", { name: "Add person", exact: true }).count()).toBe(add ? 1 : 0);
+			await shot(page, `workspace-${workspace.toLowerCase().replace(" ", "-")}`);
 		}
-		expect(await page.getByText("Head: Ada", { exact: true }).count()).toBe(0);
-		for (const [name, reason] of [
-			["Solo", "This role cannot manage people"],
-			["Sleeping head", "Wake team head to add a person"],
-		]) {
-			const add = page.getByRole("button", { name: `Add person to ${name}'s team`, exact: true });
-			expect(await add.isVisible()).toBe(true);
-			expect(await add.isEnabled()).toBe(false);
-			expect(await add.getAttribute("title")).toBe(reason);
-		}
+		await page.reload();
+		await page.getByRole("button", { name: "Org", exact: true }).click();
 		await page
-			.getByRole("group", { name: "Ada's team", exact: true })
-			.getByRole("button", { name: "View profile: Ada", exact: true })
-			.click();
-		await page.getByRole("complementary", { name: "Profile: Ada", exact: true }).waitFor();
+			.getByRole("button", { name: "Workspace: Sleeping head organization. Switch workspace", exact: true })
+			.waitFor();
 		const calls = await page.evaluate(() => (window as any).orgCalls);
-		for (const action of ["recruits", "starts", "moves", "conversations", "seen"]) expect(calls[action]).toEqual([]);
+		for (const action of ["recruits", "starts", "moves", "conversations", "seen", "profiles"])
+			expect(calls[action]).toEqual([]);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();
@@ -821,9 +808,17 @@ test.each(["light", "dark"] as const)(
 		const { page, errors } = await openOrg(appearance, snapshot);
 		try {
 			await page.setViewportSize({ width: appearance === "dark" ? 900 : 1440, height: 900 });
-			const card = page.getByRole("group", { name: "Ada's team", exact: true });
-			const name = card.getByRole("button", { name: "Ada organization", exact: true });
-			expect(await card.getByRole("button", { name: /^View (?:all )?recorded work/ }).count()).toBe(0);
+			const organizationButton = (workspace: string) =>
+				page
+					.getByRole("heading", { name: `${workspace} organization`, level: 1 })
+					.getByRole("button", { name: `${workspace} organization`, exact: true });
+			const name = organizationButton("Ada");
+			expect(
+				await page
+					.locator(".wp-org-toolbar")
+					.getByRole("button", { name: /^View (?:all )?recorded work/ })
+					.count(),
+			).toBe(0);
 			await shot(page, `${appearance}-organization-work-trigger`);
 			await name.click();
 			const modal = page.getByRole("dialog", { name: "Recorded team work", exact: true });
@@ -845,13 +840,12 @@ test.each(["light", "dark"] as const)(
 			await menu.waitFor();
 			expect(await modal.count()).toBe(0);
 			await page.keyboard.press("Escape");
-			await page.getByRole("button", { name: "Solo organization", exact: true }).click();
+			await openTeam(page, "Solo");
+			await organizationButton("Solo").click();
 			await modal.getByText("No matching work.", { exact: true }).waitFor();
 			await page.keyboard.press("Escape");
 			await openTeam(page, "Ada");
-			const headingName = page
-				.getByRole("heading", { name: "Ada organization", exact: true })
-				.getByRole("button", { name: "Ada organization", exact: true });
+			const headingName = organizationButton("Ada");
 			await headingName.focus();
 			await page.keyboard.press(appearance === "dark" ? "Space" : "Enter");
 			await modal.waitFor();
@@ -949,21 +943,13 @@ test("organization display names persist locally, cancel cleanly and relabel cha
 		await form.getByRole("textbox", { name: "Organization name", exact: true }).fill("Reporting Team");
 		await form.getByRole("button", { name: "Save name", exact: true }).click();
 		await page.getByRole("button", { name: "Reporting Team", exact: true }).waitFor();
-		await openTeam(page, "Ada");
-		await page.getByRole("heading", { name: "Reporting Team", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Reporting Team", level: 1 }).waitFor();
+		await page.getByRole("button", { name: "Workspace: Reporting Team. Switch workspace", exact: true }).waitFor();
 		await page.getByRole("button", { name: "View profile: Ada", exact: true }).waitFor();
 		await openTeam(page, "Daria");
-		const search = page.getByRole("searchbox", { name: "Search people, teams, and work", exact: true });
-		const results = page.getByRole("region", { name: "Organization search results", exact: true });
-		await search.fill("Reporting Team");
-		await results.getByRole("button", { name: "Open team: Reporting Team", exact: true }).first().click();
-		await results.waitFor({ state: "hidden" });
-		await page.getByRole("heading", { name: "Reporting Team", exact: true }).waitFor();
-		await openTeam(page, "Daria");
-		await search.fill("Build the reporting editor");
-		await results.getByRole("button", { name: "Open recorded team: Reporting Team", exact: true }).click();
-		await results.waitFor({ state: "hidden" });
-		await page.getByRole("heading", { name: "Reporting Team", exact: true }).waitFor();
+		await page.getByRole("heading", { name: "Daria organization", level: 1 }).waitFor();
+		await openTeam(page, "Reporting Team");
+		await page.getByRole("heading", { name: "Reporting Team", level: 1 }).waitFor();
 		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual([]);
 		await shot(page, "light-organization-name");
 		await page.getByRole("button", { name: "Chat", exact: true }).click();
@@ -1152,10 +1138,26 @@ test("reporting controls and dragging confirm the same branch; refusals preserve
 		await page.getByRole("button", { name: "View profile: Ben", exact: true }).click();
 		expect(await chosen(reporting)).toBe("ada");
 		await page.getByRole("button", { name: "Close profile", exact: true }).click();
-		await card(page, "Ben").dragTo(page.getByRole("button", { name: "Open team: Daria", exact: true }));
+		await card(page, "Cleo").dragTo(card(page, "Ada"));
 		await confirmMove(page);
 		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).orgCalls.moves)).toHaveLength(2));
-		expect(await page.evaluate(() => (window as any).orgCalls.moves[1])).toEqual(first);
+		expect(await page.evaluate(() => (window as any).orgCalls.moves[1])).toEqual({
+			person: "cleo",
+			manager: "ada",
+			branch: ["cleo"],
+		});
+		await page.evaluate(() =>
+			(window as any).releaseOrgMove({ ok: false, reason: "Kept for this journey", tasks: [] }),
+		);
+		await page
+			.getByRole("dialog", { name: "Change reporting?", exact: true })
+			.getByRole("button", { name: "Cancel", exact: true })
+			.click();
+		await page.getByRole("button", { name: "View profile: Ben", exact: true }).click();
+		await choose(reporting, "daria");
+		await confirmMove(page);
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).orgCalls.moves)).toHaveLength(3));
+		expect(await page.evaluate(() => (window as any).orgCalls.moves[2])).toEqual(first);
 		const moved = world();
 		moved.characters.find((item) => item.id === "ben")!.facts!.reportsTo = "daria";
 		await page.evaluate((next) => {
@@ -1168,15 +1170,14 @@ test("reporting controls and dragging confirm the same branch; refusals preserve
 		expect(await chosen(reporting)).toBe("daria");
 		await choose(reporting, "");
 		await confirmMove(page);
-		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).orgCalls.moves)).toHaveLength(3));
-		expect(await page.evaluate(() => (window as any).orgCalls.moves[2])).toEqual({ ...first, manager: null });
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).orgCalls.moves)).toHaveLength(4));
+		expect(await page.evaluate(() => (window as any).orgCalls.moves[3])).toEqual({ ...first, manager: null });
 		moved.characters.find((item) => item.id === "ben")!.facts!.reportsTo = null;
 		await page.evaluate((next) => {
 			(window as any).pushOrg(next);
 			(window as any).releaseOrgMove({ ok: true, person: "ben", manager: null, branch: ["ben", "cleo", "ellis"] });
 		}, moved);
 		await page.getByRole("dialog", { name: "Change reporting?", exact: true }).waitFor({ state: "hidden" });
-		await page.getByRole("button", { name: "All teams", exact: true }).click();
 		await openTeam(page, "Ben");
 		await page.getByRole("button", { name: "View profile: Ben", exact: true }).click();
 		expect(await chosen(reporting)).toBe("");
@@ -1454,13 +1455,9 @@ test("closing and resuming setup preserves partial identities; replacing it need
 		expect(await plan.getByRole("textbox", { name: "Team task", exact: true }).inputValue()).toBe("");
 		expect(await plan.getByRole("button", { name: /^Planned role:/ }).count()).toBe(1);
 		expect(await progress.count()).toBe(0);
-		expect(await page.getByRole("button", { name: "Open team: Retained head", exact: true }).count()).toBe(0);
-		expect(
-			await page
-				.getByRole("table", { name: "People", exact: true })
-				.getByRole("button", { name: "View profile: Retained head", exact: true })
-				.count(),
-		).toBe(1);
+		await page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ }).click();
+		await page.getByRole("menuitem", { name: /^Retained head organization/ }).waitFor();
+		await page.keyboard.press("Escape");
 		const calls = await page.evaluate(() => (window as any).orgCalls);
 		expect(calls.starts).toHaveLength(2);
 		for (const action of ["moves", "wakes", "closes", "recruits", "conversations", "seen"])
@@ -1824,7 +1821,7 @@ test("large work history stays in a bounded modal with independent scrolling and
 	}
 }, 30_000);
 
-test("Org search crosses teams using snapshot metadata and reads work only on request", async () => {
+test("Org search stays in its workspace, uses snapshot metadata and reads work only on request", async () => {
 	const { page, errors } = await openOrg();
 	try {
 		const search = page.getByRole("searchbox", { name: "Search people, teams, and work", exact: true });
@@ -1835,13 +1832,10 @@ test("Org search crosses teams using snapshot metadata and reads work only on re
 		const profile = page.getByRole("complementary", { name: "Profile: Ellis", exact: true });
 		await profile.getByText(/Away/).waitFor();
 		await profile.getByRole("button", { name: "Close profile", exact: true }).click();
-		await search.fill("Daria");
-		await results
-			.getByRole("listitem")
-			.filter({ has: page.getByRole("button", { name: "View person: Daria", exact: true }) })
-			.getByRole("button", { name: "Open team: Daria", exact: true })
-			.click();
-		await page.getByRole("button", { name: "View profile: Daria", exact: true }).waitFor();
+		await search.fill("Ben");
+		await results.getByRole("button", { name: "View person: Ben", exact: true }).waitFor();
+		await search.fill("Daria report");
+		expect(await results.getByRole("button", { name: "View person: Daria report", exact: true }).count()).toBe(0);
 		await search.fill("invoice");
 		await results.getByText("Recorded organization: Daria", { exact: true }).waitFor();
 		expect(await page.evaluate(() => (window as any).orgCalls.taskReads)).toEqual([]);
