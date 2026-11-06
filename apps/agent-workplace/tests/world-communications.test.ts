@@ -60,7 +60,9 @@ async function openWorkplace() {
 				{ id: "ada", name: "Ada", wings: [] },
 				{ id: "ben", name: "Ben", wings: [] },
 			],
-			operatorMail: [{ id: "mail:review", subject: "Review exchange", lastAt: 1000, unread: 1 }],
+			operatorMail: [
+				{ id: "mail:review", subject: "Review exchange", lastAt: 1000, unread: 1, participants: ["operator", "ada"] },
+			],
 			workplace: {
 				threads: [
 					{
@@ -673,6 +675,10 @@ test("Mail keeps addressed replies and plain text while its draft survives Chat 
 		expect(posted[0]).toMatchObject({ thread: "mail:review", body: "Keep my addressed reply draft." });
 		expect(Object.hasOwn(posted[0], "notify")).toBe(false);
 		expect((await calls(page, "readThread")).every((read: any) => read.view === "recent" && !read.attempt)).toBe(true);
+		await switchWorkspace(page, "Ben");
+		expect(await page.getByRole("button", { name: /Review exchange/ }).count()).toBe(0);
+		expect(await page.getByText("Mail evidence remains literal: <b>private</b>.", { exact: true }).count()).toBe(0);
+		expect(await page.getByRole("textbox", { name: "Reply to everyone", exact: true }).count()).toBe(0);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

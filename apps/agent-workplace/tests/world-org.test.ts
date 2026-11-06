@@ -754,6 +754,8 @@ test("each organization is its own workspace with only its own tree, people and 
 		reportsTo: null,
 	});
 	snapshot.characters.push(person("sleeping-report", "Sleeping report", "sleeping-head"));
+	snapshot.dormant!.push({ ...snapshot.dormant![1]!, id: "gone", name: "Gone", reportsTo: "ada" });
+	snapshot.characters.push(person("survivor", "Survivor", "gone"));
 	const { page, errors } = await openOrg("light", snapshot);
 	try {
 		const switcher = page.getByRole("button", { name: "Workspace: Ada organization. Switch workspace", exact: true });
@@ -764,6 +766,7 @@ test("each organization is its own workspace with only its own tree, people and 
 			"Daria organization (2)",
 			"Sleeping head organization (1)",
 			"Solo organization (1)",
+			"Survivor organization (1)",
 		]);
 		await page.keyboard.press("Escape");
 		const directory = page.getByRole("table", { name: "People", exact: true });
@@ -773,6 +776,7 @@ test("each organization is its own workspace with only its own tree, people and 
 			["Daria", ["Daria", "Daria report"], true],
 			["Solo", ["Solo"], false],
 			["Sleeping head", ["Sleeping head", "Sleeping report"], false],
+			["Survivor", ["Survivor"], false],
 		] as const) {
 			await openTeam(page, workspace);
 			await page.getByRole("heading", { name: `${workspace} organization`, level: 1 }).waitFor();
@@ -786,14 +790,22 @@ test("each organization is its own workspace with only its own tree, people and 
 			expect(await page.getByRole("button", { name: "Add person", exact: true }).count()).toBe(add ? 1 : 0);
 			await shot(page, `workspace-${workspace.toLowerCase().replace(" ", "-")}`);
 		}
+		await openTeam(page, "Ada");
+		await page.getByRole("button", { name: "Collapse reports of Ben", exact: true }).click();
+		expect(await chart.getByRole("button", { name: "View profile: Cleo", exact: true }).count()).toBe(0);
+		await directory.getByRole("button", { name: "Cleo", exact: true }).click();
+		await chart.getByRole("button", { name: "View profile: Cleo", exact: true }).waitFor();
+		await page.getByRole("complementary", { name: "Profile: Cleo", exact: true }).waitFor();
+		await page.getByRole("button", { name: "Close profile", exact: true }).click();
+		await openTeam(page, "Sleeping head");
 		await page.reload();
 		await page.getByRole("button", { name: "Org", exact: true }).click();
 		await page
 			.getByRole("button", { name: "Workspace: Sleeping head organization. Switch workspace", exact: true })
 			.waitFor();
 		const calls = await page.evaluate(() => (window as any).orgCalls);
-		for (const action of ["recruits", "starts", "moves", "conversations", "seen", "profiles"])
-			expect(calls[action]).toEqual([]);
+		for (const action of ["recruits", "starts", "moves", "conversations", "seen"]) expect(calls[action]).toEqual([]);
+		expect(calls.profiles.every((id: string) => id === "cleo")).toBe(true);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

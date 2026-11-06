@@ -48,6 +48,7 @@ export function workspaces(world: WorldSnapshot): Workspace[] {
 	const people = orgPeople(world);
 	const lasting = new Set(people.map((person) => person.character.id));
 	const parents = parentsOf(world);
+	for (const person of people) if (person.parent && !lasting.has(person.parent)) parents.set(person.character.id, null);
 	const size = (workspace: Workspace) => [...workspace.members].filter((id) => lasting.has(id)).length;
 	return people
 		.filter((person) => !person.parent || !lasting.has(person.parent))

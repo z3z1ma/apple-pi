@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useContext, useEffect, useMemo, useState } from "react";
+import { Fragment, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	Character,
 	Desk,
@@ -63,11 +63,16 @@ function deskCandidates(world: WorldSnapshot): { id: string; name: string; away:
 	return [...awake, ...asleep];
 }
 
-function DeskSetup({ world }: { world: WorldSnapshot }) {
+function DeskSetup({ world, focus = false }: { world: WorldSnapshot; focus?: boolean }) {
 	const root = useContext(WorkspaceContext).current?.id;
 	const candidates = deskCandidates(world);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState("");
+	const actions = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (focus) actions.current?.querySelector<HTMLButtonElement>("button")?.focus();
+	}, [focus]);
+	const sleepingHead = root ? world.dormant?.find((person) => person.id === root) : undefined;
 	const open = async (person: string) => {
 		setBusy(true);
 		setError("");
@@ -109,7 +114,7 @@ function DeskSetup({ world }: { world: WorldSnapshot }) {
 				name: "",
 				cwd,
 				role: "coordinator",
-				...(root && head && !head.facts?.temporary ? { reportsTo: root } : {}),
+				...(head ? { reportsTo: head.id } : {}),
 			});
 			if (!receipt.ok || !receipt.sessionId) {
 				setError(receipt.ok ? "The coordinator could not start." : receipt.reason);
@@ -133,7 +138,7 @@ function DeskSetup({ world }: { world: WorldSnapshot }) {
 				work, and tells you when something needs you.
 			</p>
 			{candidates.length ? (
-				<div className="wp-desk-candidates">
+				<div className="wp-desk-candidates" ref={actions}>
 					{candidates.map((candidate) => (
 						<button
 							key={candidate.id}
@@ -148,9 +153,17 @@ function DeskSetup({ world }: { world: WorldSnapshot }) {
 					))}
 				</div>
 			) : (
-				<button type="button" className="wp-primary" disabled={busy} onClick={() => void hire()}>
-					Hire a coordinator and open the desk
-				</button>
+				<div className="wp-desk-candidates" ref={actions}>
+					<button type="button" className="wp-primary" disabled={busy || !!sleepingHead} onClick={() => void hire()}>
+						Hire a coordinator and open the desk
+					</button>
+					{sleepingHead && (
+						<p>
+							{sleepingHead.name} is away. Call them in first: a coordinator hired here reports to them, and only an
+							awake manager can hire.
+						</p>
+					)}
+				</div>
 			)}
 			{error && <p className="wp-error">{error}</p>}
 		</div>
@@ -257,6 +270,8 @@ function TaskChip({
 	);
 }
 
+let arrivingAtDesk = false;
+
 export function DeskView({
 	world,
 	desk,
@@ -277,7 +292,14 @@ export function DeskView({
 	const place = useContext(WorkspaceContext);
 	const home = desk ? workspaceOf(place.all, desk.person) : undefined;
 	const elsewhere = home && place.current && home.id !== place.current.id ? home : undefined;
-	if (!desk || (elsewhere && movingTo === place.current?.id)) return <DeskSetup world={world} />;
+	const heading = useRef<HTMLHeadingElement>(null);
+	useEffect(() => {
+		if (!arrivingAtDesk || !heading.current) return;
+		arrivingAtDesk = false;
+		heading.current.focus();
+	});
+	if (!desk || (elsewhere && movingTo === place.current?.id))
+		return <DeskSetup world={world} focus={!!desk && movingTo === place.current?.id} />;
 	if (elsewhere)
 		return (
 			<div className="wp-desk-setup">
@@ -287,7 +309,14 @@ export function DeskView({
 				<h1>The desk is run from {elsewhere.name}</h1>
 				<p>There is one desk. Its coordinator works in another workspace; open it there, or run it from here.</p>
 				<div className="wp-desk-candidates">
-					<button type="button" className="wp-primary" onClick={() => chooseWorkspace(elsewhere.id)}>
+					<button
+						type="button"
+						className="wp-primary"
+						onClick={() => {
+							arrivingAtDesk = true;
+							chooseWorkspace(elsewhere.id);
+						}}
+					>
 						Go there
 					</button>
 					<button type="button" className="wp-desk-secondary" onClick={() => setMovingTo(place.current?.id)}>
@@ -306,7 +335,9 @@ export function DeskView({
 					<Icon name="desk" />
 				</span>
 				<div className="wp-header-person">
-					<h1>Desk</h1>
+					<h1 ref={heading} tabIndex={-1}>
+						Desk
+					</h1>
 					<p>
 						{listener ? (
 							<>

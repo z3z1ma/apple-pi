@@ -151,12 +151,25 @@ export function OrgChart({
 		element.scrollLeft += bounds.left + anchor.x * zoom - anchor.clientX;
 		element.scrollTop += bounds.top + anchor.y * zoom - anchor.clientY;
 	}, [zoom]);
+	const parentOf = useRef(new Map<string, string | null>());
+	parentOf.current = new Map(people.map((person) => [person.character.id, person.parent]));
+	const [revealed, setRevealed] = useState<string>();
 	useEffect(() => {
 		if (!selected) return;
+		const ancestors = new Set<string>();
+		for (let id = parentOf.current.get(selected); id && !ancestors.has(id); id = parentOf.current.get(id))
+			ancestors.add(id);
+		setCollapsed((value) =>
+			[...value].some((id) => ancestors.has(id)) ? new Set([...value].filter((id) => !ancestors.has(id))) : value,
+		);
+		setRevealed(selected);
+	}, [selected]);
+	useEffect(() => {
+		if (!selected || revealed !== selected) return;
 		const at = `[data-person="${CSS.escape(selected)}"]`;
 		canvas.current?.querySelector(at)?.scrollIntoView({ block: "nearest", inline: "nearest" });
 		directory.current?.querySelector(at)?.scrollIntoView({ block: "nearest" });
-	}, [selected]);
+	}, [selected, revealed]);
 	useEffect(() => {
 		if (headId) setFitting(true);
 	}, [headId]);

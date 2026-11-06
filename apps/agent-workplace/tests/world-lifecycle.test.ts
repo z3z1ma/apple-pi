@@ -284,6 +284,14 @@ test("VIPs group four lasting people including nested sleepers without duplicati
 		expect((await calls(page)).wake).toEqual([]);
 		await switchTo("Ada");
 		await direct.waitFor();
+		await sidebar.getByText(/^Away \(/).click();
+		expect(
+			await sidebar
+				.getByRole("button", { name: /^Temporary sleeper/ })
+				.locator(".wp-kind-badge")
+				.textContent(),
+		).toBe("temp");
+		await sidebar.getByText(/^Away \(/).click();
 		expect(await headSection.count()).toBe(0);
 		expect((await ada.boundingBox())!.y).toBeGreaterThan((await direct.boundingBox())!.y);
 		expect(await sidebar.getByRole("button", { name: /^Daria/, includeHidden: true }).count()).toBe(0);

@@ -6425,6 +6425,7 @@ function reviewAnalytics(db, actor, options = {}) {
 	return snapshot(db, () => {
 		const summaries = reviewQueue(db, actor, {
 			cwd: options.cwd,
+			people: options.people,
 			limit: Number.MAX_SAFE_INTEGER
 		}).page?.rows ?? [];
 		const byModel = /* @__PURE__ */ new Map();

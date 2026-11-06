@@ -273,7 +273,10 @@ export function PersonProfile({
 					interactive={false}
 					presence={id === "operator" ? undefined : presenceOf(person, !!dormant)}
 				/>
-				<h3>{name}</h3>
+				<h3>
+					{name}
+					{isTemporary(people.world, id) && <KindBadge kind="temp" />}
+				</h3>
 				<p className="wp-profile-status">
 					{id === "operator"
 						? "Operator"

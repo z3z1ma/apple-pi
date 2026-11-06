@@ -865,9 +865,17 @@ function reviewLogs(db: DatabaseSync, review: string, options: ReviewReadOptions
 	}));
 }
 
-export function reviewAnalytics(db: DatabaseSync, actor: string, options: { cwd?: string } = {}): ReviewAnalytics {
+export function reviewAnalytics(
+	db: DatabaseSync,
+	actor: string,
+	options: { cwd?: string; people?: string[] } = {},
+): ReviewAnalytics {
 	return snapshot(db, () => {
-		const queue = reviewQueue(db, actor, { cwd: options.cwd, limit: Number.MAX_SAFE_INTEGER });
+		const queue = reviewQueue(db, actor, {
+			cwd: options.cwd,
+			people: options.people,
+			limit: Number.MAX_SAFE_INTEGER,
+		});
 		const summaries = queue.page?.rows ?? [];
 		const byModel = new Map<string, ReviewAnalytics["byModel"][number]>();
 		const byPhase = new Map<ReviewAttempt["kind"], ReviewAnalytics["byPhase"][number]>();

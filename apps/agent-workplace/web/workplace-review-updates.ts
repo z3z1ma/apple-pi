@@ -8,6 +8,7 @@ export type ReviewUpdates = {
 	updated: Map<string, string | null>;
 	markSeen(id: string): void;
 	markAllSeen(): void;
+	peopleOf(id: string): string[] | undefined;
 };
 
 function readSeen(): Seen | null {
@@ -93,5 +94,6 @@ export function useReviewUpdates(connected: boolean, members?: Set<string>): Rev
 			return next;
 		});
 	}, [states]);
-	return { updated, markSeen, markAllSeen };
+	const peopleOf = useCallback((id: string) => rows?.[id]?.people, [rows]);
+	return { updated, markSeen, markAllSeen, peopleOf };
 }

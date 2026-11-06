@@ -45,7 +45,7 @@ export interface ReviewsApi {
 		hideAddressed?: boolean;
 		around?: string;
 	}): Promise<ReviewQueue>;
-	analytics(request: { cwd?: string }): Promise<ReviewAnalytics>;
+	analytics(request: { cwd?: string; people?: string[] }): Promise<ReviewAnalytics>;
 	read(request: {
 		review: string;
 		part:

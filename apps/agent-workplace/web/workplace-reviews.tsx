@@ -509,7 +509,7 @@ export function WorkplaceReviews({
 					</button>
 				</div>
 			)}
-			{analytics && <ReviewAnalyticsView api={api} root={root} version={version} />}
+			{analytics && <ReviewAnalyticsView api={api} root={root} people={people} version={version} />}
 			<div className="wp-rv-body" ref={body} style={listPane.style} hidden={analytics}>
 				<aside className="wp-rv-list" ref={listPane.ref} aria-label="Reviews">
 					<ul ref={list} aria-label="Review queue">
@@ -880,14 +880,25 @@ function Stat({ label, value, note }: { label: string; value: ReactNode; note?: 
 	);
 }
 
-function ReviewAnalyticsView({ api, root, version }: { api: ReviewsApi; root: string; version: number }) {
+function ReviewAnalyticsView({
+	api,
+	root,
+	people,
+	version,
+}: {
+	api: ReviewsApi;
+	root: string;
+	people?: string[];
+	version: number;
+}) {
 	const [data, setData] = useState<{ key: string; value: ReviewAnalytics }>();
 	const [error, setError] = useState("");
-	const key = JSON.stringify([root, version]);
+	const key = JSON.stringify([root, people ?? null, version]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the key holds root, people and version.
 	useEffect(() => {
 		let live = true;
 		void api
-			.analytics(root ? { cwd: root } : {})
+			.analytics({ ...(root ? { cwd: root } : {}), ...(people ? { people } : {}) })
 			.then((value) => {
 				if (!live) return;
 				setError("");

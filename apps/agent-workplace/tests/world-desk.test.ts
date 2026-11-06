@@ -246,6 +246,14 @@ async function openDesk(appearance: "light" | "dark", width = 1440, desk = true)
 				};
 				for (const listener of listeners) listener(world);
 			};
+			w.addRoot = (id: string, name: string) => {
+				const root = person(id, name, "Implementation Engineer");
+				world = {
+					...world,
+					characters: [...world.characters, { ...root, facts: { ...root.facts, reportsTo: null, unseen: false } }],
+				};
+				for (const listener of listeners) listener(world);
+			};
 			w.work = [];
 			w.agentWorkplace = {
 				credentialStatus: async () => ({ atlassian: null, slack: null }),
@@ -1132,6 +1140,37 @@ test("Without a desk, Chat offers to open one with the root coordinator", { time
 			name: "desk",
 			invite: ["cora"],
 		});
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("another workspace says where the desk is run, and Go there or Run it here keep keyboard focus", {
+	timeout: 60_000,
+}, async () => {
+	const { page, errors } = await openDesk("light");
+	try {
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
+		await page.evaluate(() => (window as any).addRoot("nadia", "Nadia"));
+		await page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ }).click();
+		await page.getByRole("menuitem", { name: /^Nadia organization/ }).click();
+		await page.getByRole("heading", { name: "The desk is run from Cora organization", exact: true }).waitFor();
+		await shot(page, "desk-elsewhere-light");
+		await page.getByRole("button", { name: "Run the desk from here", exact: true }).focus();
+		await page.keyboard.press("Enter");
+		const hire = page.getByRole("button", { name: "Hire a coordinator and open the desk", exact: true });
+		await vi.waitFor(async () => expect(await hire.evaluate((node) => node === document.activeElement)).toBe(true));
+		await page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ }).click();
+		await page.getByRole("menuitem", { name: /^Cora organization/ }).click();
+		await page.getByRole("heading", { name: "Desk", exact: true }).waitFor();
+		await page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ }).click();
+		await page.getByRole("menuitem", { name: /^Nadia organization/ }).click();
+		await page.getByRole("button", { name: "Go there", exact: true }).focus();
+		await page.keyboard.press("Enter");
+		const desk = page.getByRole("heading", { name: "Desk", exact: true });
+		await vi.waitFor(async () => expect(await desk.evaluate((node) => node === document.activeElement)).toBe(true));
+		await page.getByRole("button", { name: "Workspace: Cora organization. Switch workspace", exact: true }).waitFor();
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

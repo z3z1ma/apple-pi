@@ -44,7 +44,7 @@ async function openWorkplace(options: { height?: number; seen?: Record<string, s
 			const w = window as any;
 			if (seen) localStorage.setItem("workplace-reviews-seen", JSON.stringify(seen));
 			Object.defineProperty(navigator, "clipboard", { value: { writeText: async () => {} } });
-			w.reviewCalls = { captures: [], signOffs: [], sources: [], manage: [], queues: [] };
+			w.reviewCalls = { captures: [], signOffs: [], sources: [], manage: [], queues: [], analytics: [] };
 			const review = (id: string, state: string, subject: string, extra: Record<string, unknown> = {}) => ({
 				id,
 				state,
@@ -131,18 +131,21 @@ async function openWorkplace(options: { height?: number; seen?: Record<string, s
 						page: { offset: 0, nextOffset: null, rows },
 					};
 				},
-				analytics: async () => ({
-					reviews: 1,
-					settled: 1,
-					dollars: 1.23,
-					confirmed: 1,
-					medianMinutes: 4.5,
-					byModel: [
-						{ model: "provider/strong", attempts: 2, dollars: 1, minutes: 9, confirmed: 1, severities: { high: 1 } },
-					],
-					byPhase: [{ kind: "focused", attempts: 2, dollars: 1, minutes: 9 }],
-					recent: [],
-				}),
+				analytics: async (request: unknown) => {
+					w.reviewCalls.analytics.push(request);
+					return {
+						reviews: 1,
+						settled: 1,
+						dollars: 1.23,
+						confirmed: 1,
+						medianMinutes: 4.5,
+						byModel: [
+							{ model: "provider/strong", attempts: 2, dollars: 1, minutes: 9, confirmed: 1, severities: { high: 1 } },
+						],
+						byPhase: [{ kind: "focused", attempts: 2, dollars: 1, minutes: 9 }],
+						recent: [],
+					};
+				},
 				manage: async (request: unknown) => {
 					w.reviewCalls.manage.push(request);
 					return fixture;
@@ -471,6 +474,7 @@ test("Reviews is its own app: queue cards, progress, every evidence tab and anal
 		);
 		await reviews.getByRole("button", { name: "Analytics", exact: true }).click();
 		await page.getByRole("region", { name: "Review analytics" }).getByText("provider/strong").waitFor();
+		expect(await calls(page, "analytics")).toEqual([{ people: ["owner"] }]);
 		await shot(page, "light-analytics");
 		await reviews.getByRole("button", { name: "Analytics", exact: true }).click();
 		await reviews.getByText("Hide addressed", { exact: true }).click();

@@ -75,6 +75,7 @@ import {
 	scopeWorld,
 	useChosenWorkspace,
 	WorkspaceContext,
+	workspaceOf,
 	workspaces,
 	workspaceUnread,
 } from "./workplace-workspaces.js";
@@ -328,12 +329,18 @@ function Workplace() {
 	const [reviewsVisited, setReviewsVisited] = useState(initialView === "reviews");
 	const [reviewRequest, setReviewRequest] = useState<{ id: string; key: string }>();
 	const reviewUpdates = useReviewUpdates(!!world?.connected, workspace?.members);
-	const openReview = useCallback((id: string) => {
+	const showPersonWorkspace = (people: string[]) => {
+		if (people.some((person) => workspace?.members.has(person))) return;
+		const home = people.map((person) => workspaceOf(allWorkspaces, person)).find(Boolean);
+		if (home) chooseWorkspace(home.id);
+	};
+	const openReview = (id: string) => {
+		showPersonWorkspace([...(reviewUpdates.peopleOf(id) ?? [])].reverse());
 		setReviewRequest({ id, key: crypto.randomUUID() });
 		setReviewsVisited(true);
 		setView("reviews");
 		history.replaceState(null, "", "?workplace=reviews");
-	}, []);
+	};
 	const [issuesVisited, setIssuesVisited] = useState(initialView === "issues");
 	const [worldVisited, setWorldVisited] = useState(initialView === "world");
 	const [codeDirty, setCodeDirty] = useState(false);
@@ -369,9 +376,15 @@ function Workplace() {
 		history.replaceState(null, "", "?workplace=chat");
 	};
 	const openDM = (id: string) => {
+		showPersonWorkspace([id]);
 		setRequestedDM({ id, key: crypto.randomUUID() });
 		setView("chat");
 		history.replaceState(null, "", "?workplace=chat");
+	};
+	const switchWorkspace = (id: string) => {
+		setRequestedDM(undefined);
+		setRequestedChannel(undefined);
+		chooseWorkspace(id);
 	};
 	const unread = scoped ? inboxThreads(scoped).reduce((sum, thread) => sum + thread.unread, 0) : 0;
 	const openMenu = useWorkplaceMenu();
@@ -397,7 +410,7 @@ function Workplace() {
 		const count = world && each.id !== workspace?.id ? workspaceUnread(world, each) : 0;
 		return {
 			label: `${each.id === workspace?.id ? "\u2713 " : ""}${each.name}${count ? ` (${count})` : ""}`,
-			onSelect: () => chooseWorkspace(each.id),
+			onSelect: () => switchWorkspace(each.id),
 		};
 	});
 	return (
@@ -532,6 +545,7 @@ function Workplace() {
 								<WorkplacePersonActions world={world}>
 									<div hidden={view !== "chat"}>
 										<Chat
+											key={workspace?.id}
 											world={scoped}
 											active={view === "chat"}
 											requestedDM={requestedDM}
@@ -539,7 +553,7 @@ function Workplace() {
 										/>
 									</div>
 									<div hidden={view !== "mail"}>
-										<Mail world={scoped} active={view === "mail"} drafts={drafts} />
+										<Mail key={workspace?.id} world={scoped} active={view === "mail"} drafts={drafts} />
 									</div>
 									{orgVisited && (
 										<div hidden={view !== "org"}>
@@ -1036,6 +1050,7 @@ function Chat({
 											onClick={() => setSelection({ kind: "dm", id: agent.id })}
 										>
 											{agent.name}
+											{agent.temporary && <KindBadge kind="temp" />}
 											<small>Away</small>
 										</button>
 									))}

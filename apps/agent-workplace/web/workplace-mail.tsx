@@ -3,7 +3,7 @@ import type { CommunicationResult } from "../src/communications.js";
 import type { MailItem, MailThreadSummary, WorldSnapshot } from "../src/world.js";
 import { Recipients } from "./workplace-fields.js";
 import { Icon } from "./workplace-icon.js";
-import { PersonAvatar } from "./workplace-people.js";
+import { isTemporary, KindBadge, PersonAvatar } from "./workplace-people.js";
 import { usePaneResize } from "./workplace-resize.js";
 import { ThreadPane } from "./workplace-thread.js";
 import "./workplace-mail.css";
@@ -107,7 +107,10 @@ function InboxRow({
 			<Avatar id={author} world={world} />
 			<span className="wp-mail-row-text">
 				<span className="wp-mail-row-top">
-					<strong>{names.length ? names.join(", ") : (thread.lastFromName ?? "Pi")}</strong>
+					<strong>
+						{names.length ? names.join(", ") : (thread.lastFromName ?? "Pi")}
+						{others.some((id) => isTemporary(world, id)) && <KindBadge kind="temp" />}
+					</strong>
 					<time dateTime={new Date(thread.lastAt).toISOString()}>{when(thread.lastAt)}</time>
 				</span>
 				<span className="wp-mail-row-subject">
@@ -154,7 +157,10 @@ function LetterRow({
 			<span className="wp-mail-row-text">
 				<span className="wp-mail-row-top">
 					<strong>
-						{letter.fromName} <span className="wp-mail-arrow">→</span> {recipients.join(", ")}
+						{letter.fromName}
+						{isTemporary(world, letter.from) && <KindBadge kind="temp" />} <span className="wp-mail-arrow">→</span>{" "}
+						{recipients.join(", ")}
+						{letter.deliveries.some((item) => isTemporary(world, item.to)) && <KindBadge kind="temp" />}
 					</strong>
 					<time dateTime={new Date(letter.sentAt).toISOString()}>{when(letter.sentAt)}</time>
 				</span>
@@ -175,7 +181,10 @@ function LetterReader({ world, letter }: { world: WorldSnapshot; letter: Letter 
 			<header>
 				<Avatar id={letter.from} world={world} />
 				<div>
-					<h1>{letter.fromName}</h1>
+					<h1>
+						{letter.fromName}
+						{isTemporary(world, letter.from) && <KindBadge kind="temp" />}
+					</h1>
 					<p>
 						{when(letter.sentAt)} · to {letter.deliveries.length} {letter.deliveries.length === 1 ? "person" : "people"}
 					</p>
