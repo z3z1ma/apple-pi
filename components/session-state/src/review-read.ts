@@ -777,7 +777,7 @@ function reviewThread(db: DatabaseSync, review: string): ReviewThreadMessage[] {
 
 const LOG_TAIL_BYTES = 512 * 1024;
 
-function transcriptTail(file: string): ReviewLogEntry[] {
+function transcriptTail(file: string, fork?: { person: string; offset: number | null }): ReviewLogEntry[] {
 	let descriptor: number;
 	try {
 		descriptor = openSync(file, "r");
@@ -786,11 +786,13 @@ function transcriptTail(file: string): ReviewLogEntry[] {
 	}
 	try {
 		const size = fstatSync(descriptor).size;
-		const start = Math.max(0, size - LOG_TAIL_BYTES);
+		if (fork && !validForkOffset(descriptor, size, fork.person, fork.offset)) return [];
+		const boundary = fork?.offset ?? 0;
+		const start = Math.max(boundary, size - LOG_TAIL_BYTES);
 		const buffer = Buffer.alloc(size - start);
 		readSync(descriptor, buffer, 0, buffer.length, start);
 		const lines = buffer.toString("utf8").split("\n");
-		if (start > 0) lines.shift();
+		if (start > boundary) lines.shift();
 		const clip = (text: string) => (text.length > 400 ? `${text.slice(0, 400)}\u2026` : text);
 		return lines.flatMap((line): ReviewLogEntry[] => {
 			let entry: { type?: string; timestamp?: string; message?: Record<string, unknown> } | null;
@@ -829,12 +831,27 @@ function transcriptTail(file: string): ReviewLogEntry[] {
 	}
 }
 
+function validForkOffset(descriptor: number, size: number, person: string, offset: number | null): boolean {
+	if (offset === null || !Number.isSafeInteger(offset) || offset < 0 || offset >= size) return false;
+	const buffer = Buffer.alloc(Math.min(LOG_TAIL_BYTES, size - offset));
+	readSync(descriptor, buffer, 0, buffer.length, offset);
+	try {
+		const entry = JSON.parse(buffer.toString("utf8").split("\n")[0]!);
+		return entry.type === "custom" && entry.customType === "program-fork" && entry.data?.session === person;
+	} catch {
+		return false;
+	}
+}
+
 function reviewLogs(db: DatabaseSync, review: string, options: ReviewReadOptions): ReviewAttemptLog[] {
-	const columns = "id, pass_id as pass, kind, reviewer, state, model, session_file as sessionFile";
+	const columns =
+		"id, pass_id as pass, kind, reviewer, state, model, session_file as sessionFile, person, fork_offset as forkOffset";
 	type Row = Omit<ReviewAttemptLog, "attempt" | "entries" | "reviewer"> & {
 		reviewer: string;
 		id: string;
 		sessionFile: string | null;
+		person: string;
+		forkOffset: number | null;
 	};
 	let rows: Row[];
 	if (options.attempt) {
@@ -857,12 +874,19 @@ function reviewLogs(db: DatabaseSync, review: string, options: ReviewReadOptions
 				.all(review) as Row[];
 	}
 	const limit = options.limit ?? 20;
-	return rows.map(({ id, sessionFile, reviewer, ...row }) => ({
-		attempt: id,
-		...row,
-		reviewer: JSON.parse(reviewer),
-		entries: sessionFile ? transcriptTail(sessionFile).slice(-limit) : [],
-	}));
+	return rows.map(({ id, sessionFile, reviewer, person, forkOffset, ...row }) => {
+		const identity = JSON.parse(reviewer);
+		return {
+			attempt: id,
+			...row,
+			reviewer: identity,
+			entries: sessionFile
+				? transcriptTail(sessionFile, identity.kind === "worker" ? { person, offset: forkOffset } : undefined).slice(
+						-limit,
+					)
+				: [],
+		};
+	});
 }
 
 export function reviewAnalytics(

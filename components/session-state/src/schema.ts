@@ -495,6 +495,8 @@ const MIGRATIONS = [
 
 	`alter table review_attempts add column reviewer text not null default '{"kind":"temp"}';
 	alter table review_attempts add column fork_file text;`,
+
+	`alter table review_attempts add column fork_offset integer;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

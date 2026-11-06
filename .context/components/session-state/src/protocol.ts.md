@@ -1,5 +1,9 @@
 ## file
 
+Hello.session.forkOffset is optional, identity-bound fork metadata from the bridge, not a requested source path. A new runtime accepts older hellos without it and withholds worker logs lacking a recorded boundary; an older runtime ignores the added field. Cost remains the existing Facts.cost field, already normalized by a current fork bridge to newly generated entries. Fresh-temp hellos and their cost convention are unchanged.
+Coupled: components/session-state/src/program-fork.ts, components/session-state/src/review-read.ts
+Verify: components/session-state/tests/peer-history.test.ts, components/session-state/tests/review-workers.test.ts
+
 Versioned communication commands are runtime-owned, not bridge execution requests. Their original input and canonical operation allow exact-attempt recovery before alias/thread generation. New callers fail on older runtimes rather than silently losing access/notification semantics. Mail kind/reference are optional because retained legacy outbox rows cannot infer them from titles; new publication supplies both.
 
 Communication effects remain on the existing command journal. Receipt.result is still the original correlated turn owner's ephemeral result; retry receipt observation does not transfer its ownership.

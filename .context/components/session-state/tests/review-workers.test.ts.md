@@ -2,6 +2,10 @@
 
 Real isolated runtime, Git capture and program-peer lifecycle; fixture peers use Pi's real SessionManager.forkFrom rather than append to an original worker. One fake bridge represents an awake worker; seeded retained sessions represent workers at home. The public review_code/manage_review path uses a real scripted SDK session. No paid model, shared runtime, UI badge or installed CLI process is exercised.
 
+Foreign worker names and IDs are refused before capture. A worker moved while the review is queued cannot launch; reviewScope separately rechecks authority after attempt persistence, preserving operator authority. Runtime tests use actual public log projections to require new attempt text and exclude inherited worker text. Missing/incorrect offsets yield no entries, while output beyond the bounded tail still retains attempt-local results. The direct scope case seeds a launch-eligible persisted attempt only after actual peer cleanup; it tests that guard, not another process launch.
+Coupled: components/session-state/src/program-fork.ts, components/session-state/src/protocol.ts
+Verify: components/session-state/tests/review-workers.test.ts
+
 Two supplied workers on three planned passes must bind by plan order despite parallel execution; planning remains a temp. A longer list leaves extra workers unused. Cancelled and failed/retried forks must lose every program scope/peer while the lasting people and original session bytes remain. No run_turn may target an original worker. read_review attempts and pass projections expose the same worker metadata, and a native fresh rerun retains the admitted worker IDs.
 
 Review outcomes, full attempt identities/models, and rerun staffing are asserted through read_review's shared public projection, rather than raw review tables. Fork transcripts must retain the selected worker's history as well as leave the original bytes unchanged. Cancellation requires two worker attempts before checking their terminal states.

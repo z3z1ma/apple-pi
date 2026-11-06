@@ -259,6 +259,64 @@ test.each([false, true])(
 	},
 );
 
+test("a real worker fork bridge charges only new work across reloads", async () => {
+	const { state, runtime, host, seedPeer } = await nativeHistory();
+	let run: Awaited<ReturnType<typeof fauxSession>> | undefined;
+	try {
+		const original = SessionManager.create(state.agentDir, join(state.agentDir, "transcripts"));
+		const history = fauxAssistantMessage("Already paid worker history.");
+		history.usage = structuredClone(history.usage);
+		history.usage.cost.total = 37;
+		original.appendMessage(history);
+		const fork = SessionManager.forkFrom(original.getSessionFile()!, state.agentDir, join(state.agentDir, "forks"));
+		const id = fork.getSessionId();
+		seedPeer(id);
+		host.programs.set("program", {
+			program: { id: "program", caller: "caller", closing: false, created: new Set([id]), discarded: new Set() },
+		});
+		vi.stubEnv("PI_PROGRAM_ID", "program");
+		vi.stubEnv("PI_PROGRAM_PARENT", "caller");
+		const replies = [fauxAssistantMessage("New inspection."), fauxAssistantMessage("Later work.")].map((reply) => ({
+			...reply,
+			usage: structuredClone(reply.usage),
+		}));
+		replies[0]!.usage.cost.total = 3;
+		replies[1]!.usage.cost.total = 2;
+		const hello = vi.spyOn(host, "hello");
+		run = await fauxSession([bridge], replies, [], { cwd: state.agentDir, sessionManager: fork });
+		const onError = vi.fn();
+		await run.session.bindExtensions({ onError });
+		await vi.waitFor(() => expect(hello).toHaveBeenCalled());
+		expect(realizedFitness(host.db, "caller", 0, Date.now()).compute).toBe(0);
+		expect(replies).toHaveLength(2);
+		await run.session.prompt("Inspect the change.");
+		await vi.waitFor(() => expect(realizedFitness(host.db, "caller", 0, Date.now()).compute).toBe(3));
+		const priorHellos = hello.mock.calls.length;
+		await run.session.reload();
+		await vi.waitFor(() => expect(hello.mock.calls.length).toBeGreaterThan(priorHellos));
+		expect(realizedFitness(host.db, "caller", 0, Date.now()).compute).toBe(3);
+		await run.session.prompt("Continue the inspection.");
+		await vi.waitFor(() => expect(realizedFitness(host.db, "caller", 0, Date.now()).compute).toBe(5));
+		expect(onError).not.toHaveBeenCalled();
+		await close(run);
+		run = undefined;
+		const nested = SessionManager.forkFrom(fork.getSessionFile()!, state.agentDir, join(state.agentDir, "nested"));
+		const nestedId = nested.getSessionId();
+		seedPeer(nestedId);
+		host.programs.get("program")!.program.created.add(nestedId);
+		run = await fauxSession([bridge], [], [], { cwd: state.agentDir, sessionManager: nested });
+		await vi.waitFor(() =>
+			expect(host.db.prepare("select cost from sessions where id = ?").get(nestedId)).toEqual({ cost: 0 }),
+		);
+		expect(realizedFitness(host.db, "caller", 0, Date.now()).compute).toBe(5);
+	} finally {
+		if (run) await close(run);
+		runtime.stop();
+		vi.unstubAllEnvs();
+		rmSync(state.agentDir, { recursive: true, force: true });
+	}
+});
+
 test.each(["program_peer_created", "cost_changed"])(
 	"new launch ownership and identity/baseline roll back together on %s failure before work or launch",
 	async (type) => {

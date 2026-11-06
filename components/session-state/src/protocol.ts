@@ -276,6 +276,7 @@ export interface Hello {
 		cwd: string;
 		name?: string;
 		program?: { id: string; parent: string };
+		forkOffset?: number;
 	};
 	process: { pid: number; startedAt: number };
 

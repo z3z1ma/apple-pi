@@ -249,7 +249,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 					intent: ReviewRequestSchema.properties.intent,
 					lenses: ReviewRequestSchema.properties.lenses,
 					workers: Type.Optional(
-						Type.Array(text("Names/IDs: private forks take inspection passes in order, then temps.")),
+						Type.Array(text("Your organization's names/IDs; private forks inspect in order, then temps.")),
 					),
 					owner: Type.Optional(
 						text(

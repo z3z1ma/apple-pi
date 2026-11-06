@@ -30,7 +30,7 @@ import type { ReviewArtifact } from "../../code-review/src/types.js";
 import { RETRY_MS } from "./client.js";
 import type { StatePaths } from "./paths.js";
 import { temporaryCallers } from "./program-peers.js";
-import { type ReviewPassRequest, ReviewStop, runReviewAttempt } from "./review-attempt.js";
+import { authorizeReviewWorker, type ReviewPassRequest, ReviewStop, runReviewAttempt } from "./review-attempt.js";
 import { recordReviewDecision, reviewSettled } from "./review-decisions.js";
 import { readReview } from "./review-read.js";
 import { rootOf } from "./tree.js";
@@ -245,6 +245,7 @@ export class ReviewJobs {
 						.all(address, address) as { id: string }[];
 					if (rows.length !== 1 || temporary.has(rows[0]!.id))
 						throw new Error(`Review worker must name one existing lasting person: ${address}`);
+					authorizeReviewWorker(this.db, actor, rows[0]!.id);
 					return rows[0]!.id;
 				});
 			}

@@ -2,6 +2,12 @@ import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { join } from "node:path";
+import {
+	forkBoundary,
+	PROGRAM_FORK_ENTRY,
+	recordProgramFork,
+	sessionCost,
+} from "../../components/session-state/src/program-fork.ts";
 import { reviewReply } from "./review-reply.ts";
 
 const argument = (name) => process.argv[process.argv.indexOf(name) + 1];
@@ -26,6 +32,7 @@ const forked = fork
 			await import("../../node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js")
 		).SessionManager.forkFrom(fork, process.cwd(), records, { id })
 	: undefined;
+if (forked) recordProgramFork(forked, (data) => forked.appendCustomEntry(PROGRAM_FORK_ENTRY, data));
 const file = forked?.getSessionFile() ?? join(records, `${id}.jsonl`);
 if (!forked) writeFileSync(file, `${JSON.stringify({ type: "session", id, cwd: process.cwd() })}\n`);
 const inheritedModel = forked?.buildSessionContext().model;
@@ -95,6 +102,7 @@ if (!stopping) {
 				cwd: process.cwd(),
 				name: `Fixture ${id}`,
 				file,
+				...(forked ? { forkOffset: forkBoundary(forked).offset } : {}),
 				...(process.env.PI_PROGRAM_ID
 					? { program: { id: process.env.PI_PROGRAM_ID, parent: process.env.PI_PROGRAM_PARENT } }
 					: {}),
@@ -105,6 +113,7 @@ if (!stopping) {
 				: {}),
 			run: "idle",
 			facts: {
+				...(forked ? { cost: sessionCost(forked) } : {}),
 				reportsTo: parent,
 				role: inheritedRole ?? role,
 				manages: role === "team-lead",

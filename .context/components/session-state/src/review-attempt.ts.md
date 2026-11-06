@@ -1,5 +1,9 @@
 ## file
 
+Worker selection is limited to the requester's current organization, with the existing operator exception. Check before reuse/attempt persistence and again in reviewScope immediately before runtime launch; an admitted ID is not permanent authority over a worker that moved while queued. Review-job ownership alone does not authorize an arbitrary fork source.
+Why: generation-bound launch ownership authenticated a foreign transcript already admitted without an organization check.
+Verify: components/session-state/tests/review-workers.test.ts
+
 Worker attempts retain an original worker in `reviewer` (kind/person/name) and its source transcript in `fork_file`; `person` always names a new disposable peer. The runtime derives --fork only from that persisted, generation-bound review scope, not a caller-supplied generic program flag. Keep the original worker outside program ownership and cleanup. The original may be awake or at home: no request is sent to its bridge, and its session file is read only by Pi's fork path.
 
 Forks keep their stored role/model rather than overriding their identity with the pass's role or depth profile. Planned-policy fingerprints and captured-source checks still apply, as do silence, cancellation, output validation and guarded cleanup. Temp-only observed-role/model membership checks do not apply to a fork; when the original has an observed model, require the fork to retain it. Record the actual fork model/thinking separately. The pass's role remains the planned inspection perspective, not a claim that its fork changed lifelong role. This deliberately values the selected worker's existing context; authorship avoidance is guidance only. Exact-input reuse also binds worker ID, source file and known model; it does not hash/freeze an evolving worker conversation.

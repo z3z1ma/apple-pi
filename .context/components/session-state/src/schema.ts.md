@@ -1,5 +1,9 @@
 ## file
 
+Migration53 adds nullable review_attempts.fork_offset. Existing worker attempts retain null: their inherited-history boundary is unknown and their logs are withheld rather than guessed. A new fork bridge reports the offset of its identity-bound transcript marker. Keep the physical column in historical-schema.ts's rewind list; earlier migrations stay unchanged.
+Coupled: components/session-state/src/program-fork.ts, components/session-state/src/protocol.ts, components/session-state/src/review-read.ts
+Verify: components/session-state/tests/event-index.test.ts, components/session-state/tests/review-workers.test.ts
+
 Reviewer metadata is a forward-only review_attempts addition: historical attempts default to temp (all launches before worker pools were temps). New worker records retain the original person/name independently from the disposable attempt person; fork_file is its read-only source, not a cleanup target. The historical-schema rewind helper removes both physical columns before replaying earlier versions.
 Verify: components/session-state/tests/review-workers.test.ts, components/session-state/tests/event-index.test.ts
 

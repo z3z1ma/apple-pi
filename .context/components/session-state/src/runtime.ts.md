@@ -84,6 +84,10 @@ Verify: components/session-state/tests/history.test.ts
 
 ## symbol:Runtime.hello
 
+After program/person admission, a hello's optional forkOffset is retained once on its worker review attempt. The bridge binds the offset to the new transcript's program-fork marker; review logs revalidate that marker against the attempt person before reading. Older hellos remain valid but grant no worker-history exposure. Fresh-peer zero-cost initialization stays unchanged; a current fork bridge reports cost after its own persisted marker.
+Coupled: components/session-state/src/program-fork.ts, components/session-state/src/review-read.ts
+Verify: components/session-state/tests/review-workers.test.ts, components/session-state/tests/peer-history.test.ts
+
 Durable temporary identity participates in hello admission even when the incoming bridge has no program flags. A retained transcript preserves UUID while ordinary resume can lose its program environment; only valid live scope/owner/parent matching permits a temporary hello. Rejection sends close before incarnation/person/facts writes. Valid first program hello and same-process reconnect retain their existing behavior, as do ordinary new IDs. This is the same lifetime no-reopen boundary as startSession, not a new ACL or hostile-socket policy.
 Verify: components/session-state/tests/peer-history.test.ts
 

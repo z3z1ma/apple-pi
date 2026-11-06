@@ -21,6 +21,7 @@ import { deliverMail, installMail, mailRecordedIn } from "./mail.js";
 import { statePaths } from "./paths.js";
 import { installPeerTurns } from "./peer-turns.js";
 import { installPeers } from "./peers.js";
+import { forkBoundary, PROGRAM_FORK_ENTRY, recordProgramFork, sessionCost } from "./program-fork.js";
 import {
 	type BridgeMessage,
 	type Command,
@@ -257,15 +258,6 @@ function contextUsage(ctx: ExtensionContext): Pick<Facts, "contextTokens" | "con
 	return { contextTokens: usage?.tokens ?? null, contextWindow: usage?.contextWindow ?? null };
 }
 
-function sessionCost(ctx: ExtensionContext): number {
-	let total = 0;
-	for (const entry of ctx.sessionManager.getEntries()) {
-		if (entry.type !== "message" || entry.message.role !== "assistant") continue;
-		total += entry.message.usage?.cost?.total ?? 0;
-	}
-	return total;
-}
-
 function flagNames(): string[] {
 	return process.argv
 		.slice(2)
@@ -300,6 +292,7 @@ function helloFor(
 	previousSession: Facts["previousSession"],
 ): Hello {
 	const sessions = ctx.sessionManager;
+	const fork = forkBoundary(sessions);
 	return {
 		type: "hello",
 		session: {
@@ -308,6 +301,7 @@ function helloFor(
 			file: sessions.getSessionFile(),
 			cwd: ctx.cwd,
 			name: sessions.getSessionName(),
+			...(fork ? { forkOffset: fork.offset } : {}),
 			...(process.env[PROGRAM_ID_ENV] && process.env[PROGRAM_PARENT_ENV]
 				? { program: { id: process.env[PROGRAM_ID_ENV]!, parent: process.env[PROGRAM_PARENT_ENV]! } }
 				: {}),
@@ -319,7 +313,7 @@ function helloFor(
 			model: modelName(ctx),
 			thinkingLevel: pi.getThinkingLevel(),
 			...contextUsage(ctx),
-			cost: sessionCost(ctx),
+			cost: sessionCost(sessions),
 			prompt: null,
 			queue: { steers: 0, followUps: 0, pending: false },
 			lastError: null,
@@ -717,6 +711,8 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		stop();
 		current = ctx;
 		startingUp = event.reason === "startup";
+		if (startingUp && process.env[PROGRAM_ID_ENV])
+			recordProgramFork(ctx.sessionManager, (data) => pi.appendEntry(PROGRAM_FORK_ENTRY, data));
 		recorded.clear();
 
 		if (event.reason !== "reload") handedOver(ctx.sessionManager.getSessionId()).clear();

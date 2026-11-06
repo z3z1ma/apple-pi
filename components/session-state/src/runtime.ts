@@ -649,6 +649,10 @@ export class Runtime {
 				"update program_peers set pid = ?, process_started_at = ?, pane = coalesce(pane, ?) where session_id = ?",
 			).run(proc.pid, proc.startedAt, hello.tmux?.pane ?? null, session.id);
 		}
+		if (Number.isSafeInteger(session.forkOffset) && session.forkOffset! >= 0)
+			db.prepare(
+				"update review_attempts set fork_offset = coalesce(fork_offset, ?) where person = ? and fork_file is not null",
+			).run(session.forkOffset!, session.id);
 		connection.sessionId = session.id;
 		connection.generation = generation;
 		this.setRunState(session.id, generation, hello.run);

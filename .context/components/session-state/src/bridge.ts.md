@@ -1,5 +1,10 @@
 ## file
 
+Only a program-owned fork at startup records its identity-bound inherited-history marker before hello. sessionCost counts new entries after that marker on every hello/settlement; reloads retain it and do not reset genuine work to a new baseline. Report optional forkOffset with hello for the runtime's log boundary. A fresh temp has no parent transcript/marker and keeps its prior zero-baseline accounting. A legacy already-running bridge without a marker remains readable and does not invent one on reload; new forks require current bridge code.
+Why: bridge cost previously summed copied assistant usage, and the program launch's deliberate zero event made that historical spend look newly incurred.
+Coupled: components/session-state/src/program-fork.ts
+Verify: components/session-state/tests/peer-history.test.ts, components/session-state/tests/review-workers.test.ts
+
 Git context distinguishes a confirmed non-repository (null) from failed inspection (undefined, retaining the previous observation). The common Git directory identifies the repository across linked worktrees. Extension inventory includes tool/command registrants only; hook-only extensions are invisible to Pi's listing. Flag registration remains present even when the bridge is switched off, since Pi rejects an unknown launch flag.
 Why: absence and unavailable observations are different facts, and the host's inventory and command parser set the bridge's information boundary.
 

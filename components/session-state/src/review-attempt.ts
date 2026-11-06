@@ -11,6 +11,7 @@ import { normalizeOutputSchema } from "../../shared/src/structured-output.js";
 import type { TurnResult } from "../../shared/src/turn-observer.js";
 import type { StatePaths } from "./paths.js";
 import { openPeerProgram, type PeerProgram } from "./program-client.js";
+import { rootOf } from "./tree.js";
 
 export class ReviewStop extends Error {}
 
@@ -42,6 +43,11 @@ export interface ReviewPassRequest {
 	reuse?(value: unknown): boolean;
 }
 
+export function authorizeReviewWorker(db: DatabaseSync, requester: string, worker: string): void {
+	if (requester !== "operator" && rootOf(db, requester) !== rootOf(db, worker))
+		throw new ReviewStop("The review worker is outside the requester's organization");
+}
+
 export function reviewScope(
 	db: DatabaseSync,
 	program: string,
@@ -57,6 +63,13 @@ export function reviewScope(
 		| { attempt: string; person: string; role: string; source: string; fork: string | null }
 		| undefined;
 	if (!active?.source) throw new Error("The review attempt no longer owns this launch");
+	if (active.fork) {
+		const row = db
+			.prepare(`select j.requester, json_extract(a.reviewer, '$.person') as worker
+			from review_attempts a join review_jobs j on j.id = a.review_id where a.id = ?`)
+			.get(active.attempt) as { requester: string; worker: string };
+		authorizeReviewWorker(db, row.requester, row.worker);
+	}
 	return active;
 }
 
@@ -77,6 +90,7 @@ export async function runReviewAttempt(
 		throw new ReviewStop(
 			`The review policy for ${pass.role} differs from the planned catalog; resume to plan under current policy`,
 		);
+	if (pass.worker) authorizeReviewWorker(db, job.requester, pass.worker);
 	const worker = pass.worker
 		? (db
 				.prepare("select id, name, model, session_file as file from sessions where id = ? and retired_at is null")

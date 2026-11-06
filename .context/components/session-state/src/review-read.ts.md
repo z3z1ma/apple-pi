@@ -1,5 +1,10 @@
 ## file
 
+Worker logs start at the persisted fork_offset, validated against a program-fork custom entry bound to the attempt's disposable person. Inherited assistant/tool entries are reviewer context, not public review output. Missing offset (including older bridges/attempts), a rewritten/moved marker, wrong identity or invalid offset yields no entries. Temp logs retain their original behavior. Keep the bounded tail read after that boundary, including when the marker itself is outside the tail window.
+Why: review authorization did not authorize publishing the worker's unrelated inherited conversation. A timestamp cannot identify the boundary of a concurrently changing transcript, and an unchecked byte offset would expose history after a rewrite.
+Coupled: components/session-state/src/program-fork.ts, components/session-state/src/schema.ts
+Verify: components/session-state/tests/review-workers.test.ts
+
 Attempt lists and complete attempt/pass records expose `reviewer`: temp, or worker with the original person's retained ID/name. The attempt's own `person` is still its disposable program peer, never the original worker. Workplace's backend forwards these records unchanged.
 Verify: components/session-state/tests/review-workers.test.ts
 

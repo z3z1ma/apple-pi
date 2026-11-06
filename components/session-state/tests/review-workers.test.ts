@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import codeReview from "../../../extensions/code-review.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { sendCommand } from "../src/client.js";
+import { reviewScope } from "../src/review-attempt.js";
 import { type ReviewReadOptions, readReviewPart } from "../src/review-read.js";
 import { fakeBridge, query, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
@@ -142,6 +143,63 @@ function attempts(id: string) {
 	).page;
 }
 
+test.each(["id", "name"])(
+	"foreign workers are refused before capture (%s)",
+	async (address) => {
+		const worker = workers[1]!;
+		const db = new DatabaseSync(state.dbPath);
+		db.prepare("update sessions set reports_to = null where id = ?").run(worker.id);
+		db.close();
+		const receipt = await sendCommand(
+			"owner",
+			{
+				kind: "review",
+				version: 1,
+				operation: {
+					action: "enqueue",
+					request: {
+						cwd: repository,
+						target: { kind: "working-tree", base: "HEAD" },
+						workers: [address === "id" ? worker.id : "Worker 1"],
+					},
+				},
+			},
+			{ socketPath: state.socketPath },
+		);
+		expect(receipt.stage).toBe("failed");
+		expect(receipt.reason).toContain("organization");
+		expect(query(state.dbPath, "select id from review_jobs")).toEqual([]);
+		unchanged();
+	},
+	30000,
+);
+
+test("queued workers lose launch authority when they move to another organization", async () => {
+	writeFileSync(
+		join(state.agentDir, "peer-control.json"),
+		JSON.stringify({ review: { authority: true, hold: "inspection" } }),
+	);
+	const blocker = await enqueue([]);
+	await vi.waitFor(() => expect(attempts(blocker).rows.filter((entry) => entry.state === "running")).toHaveLength(3), {
+		timeout: 15000,
+	});
+	const id = await enqueue([workers[1]!.id]);
+	expect(reviewPart(id, { part: "summary" })).toMatchObject({ state: "queued" });
+	const db = new DatabaseSync(state.dbPath);
+	db.prepare("update sessions set reports_to = null where id = ?").run(workers[1]!.id);
+	db.close();
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { authority: true } }));
+	await sendCommand(
+		"owner",
+		{ kind: "review", version: 1, operation: { action: "cancel", review: blocker } },
+		{ socketPath: state.socketPath },
+	);
+	await settled(id, "failed");
+	expect(reviewPart(id, { part: "summary" })).toMatchObject({ reason: expect.stringContaining("organization") });
+	expect(attempts(id).rows.filter((entry) => entry.reviewer.kind === "worker")).toEqual([]);
+	noResources();
+}, 40000);
+
 test("two existing workers fork in plan order before the third pass uses a temp", async () => {
 	const id = await enqueue([workers[0]!.id, "Worker 1"]);
 	await settled(id, "completed");
@@ -165,6 +223,26 @@ test("two existing workers fork in plan order before the third pass uses a temp"
 		};
 		expect(row.person).not.toBe(worker.id);
 		expect(readFileSync(row.sessionFile, "utf8")).toContain(`Worker ${workers.indexOf(worker)} history`);
+		const logs = reviewPart(id, { part: "log", attempt: attempt.id, limit: 100 });
+		expect(JSON.stringify(logs)).not.toContain(`Worker ${workers.indexOf(worker)} history`);
+		expect(JSON.stringify(logs)).toContain("Reply from");
+		const db = new DatabaseSync(state.dbPath);
+		const { offset } = db.prepare("select fork_offset as offset from review_attempts where id = ?").get(attempt.id) as {
+			offset: number;
+		};
+		for (const invalid of [null, 0, offset + 1]) {
+			db.prepare("update review_attempts set fork_offset = ? where id = ?").run(invalid, attempt.id);
+			expect(reviewPart(id, { part: "log", attempt: attempt.id })).toMatchObject([{ entries: [] }]);
+		}
+		db.prepare("update review_attempts set fork_offset = ? where id = ?").run(offset, attempt.id);
+		db.close();
+		appendFileSync(
+			row.sessionFile,
+			`${JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text: "x".repeat(512 * 1024 + 1) }] } })}\n${JSON.stringify({ type: "message", message: { role: "toolResult", toolName: "read", content: [{ type: "text", text: "Attempt-local result" }] } })}\n`,
+		);
+		const tail = reviewPart(id, { part: "log", attempt: attempt.id });
+		expect(JSON.stringify(tail)).toContain("Attempt-local result");
+		expect(JSON.stringify(tail)).not.toContain(`Worker ${workers.indexOf(worker)} history`);
 		const launch = JSON.parse(readFileSync(join(state.agentDir, "peer-records", `${row.person}.launch.json`), "utf8"));
 		expect(launch.args).toContain("--fork");
 		expect(launch.args[launch.args.indexOf("--fork") + 1]).toBe(worker.file);
@@ -173,6 +251,28 @@ test("two existing workers fork in plan order before the third pass uses a temp"
 	expect(page.find((entry) => entry.pass === "integration")!.reviewer).toEqual({ kind: "temp" });
 	expect(page.find((entry) => entry.pass === "planner")!.reviewer).toEqual({ kind: "temp" });
 	noResources();
+}, 30000);
+
+test("launch scope rechecks worker authority after an attempt is persisted", async () => {
+	const id = await enqueue([workers[1]!.id]);
+	await settled(id, "completed");
+	noResources();
+	const attempt = attempts(id).rows.find((entry) => entry.reviewer.kind === "worker")!;
+	const db = new DatabaseSync(state.dbPath);
+	try {
+		db.prepare("update review_jobs set state = 'running' where id = ?").run(id);
+		db.prepare("update review_attempts set state = 'starting' where id = ?").run(attempt.id);
+		const { program } = db
+			.prepare("select program_id as program from review_attempts where id = ?")
+			.get(attempt.id) as { program: string };
+		expect(reviewScope(db, program, "owner")).toMatchObject({ fork: workers[1]!.file });
+		db.prepare("update sessions set reports_to = null where id = ?").run(workers[1]!.id);
+		expect(() => reviewScope(db, program, "owner")).toThrow("organization");
+		db.prepare("update review_jobs set requester = 'operator' where id = ?").run(id);
+		expect(reviewScope(db, program, "owner")).toMatchObject({ fork: workers[1]!.file });
+	} finally {
+		db.close();
+	}
 }, 30000);
 
 test("workers beyond the three planned passes remain unused", async () => {
