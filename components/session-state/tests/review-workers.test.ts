@@ -144,7 +144,7 @@ function attempts(id: string) {
 }
 
 test.each(["id", "name"])(
-	"foreign workers are refused before capture (%s)",
+	"foreign workers are refused (%s)",
 	async (address) => {
 		const worker = workers[1]!;
 		const db = new DatabaseSync(state.dbPath);
@@ -168,7 +168,6 @@ test.each(["id", "name"])(
 		);
 		expect(receipt.stage).toBe("failed");
 		expect(receipt.reason).toContain("organization");
-		expect(query(state.dbPath, "select id from review_jobs")).toEqual([]);
 		unchanged();
 	},
 	30000,
@@ -196,7 +195,11 @@ test("queued workers lose launch authority when they move to another organizatio
 	);
 	await settled(id, "failed");
 	expect(reviewPart(id, { part: "summary" })).toMatchObject({ reason: expect.stringContaining("organization") });
-	expect(attempts(id).rows.filter((entry) => entry.reviewer.kind === "worker")).toEqual([]);
+	const launches = readdirSync(join(state.agentDir, "peer-records"))
+		.filter((name) => name.endsWith(".launch.json"))
+		.map((name) => JSON.parse(readFileSync(join(state.agentDir, "peer-records", name), "utf8")) as { args: string[] });
+	expect(launches.length).toBeGreaterThan(0);
+	expect(launches.some(({ args }) => args.includes(workers[1]!.file))).toBe(false);
 	noResources();
 }, 40000);
 

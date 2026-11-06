@@ -304,11 +304,14 @@ test("a real worker fork bridge charges only new work across reloads", async () 
 		const nestedId = nested.getSessionId();
 		seedPeer(nestedId);
 		host.programs.get("program")!.program.created.add(nestedId);
-		run = await fauxSession([bridge], [], [], { cwd: state.agentDir, sessionManager: nested });
-		await vi.waitFor(() =>
-			expect(host.db.prepare("select cost from sessions where id = ?").get(nestedId)).toEqual({ cost: 0 }),
-		);
+		const nestedReply = fauxAssistantMessage("New nested inspection.");
+		nestedReply.usage = structuredClone(nestedReply.usage);
+		nestedReply.usage.cost.total = 2;
+		run = await fauxSession([bridge], [nestedReply], [], { cwd: state.agentDir, sessionManager: nested });
+		await vi.waitFor(() => expect(hello.mock.calls.some(([, message]) => message.session.id === nestedId)).toBe(true));
 		expect(realizedFitness(host.db, "caller", 0, Date.now()).compute).toBe(5);
+		await run.session.prompt("Inspect from the new fork.");
+		await vi.waitFor(() => expect(realizedFitness(host.db, "caller", 0, Date.now()).compute).toBe(7));
 	} finally {
 		if (run) await close(run);
 		runtime.stop();
