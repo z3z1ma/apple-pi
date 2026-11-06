@@ -88,10 +88,11 @@ export function reviewAttempt(db: DatabaseSync, actor: string, review: string, i
 function attemptRecord(db: DatabaseSync, review: string, id: string): ReviewAttempt {
 	const row = db
 		.prepare(
-			`select id, review_id as review, generation, plan_revision as planRevision, pass_id as pass, kind, person, role, state, model, thinking, session_file as sessionFile, input, policy, reuse_blocked_by as reuseBlockedBy, result, output, reason, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ? and id = ?`,
+			`select id, review_id as review, generation, plan_revision as planRevision, pass_id as pass, kind, person, reviewer, role, state, model, thinking, session_file as sessionFile, input, policy, reuse_blocked_by as reuseBlockedBy, result, output, reason, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ? and id = ?`,
 		)
 		.get(review, id) as
-		| (Omit<ReviewAttempt, "input" | "policy" | "result" | "output"> & {
+		| (Omit<ReviewAttempt, "input" | "policy" | "result" | "output" | "reviewer"> & {
+				reviewer: string;
 				input: string;
 				policy: string;
 				result: string | null;
@@ -101,6 +102,7 @@ function attemptRecord(db: DatabaseSync, review: string, id: string): ReviewAtte
 	if (!row) throw new Error(`Unknown review attempt: ${id}`);
 	return {
 		...row,
+		reviewer: JSON.parse(row.reviewer),
 		input: JSON.parse(row.input),
 		policy: JSON.parse(row.policy),
 		result: row.result ? JSON.parse(row.result) : null,
@@ -310,13 +312,18 @@ function scopeClause(db: DatabaseSync, actor: string): { where: string[]; args: 
 	return { where: [`organization in (${roots.map(() => "?").join(",")})`], args: roots };
 }
 
-export function reviewStates(db: DatabaseSync, actor: string): { id: string; state: ReviewState }[] {
+export function reviewStates(
+	db: DatabaseSync,
+	actor: string,
+): { id: string; state: ReviewState; requester: string; owner: string }[] {
 	return snapshot(db, () => {
 		const { where, args } = scopeClause(db, actor);
 		const filter = where.length ? `where ${where.join(" and ")}` : "";
-		return db.prepare(`select id, state from review_jobs ${filter}`).all(...args) as {
+		return db.prepare(`select id, state, requester, owner from review_jobs ${filter}`).all(...args) as {
 			id: string;
 			state: ReviewState;
+			requester: string;
+			owner: string;
 		}[];
 	});
 }
@@ -329,6 +336,7 @@ export function reviewQueue(
 		offset?: number;
 		state?: ReviewState;
 		cwd?: string;
+		people?: string[];
 		around?: string;
 		hideAddressed?: boolean;
 	} = {},
@@ -347,6 +355,10 @@ export function reviewQueue(
 		if (options.cwd) {
 			where.push("(json_extract(artifact, '$.repository') = ? or json_extract(request, '$.cwd') = ?)");
 			args.push(options.cwd, options.cwd);
+		}
+		if (options.people) {
+			where.push("(requester in (select value from json_each(?)) or owner in (select value from json_each(?)))");
+			args.push(JSON.stringify(options.people), JSON.stringify(options.people));
 		}
 		const filter = where.length ? `where ${where.join(" and ")}` : "";
 		const groups = db
@@ -687,12 +699,13 @@ export function readReviewPart(db: DatabaseSync, actor: string, id: string, opti
 			case "attempts": {
 				const rows = db
 					.prepare(
-						"select id, pass_id as pass, kind, role, state, model, thinking, reason, json_extract(result, '$.usage') as usage, reuse_blocked_by as reuseBlockedBy, output is not null as hasOutput, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ? order by created_at, rowid",
+						"select id, pass_id as pass, kind, reviewer, role, state, model, thinking, reason, json_extract(result, '$.usage') as usage, reuse_blocked_by as reuseBlockedBy, output is not null as hasOutput, created_at as createdAt, finished_at as finishedAt from review_attempts where review_id = ? order by created_at, rowid",
 					)
-					.all(job.id) as { id: string; usage: string | null; hasOutput: number }[];
+					.all(job.id) as { id: string; reviewer: string; usage: string | null; hasOutput: number }[];
 				return page(
 					rows.map((row) => ({
 						...row,
+						reviewer: JSON.parse(row.reviewer),
 						usage: row.usage ? JSON.parse(row.usage) : null,
 						hasOutput: Boolean(row.hasOutput),
 						selected: Object.values(job.selectedAttempts).includes(row.id),
@@ -709,6 +722,7 @@ export function readReviewPart(db: DatabaseSync, actor: string, id: string, opti
 					attempt: entry.attempt
 						? {
 								id: entry.attempt.id,
+								reviewer: entry.attempt.reviewer,
 								state: entry.attempt.state,
 								role: entry.attempt.role,
 								model: entry.attempt.model,
@@ -816,8 +830,12 @@ function transcriptTail(file: string): ReviewLogEntry[] {
 }
 
 function reviewLogs(db: DatabaseSync, review: string, options: ReviewReadOptions): ReviewAttemptLog[] {
-	const columns = "id, pass_id as pass, kind, state, model, session_file as sessionFile";
-	type Row = Omit<ReviewAttemptLog, "attempt" | "entries"> & { id: string; sessionFile: string | null };
+	const columns = "id, pass_id as pass, kind, reviewer, state, model, session_file as sessionFile";
+	type Row = Omit<ReviewAttemptLog, "attempt" | "entries" | "reviewer"> & {
+		reviewer: string;
+		id: string;
+		sessionFile: string | null;
+	};
 	let rows: Row[];
 	if (options.attempt) {
 		const row = db
@@ -839,9 +857,10 @@ function reviewLogs(db: DatabaseSync, review: string, options: ReviewReadOptions
 				.all(review) as Row[];
 	}
 	const limit = options.limit ?? 20;
-	return rows.map(({ id, sessionFile, ...row }) => ({
+	return rows.map(({ id, sessionFile, reviewer, ...row }) => ({
 		attempt: id,
 		...row,
+		reviewer: JSON.parse(reviewer),
 		entries: sessionFile ? transcriptTail(sessionFile).slice(-limit) : [],
 	}));
 }

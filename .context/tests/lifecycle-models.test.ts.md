@@ -2,6 +2,10 @@
 
 ReviewWait is a liveness model: under its stated fairness a waiting `read_review` always returns, and switching off either the silence watchdog or SIGKILL escalation must produce a temporal violation (the controls keep the pass meaningful). Its implementation evidence is `review-silence.test.ts` (the watchdog) and the unresponsive-peer case in `program-peers.test.ts` (escalation), which failed at the commit before the change.
 
+ReviewWorkers checks three concurrent attempts (two original worker sources and a temp fallback), plan-index assignment, process/scope ownership through repeated logical crashes, and cleanup separate from original identity. Its UnsafeCleanup control must violate OriginalsPreserved. The runtime worker tests independently check original file bytes, plan-order staffing, retry assignment and cancellation/failure cleanup.
+Coupled: specs/review-workers.tla, specs/review-workers.cfg
+Verify: components/session-state/tests/review-workers.test.ts
+
 The other two are bounded source-derived safety models, not implementation-refinement or liveness proofs. ReviewLifecycle models two independent cancellation requests crossing one additional-work admission. DepartureLifecycle models one permanent identity, a known original writer and one rejected late writer, optional handoff, one new obligation/incarnation, unknown process observations, transcript headers, independent file/SQLite completion and repeated crashes/restarts. Model comments and the experiment log state the action mappings and exclusions.
 
 The actual-runtime review-cancel-race regression is the implementation oracle for the discovered review trace; these TLC runs alone cannot establish the fix works in code.

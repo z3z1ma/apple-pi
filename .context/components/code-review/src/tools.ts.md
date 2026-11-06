@@ -1,5 +1,8 @@
 ## file
 
+review_code passes optional worker names/IDs through the captured request; manage_review rerun copies that admitted request, including its resolved pool. Worker authorship avoidance is guidance in the tool description, not a validation rule. Keep the ordinary empty/absent pool on the temp path and keep prompt-budgets.test.ts green without raising its ceiling.
+Verify: components/session-state/tests/review-workers.test.ts, tests/prompt-budgets.test.ts
+
 Native tools use the shared read-only projection and the runtime's existing command journal. The tool-call-derived request ID belongs to the original caller; an explicit replay handle must already name that caller's review command. A new request and exact replay have different meanings. Capture resolves a mutable target once; replay keeps that artifact even if the checkout later changes. Explicit rerun creates new work and a parent link, with no inherited coverage.
 
 An applied receipt confirms admission or a management mutation, not completed review work. Preserve failed/uncertain receipt state separately from the journal's observed stage: an older applied record cannot turn a conflicting new request into success. Surface the recovery handle on such outcomes. An old or unavailable store fails clearly instead of restarting a production daemon or treating it as an empty queue.

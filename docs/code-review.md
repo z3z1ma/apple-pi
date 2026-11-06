@@ -26,6 +26,10 @@ For example:
 
 `target` is the change-selection contract shared with `sign_off_code` and `explain_change` (see [browser pages](browser-pages.md#selecting-the-change)). A branch comparison uses its merge base; a range uses exact endpoints. A working-tree capture includes tracked changes and nonignored untracked files. A staged capture uses the index. Merge commits need an explicit parent comparison. A path filter narrows review accounting and is a visible limit, while the surrounding captured source remains available as context.
 
+`workers` optionally names existing people by name or ID. Prefer fresh temps; choose a worker only for a change it did not build or work on. This is guidance, not a harness authorship check. Focused and integration passes consume the list in plan order, then use temps. Extra workers remain unused; retries keep the same assigned worker. Planning and duplicate linking always use fresh temps. A fresh rerun copies the list, whose names resolve to stable person IDs at admission.
+
+A worker pass launches a new headless program peer with `pi --fork <worker transcript>` and a new identity. It never dispatches to, wakes or appends to the original worker, whether awake or at home. The fork inherits the worker's conversation, role and model rather than the pass's role/model tier; the pass's questions, captured-source integrity and planned-policy identity checks still apply. A known worker model must match the fork's observed model. Attempts retain the actual model separately and expose `reviewer: {kind: "worker", person, name}` or `{kind: "temp"}`; the ordinary attempt `person` identifies the disposable peer. Cancellation, failure and restart dispose only that peer through the existing program cleanup, leaving the original worker intact.
+
 An empty captured comparison or unchanged requested path scope records `no-changes`, with its exact artifact retained and no reviewer attempts. This is neither completed inspection nor a clean-review claim, and it creates no unfinished review responsibility. Cancellation and exact replay preserve that outcome; use a fresh capture to review later changes.
 
 A plan is risk-driven triage, not an inventory. The planner names a few scopes by their files or directories and spends passes where risk concentrates; one pass can combine lenses, and low-risk scopes need not get their own. The runtime maps changed regions to scopes, and the integration pass reads the whole change, so a region outside every scope is still reviewed and reported as such rather than failing the plan. Only identities, roles and requested lenses are checked; the runtime no longer requires a correctness pass per scope or separate passes per risk kind.
@@ -58,7 +62,7 @@ A strip above the list counts queued, running, done and failed reviews and the r
 | `h` | Hide or show addressed reviews |
 | `a` | Comment, choose a captured source file/side, capture, cancel, resume, rerun, change priority, reassign, authorize more work, open captured sign-off or recover an uncertain request |
 
-The list includes historical assessments, not only waiting work; its count is the number of recorded reviews. The owner is accountable for the review. After admission, the runtime automatically runs temporary role-based peers for planning, focused inspections, integration and duplicate linking; an owner does not have to pick up each queued pass manually. The Attempts view identifies the actual peers and their recorded roles/models.
+The list includes historical assessments, not only waiting work; its count is the number of recorded reviews. The owner is accountable for the review. After admission, the runtime automatically staffs passes from the optional worker pool and temps; an owner does not have to pick up each queued pass manually. The Attempts view identifies the actual peers, reviewer kind and recorded roles/models.
 
 Capture asks for the repository/worktree directory and comparison. Before queueing it shows resolved commits and tree identities, the target digest, scope counts, approved-intent hash and omissions. The confirmation scrolls independently of its fixed controls: `y` queues, `Esc` cancels. A too-small terminal cannot confirm. Empty comparisons stop without queueing.
 
@@ -91,7 +95,7 @@ This view returns the requested code, not the automatic `.context` append used b
 
 ## Evidence, decisions and recovery
 
-Each behavior scope requires correctness inspection, applicable repository standards and captured approved intent. Missing intent remains unassessed. Declared authority and reliability risks require independent passes; other risks carry explicit questions. Inspections do not receive the author's conversation or other passes' reports.
+Each behavior scope requires correctness inspection, applicable repository standards and captured approved intent. Missing intent remains unassessed. Declared authority and reliability risks require independent passes; other risks carry explicit questions. Temp inspections do not receive the author's conversation; worker forks retain their own history. Neither receives other passes' reports from this review.
 
 Findings retain their originating attempt, location, triggering conditions, broken invariant, impact, cause, severity, certainty, evidence and counterevidence. A finding's status (confirmed, unresolved or duplicate) and later owner responses are separate records. Rejection requires evidence; accepted risk requires evidence and scope. A claimed fix stays unverified until a response cites a completed, unchallenged verification question on another captured target. That records the responder's judgment, not automatic proof of semantic correctness. It never repairs the old snapshot.
 

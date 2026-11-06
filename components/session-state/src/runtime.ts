@@ -195,6 +195,7 @@ interface SessionLaunch {
 	role?: string;
 
 	profile?: string;
+	fork?: string;
 	prompt?: string;
 	tmux?: Hello["tmux"];
 	program?: { id: string; parent: string };
@@ -2814,6 +2815,7 @@ export class Runtime {
 			tmux: command.tmux,
 			...(programId ? { program: { id: programId, parent: programParent! } } : {}),
 			...(approve ? { approve } : {}),
+			...(program?.review ? { fork: reviewScope(db, program.id, program.caller)?.fork ?? undefined } : {}),
 		});
 	}
 
@@ -2879,8 +2881,8 @@ export class Runtime {
 			sessionId,
 			...(name ? ["--name", name] : []),
 			...(reportsTo ? ["--reports-to", reportsTo] : []),
-			...(role ? ["--role", role] : []),
-			...(launch.profile ? ["--role-profile", launch.profile] : []),
+			...(launch.fork ? ["--fork", launch.fork] : role ? ["--role", role] : []),
+			...(launch.profile && !launch.fork ? ["--role-profile", launch.profile] : []),
 			...(launch.approve ? ["--approve"] : []),
 		];
 		const env = { [PROGRAM_ID_ENV]: programId ?? "", [PROGRAM_PARENT_ENV]: programParent ?? "" };

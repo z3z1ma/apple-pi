@@ -83,7 +83,10 @@ export interface ReviewQueue {
 	page: { offset: number; nextOffset: number | null; rows: ReviewSummary[] } | null;
 }
 
+export type ReviewReviewer = { kind: "temp" } | { kind: "worker"; person: string; name: string | null };
+
 export interface ReviewAttempt {
+	reviewer: ReviewReviewer;
 	id: string;
 	review: string;
 	generation: number;
@@ -121,6 +124,7 @@ export interface ReviewLogEntry {
 }
 
 export interface ReviewAttemptLog {
+	reviewer: ReviewReviewer;
 	attempt: string;
 	pass: string;
 	kind: ReviewAttempt["kind"];

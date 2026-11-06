@@ -1,6 +1,7 @@
 import type { ReviewOperation, ReviewState } from "../../../components/code-review/src/operations.js";
 import type {
 	ReviewAnalytics,
+	ReviewAttempt,
 	ReviewQueue,
 	ReviewSource,
 	ReviewSummary,
@@ -11,10 +12,33 @@ export type ReviewManagement = Extract<
 	ReviewOperation,
 	{ action: "cancel" | "resume" | "priority" | "reassign" | "extend" | "finding" | "comment" }
 >;
+export type ReviewAttemptRow = Pick<
+	ReviewAttempt,
+	| "id"
+	| "pass"
+	| "kind"
+	| "reviewer"
+	| "role"
+	| "state"
+	| "model"
+	| "thinking"
+	| "reason"
+	| "reuseBlockedBy"
+	| "createdAt"
+	| "finishedAt"
+> & {
+	usage: unknown;
+	hasOutput: boolean;
+	selected: boolean;
+};
+
 export interface ReviewsApi {
-	states(request: Record<string, never>): Promise<{ id: string; state: ReviewState }[]>;
+	states(
+		request: Record<string, never>,
+	): Promise<{ id: string; state: ReviewState; requester: string; owner: string }[]>;
 	queue(options: {
 		cwd?: string;
+		people?: string[];
 		state?: ReviewState;
 		limit: number;
 		offset?: number;

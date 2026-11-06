@@ -28,6 +28,7 @@ export function watchSilence(lastActivity: () => number, onSilent: () => void): 
 
 export interface ReviewPassRequest {
 	id: string;
+	worker?: string;
 	role: string;
 	policyFingerprint: string | undefined;
 	depth?: ReviewDepth;
@@ -45,14 +46,16 @@ export function reviewScope(
 	db: DatabaseSync,
 	program: string,
 	caller: string,
-): { attempt: string; person: string; role: string; source: string } | undefined {
+): { attempt: string; person: string; role: string; source: string; fork: string | null } | undefined {
 	const known = db.prepare("select id from review_attempts where program_id = ?").get(program);
 	if (!known) return undefined;
 	const active = db
 		.prepare(
-			`select a.id as attempt, a.person, a.role, json_extract(j.artifact, '$.source') as source from review_attempts a join review_jobs j on j.id = a.review_id where a.program_id = ? and j.owner = ? and j.state = 'running' and a.generation = j.generation and a.plan_revision = j.plan_revision and a.state = 'starting'`,
+			`select a.id as attempt, a.person, a.role, a.fork_file as fork, json_extract(j.artifact, '$.source') as source from review_attempts a join review_jobs j on j.id = a.review_id where a.program_id = ? and j.owner = ? and j.state = 'running' and a.generation = j.generation and a.plan_revision = j.plan_revision and a.state = 'starting'`,
 		)
-		.get(program, caller) as { attempt: string; person: string; role: string; source: string } | undefined;
+		.get(program, caller) as
+		| { attempt: string; person: string; role: string; source: string; fork: string | null }
+		| undefined;
 	if (!active?.source) throw new Error("The review attempt no longer owns this launch");
 	return active;
 }
@@ -74,10 +77,17 @@ export async function runReviewAttempt(
 		throw new ReviewStop(
 			`The review policy for ${pass.role} differs from the planned catalog; resume to plan under current policy`,
 		);
+	const worker = pass.worker
+		? (db
+				.prepare("select id, name, model, session_file as file from sessions where id = ? and retired_at is null")
+				.get(pass.worker) as { id: string; name: string | null; model: string | null; file: string | null } | undefined)
+		: undefined;
+	if (pass.worker && !worker?.file) throw new ReviewStop("The assigned review worker has no available transcript");
 	const inputKey = createHash("sha256")
 		.update(
 			JSON.stringify({
 				role: pass.role,
+				...(worker ? { worker: { person: worker.id, file: worker.file, model: worker.model } } : {}),
 				policy,
 				thinking: pass.thinking ?? null,
 				goal: pass.goal,
@@ -97,6 +107,7 @@ export async function runReviewAttempt(
 		const value = pass.validate(JSON.parse(previous.output));
 		if (!pass.reuse || pass.reuse(value)) return { attempt: previous.id, output: value };
 	}
+	const reviewer = worker ? { kind: "worker", person: worker.id, name: worker.name } : { kind: "temp" };
 	const candidates = policy.candidates;
 	const id = randomUUID();
 	const person = randomUUID();
@@ -108,7 +119,7 @@ export async function runReviewAttempt(
 	const input = { task: pass.goal, outputSchema: normalizeOutputSchema(pass.schema), contextFile };
 	if (!current(db, job)) throw new ReviewStop("The review no longer owns this attempt");
 	db.prepare(
-		`insert into review_attempts (id, review_id, generation, plan_revision, pass_id, kind, program_id, person, role, policy, input, input_key, state, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'starting', ?)`,
+		`insert into review_attempts (id, review_id, generation, plan_revision, pass_id, kind, program_id, person, role, policy, input, input_key, reviewer, fork_file, state, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'starting', ?)`,
 	).run(
 		id,
 		job.id,
@@ -122,6 +133,8 @@ export async function runReviewAttempt(
 		JSON.stringify(policy),
 		JSON.stringify(input),
 		inputKey,
+		JSON.stringify(reviewer),
+		worker?.file ?? null,
 		Date.now(),
 	);
 	let program: PeerProgram | undefined;
@@ -153,7 +166,7 @@ export async function runReviewAttempt(
 				{
 					kind: "start",
 					role: pass.role,
-					...(policy.profile ? { profile: policy.profile } : {}),
+					...(!worker && policy.profile ? { profile: policy.profile } : {}),
 					goal: { by: job.owner, text: pass.goal },
 				},
 				{ signal, commandId: `${id}:start` },
@@ -167,7 +180,12 @@ export async function runReviewAttempt(
 			db.prepare(
 				"update review_attempts set model = ?, thinking = ?, session_file = ?, state = 'running' where id = ?",
 			).run(observed.model, pass.thinking ?? observed.thinking, observed.file, id);
-			if (observed.role !== pass.role || !candidates.some((candidate) => candidate.model === observed.model))
+			if (worker?.model && observed.model !== worker.model)
+				throw new ReviewStop("The fork did not retain the assigned worker's model; no review turn was sent");
+			if (
+				!worker &&
+				(observed.role !== pass.role || !candidates.some((candidate) => candidate.model === observed.model))
+			)
 				throw new ReviewStop("The reviewer did not select its recorded role/model policy; no review turn was sent");
 			if (JSON.stringify(resolve()) !== JSON.stringify(policy))
 				throw new ReviewStop("The review policy changed during startup; no review turn was sent");

@@ -20,8 +20,18 @@ const profileModel =
 		: undefined;
 const records = join(agentDir, "peer-records");
 mkdirSync(records, { recursive: true });
-const file = join(records, `${id}.jsonl`);
-writeFileSync(file, `${JSON.stringify({ type: "session", id, cwd: process.cwd() })}\n`);
+const fork = process.argv.includes("--fork") ? argument("--fork") : undefined;
+const forked = fork
+	? (
+			await import("../../node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js")
+		).SessionManager.forkFrom(fork, process.cwd(), records, { id })
+	: undefined;
+const file = forked?.getSessionFile() ?? join(records, `${id}.jsonl`);
+if (!forked) writeFileSync(file, `${JSON.stringify({ type: "session", id, cwd: process.cwd() })}\n`);
+const inheritedModel = forked?.buildSessionContext().model;
+const inheritedRole = forked
+	?.getEntries()
+	.findLast((entry) => entry.type === "custom" && entry.customType === "organization-role")?.data?.role;
 writeFileSync(
 	join(records, `${id}.launch.json`),
 	JSON.stringify({
@@ -96,9 +106,13 @@ if (!stopping) {
 			run: "idle",
 			facts: {
 				reportsTo: parent,
-				role,
+				role: inheritedRole ?? role,
 				manages: role === "team-lead",
-				model: control.model ?? profileModel ?? `fixture/${role}`,
+				model:
+					control.model ??
+					(inheritedModel ? `${inheritedModel.provider}/${inheritedModel.modelId}` : undefined) ??
+					profileModel ??
+					`fixture/${role}`,
 				thinkingLevel: "high",
 			},
 		}),
@@ -123,6 +137,13 @@ if (!stopping) {
 			},
 		});
 	};
+	const finishTurn = (commandId, value) =>
+		result(
+			commandId,
+			fork && control.failFork
+				? { status: "failed", text: "", error: "Fork fixture failed", operations: [], changes: [] }
+				: value,
+		);
 	const controlledTurn = async (commandId, command) => {
 		const plan = JSON.parse(command.task);
 		const controller = new AbortController();
@@ -251,7 +272,7 @@ if (!stopping) {
 					file,
 					`${JSON.stringify({ type: "message", message: { role: "assistant", content: [{ type: "text", text }] } })}\n`,
 				);
-				result(commandId, {
+				finishTurn(commandId, {
 					status: "completed",
 					text,
 					...(command.outputSchema ? { value } : {}),

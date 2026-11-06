@@ -1,0 +1,10 @@
+## file
+
+Design model, checked against the implemented review staffing seam: three independent planned inspection attempts, two workers in ordered slots and one temp. Assignment depends on plan index, not admission/finish order. Originals are separate identities from every attempt's owned process/scope. Staff maps to runReviewAttempt's persisted attempt and openPeerProgram; Launch to Runtime.startSession/launchSession with a new person plus --fork; Finish includes both successful and failed turns; Cancel/Crash/Recover to program closure and abandoned-scope cleanup; Stop to proven process death; Clean to guarded program disposal before terminal attempt settlement. Existing retry identities get new disposable peers while retaining their pass's worker slot; retries are covered by runtime tests rather than a second slot in this model.
+
+Safety only: OriginalsPreserved, PlanOrder, OwnedProcesses, SettledClean. Three attempts distinguish two worker slots, the temp fallback and independent concurrent cleanup. Repeated logical daemon crashes preserve ownership and processes; recovery only moves owned attempts toward cleanup. Physical PID observation, filesystem/session parsing, changing plans, provider output and liveness are excluded. The existing program lifecycle supplies process-death proof; this model assumes that proof is truthful. The worker sessions may be awake or at home; neither grants cleanup ownership of their originals.
+
+TLC: 1,413 generated / 560 distinct, depth 10, zero queued. UnsafeCleanup=TRUE is deliberately faulty: cleaning a fork removes its original worker, violating OriginalsPreserved in four states. That control is not a product defect. The runtime tests are the implementation oracle, including byte-identical original files and cleanup after cancellation/failure.
+
+Coupled: specs/review-workers.cfg, components/session-state/src/review-attempt.ts, components/session-state/src/review-jobs.ts, components/session-state/src/runtime.ts
+Verify: tests/lifecycle-models.test.ts, components/session-state/tests/review-workers.test.ts

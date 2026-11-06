@@ -43,6 +43,16 @@ test("a program comparison gives both arms of every task the same runs, and repl
 	);
 }, 300_000);
 
+test("review staffing preserves the original workers through owned fork cleanup and crashes", async () => {
+	const spec = resolve("specs/review-workers.tla");
+	const config = resolve("specs/review-workers.cfg");
+	const result = await runTlc({ spec, config });
+	expect(result.verdict, result.output).toBe("pass");
+	expect(result.unused).toEqual([]);
+	const unsafe = await runTlc({ spec, config, constants: { UnsafeCleanup: "TRUE" } });
+	expect(unsafe).toMatchObject({ verdict: "violation", property: "OriginalsPreserved" });
+}, 120_000);
+
 test("a review wait always ends, and needs both the silence watchdog and SIGKILL escalation to", async () => {
 	const spec = resolve("specs/review-wait.tla");
 	const config = resolve("specs/review-wait.cfg");

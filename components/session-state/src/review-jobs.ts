@@ -237,6 +237,17 @@ export class ReviewJobs {
 			const owner = operation.owner ?? actor;
 			if (actor !== owner) mayManage(this.db, actor, owner);
 			this.availableOwner(owner);
+			if (operation.request.workers) {
+				const temporary = temporaryCallers(this.db);
+				operation.request.workers = operation.request.workers.map((address) => {
+					const rows = this.db
+						.prepare("select id from sessions where (id = ? or name = ?) and kind = 'root' and retired_at is null")
+						.all(address, address) as { id: string }[];
+					if (rows.length !== 1 || temporary.has(rows[0]!.id))
+						throw new Error(`Review worker must name one existing lasting person: ${address}`);
+					return rows[0]!.id;
+				});
+			}
 			if (!isAbsolute(operation.request.cwd)) throw new Error("A review needs an absolute working directory");
 			const organization = rootOf(this.db, owner);
 			if (operation.parent) {
@@ -520,56 +531,54 @@ export class ReviewJobs {
 			}
 			const plan = job.plan!;
 			const failures: string[] = [];
-			const results = await inParallel(
-				planPasses(plan, artifact.regions),
-				REVIEW_PASS_CONCURRENCY,
-				signal,
-				async (pass, passSignal) => {
-					try {
-						const inspected = await this.attempt(
-							job,
-							{
-								id: pass.id,
-								role: pass.role,
-								depth: pass.depth ?? "standard",
-								policyFingerprint: roles.find((role) => role.name === pass.role)?.[
-									pass.depth === "deep" ? "deepPolicy" : "policy"
-								],
-								kind: pass.kind,
-								goal: `${artifact.configuration?.instructions.inspection ?? INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
-								schema: reportToolSchema(pass),
-								context: {
-									phase: "inspection",
-									artifact: source,
-									pass,
-									regions: artifact.regions.filter((region) => pass.regions.includes(region.id)),
-									chunks: plan.chunks.map(({ id, title, paths, context, risks }) => ({
-										id,
-										title,
-										paths,
-										context,
-										risks,
-									})),
-								},
-								fromTool: (value) => reportFromTool(value, artifact.digest, pass),
-								validate: (value) => validateReport(value, artifact.digest, pass),
-								reuse: (value) => (value as ReviewReport).coverage.every((entry) => entry.state !== "incomplete"),
+			const passes = planPasses(plan, artifact.regions);
+			const workers = new Map(passes.map((pass, index) => [pass.id, job.request.workers?.[index]]));
+			const results = await inParallel(passes, REVIEW_PASS_CONCURRENCY, signal, async (pass, passSignal) => {
+				try {
+					const inspected = await this.attempt(
+						job,
+						{
+							id: pass.id,
+							worker: workers.get(pass.id),
+							role: pass.role,
+							depth: pass.depth ?? "standard",
+							policyFingerprint: roles.find((role) => role.name === pass.role)?.[
+								pass.depth === "deep" ? "deepPolicy" : "policy"
+							],
+							kind: pass.kind,
+							goal: `${artifact.configuration?.instructions.inspection ?? INSPECT_REVIEW}\nCaptured source: ${artifact.source}`,
+							schema: reportToolSchema(pass),
+							context: {
+								phase: "inspection",
+								artifact: source,
+								pass,
+								regions: artifact.regions.filter((region) => pass.regions.includes(region.id)),
+								chunks: plan.chunks.map(({ id, title, paths, context, risks }) => ({
+									id,
+									title,
+									paths,
+									context,
+									risks,
+								})),
 							},
-							passSignal,
-						);
-						job.selectedAttempts = { ...job.selectedAttempts, [pass.id]: inspected.attempt };
-						this.storeSelection(job);
-						const report = inspected.output as ReviewReport;
-						const streamed = findingsNotice(job.id, report, inspected.attempt);
-						if (streamed) this.notice(job, `findings:${pass.id}`, streamed);
-						return report;
-					} catch (error) {
-						if (passSignal.aborted || this.stopped || error instanceof ReviewStop) throw error;
-						failures.push(`pass ${pass.id} failed twice (${message(error)})`);
-						return null;
-					}
-				},
-			);
+							fromTool: (value) => reportFromTool(value, artifact.digest, pass),
+							validate: (value) => validateReport(value, artifact.digest, pass),
+							reuse: (value) => (value as ReviewReport).coverage.every((entry) => entry.state !== "incomplete"),
+						},
+						passSignal,
+					);
+					job.selectedAttempts = { ...job.selectedAttempts, [pass.id]: inspected.attempt };
+					this.storeSelection(job);
+					const report = inspected.output as ReviewReport;
+					const streamed = findingsNotice(job.id, report, inspected.attempt);
+					if (streamed) this.notice(job, `findings:${pass.id}`, streamed);
+					return report;
+				} catch (error) {
+					if (passSignal.aborted || this.stopped || error instanceof ReviewStop) throw error;
+					failures.push(`pass ${pass.id} failed twice (${message(error)})`);
+					return null;
+				}
+			});
 			const reports = results.filter((report): report is ReviewReport => report !== null);
 			const findings = reports.flatMap((report) =>
 				report.findings.map((finding) => ({ key: findingKey(report.pass, finding.id), report, finding })),

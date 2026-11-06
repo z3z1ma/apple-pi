@@ -1,5 +1,8 @@
 ## file
 
+Attempt lists and complete attempt/pass records expose `reviewer`: temp, or worker with the original person's retained ID/name. The attempt's own `person` is still its disposable program peer, never the original worker. Workplace's backend forwards these records unchanged.
+Verify: components/session-state/tests/review-workers.test.ts
+
 These are read-only projections over the runtime's review records. Read a consistent SQLite snapshot when combining a job, its selected attempts and their reports. Keep selected completed coverage distinct from the full attempt history: a later failed attempt or a report from another plan is not automatically the current assessment. Finding handles include the actual attempt identity so a new allegation cannot silently inherit a decision attached to an earlier pass with the same local finding ID.
 
 Organization scope follows the review's recorded root through the existing tree; `scopeClause` is the one place that builds it, for both `reviewQueue` and the id/state-only `reviewStates` the Workplace badge polls. Inventory roots from review_jobs, not tree.ts anchorsOf: that helper inventories work_tasks, and a completed review can survive after every temporary task was removed. A whole-root merge without surviving tasks reproduced this distinction. Request-handle lookup follows commands.result, then applies the same review authorization.

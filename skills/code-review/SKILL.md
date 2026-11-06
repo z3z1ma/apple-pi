@@ -13,6 +13,8 @@ For a pass already assigned within a review, inspect its captured source and ans
 
 Choose the comparison the request actually means: one commit with its parent, an endpoint range, a branch against its merge base, the staged tree, or the working tree including nonignored untracked files. Resolve ambiguity with the requester. Supply the approved task, specification or request as intent, and identify the repository standards that govern the behavior. Preserve their authority separately from the author's explanation.
 
+Prefer fresh temporary reviewers. Optionally supply `workers` (people by name or ID) for inspection passes in plan order, followed by temps. Choose workers only for changes they did not build or work on. Their reviews fork their conversations privately; their live sessions stay unchanged. Planning and duplicate linking use fresh temps, and a fresh rerun keeps the worker list.
+
 Use `review_code` to capture and enqueue. Read the returned identity and retained target before interpreting results. Keep any path restriction and omitted evidence explicit. Capture and model execution are different steps; an admitted request is not a completed review. Recover an uncertain request with its original handle rather than starting duplicate work.
 
 ## Direct depth at the risk

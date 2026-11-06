@@ -210,6 +210,10 @@ Verify: components/session-state/tests/specialization.test.ts
 
 ## symbol:Runtime.launchSession
 
+A worker review starts headless with --fork <original transcript> plus the attempt's new --session-id. Pi supports that explicit ID when forking. The original worker is neither opened nor attached; only the newly created peer belongs to the program's cleanup. The persisted attempt's reviewScope supplies the fork path at launch, so no generic program caller can request arbitrary fork ownership. Omit role/profile CLI overrides for a fork: its retained worker identity/model wins. Temp review starts retain their role/profile flags.
+Coupled: components/session-state/src/review-attempt.ts
+Verify: components/session-state/tests/review-workers.test.ts
+
 Both tmux and headless launches receive startup work through a bridge steer after hello and mail replay. A positional CLI prompt can start before onboarding context arrives, and RPC mode ignores it anyway. A program peer or a person woken for handover starts with an empty startup prompt: replayed mail rides its next turn, and only the correlated request starts that turn. Passing a second startup goal would produce unobserved, duplicate work.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/mail.ts, components/session-state/src/peer-turns.ts
 Verify: components/session-state/tests/program-peers.test.ts, components/session-state/tests/coordinator.test.ts

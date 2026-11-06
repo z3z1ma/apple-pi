@@ -1,5 +1,8 @@
 ## file
 
+Reviewer metadata is a forward-only review_attempts addition: historical attempts default to temp (all launches before worker pools were temps). New worker records retain the original person/name independently from the disposable attempt person; fork_file is its read-only source, not a cleanup target. The historical-schema rewind helper removes both physical columns before replaying earlier versions.
+Verify: components/session-state/tests/review-workers.test.ts, components/session-state/tests/event-index.test.ts
+
 Migration array index i advances user_version i to i + 1; shipped entries stay immutable and schema changes append a new entry. Transcript `at` records entry time, while `observed_at` records first runtime indexing. Bound command incarnations remain separate from delivery incarnations: bound mail cannot wait for a replacement process. Role title and nullable manages snapshots let query-only views render without loading the role catalog. Program creation ancestry is separate from reporting ancestry. Historical subagent attention cleanup reflects the parent receiving the result rather than operator attention.
 Why: these persisted meanings cannot be inferred from today's column names or reconstructed from current process and catalog state.
 

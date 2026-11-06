@@ -240,7 +240,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 			name: "review_code",
 			label: "Review code",
 			description:
-				"Capture an exact commit, range, branch, staged index or working tree and queue an independent review by role peers; this starts model work. Returns once captured, leaving your checkout unchanged. Give the approved intent when there is one. The owner (you by default) gets mail when the plan is ready, as each pass's findings are confirmed, and when it settles; pass wait to block until it settles instead.",
+				"Capture an exact Git change and queue independent review; starts model work, checkout unchanged. Supply approved intent. Returns after capture; owner gets plan, findings and outcome mail. Pass wait to block until settled. Prefer fresh temps; name workers only for changes they did not build or work on.",
 			parameters: Type.Object(
 				{
 					target: GitTargetSchema,
@@ -248,6 +248,9 @@ export function installReviewTools(pi: ExtensionAPI): void {
 					paths: ReviewRequestSchema.properties.paths,
 					intent: ReviewRequestSchema.properties.intent,
 					lenses: ReviewRequestSchema.properties.lenses,
+					workers: Type.Optional(
+						Type.Array(text("Names/IDs: private forks take inspection passes in order, then temps.")),
+					),
 					owner: Type.Optional(
 						text(
 							"Existing lasting person's ID. Omit to own the review yourself; assigning another owner requires management authority.",
@@ -276,6 +279,7 @@ export function installReviewTools(pi: ExtensionAPI): void {
 							paths: params.paths,
 							intent: params.intent,
 							lenses: params.lenses,
+							workers: params.workers,
 						},
 					},
 					signal,

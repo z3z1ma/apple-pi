@@ -492,6 +492,9 @@ const MIGRATIONS = [
 		update focus_spans set ended_at = cast(unixepoch('subsec') * 1000 as integer)
 		where person = old.person and ended_at is null;
 	end;`,
+
+	`alter table review_attempts add column reviewer text not null default '{"kind":"temp"}';
+	alter table review_attempts add column fork_file text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

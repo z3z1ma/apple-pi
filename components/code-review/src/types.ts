@@ -8,6 +8,7 @@ export interface ReviewRequest {
 	paths?: string[];
 	intent?: { text: string } | { path: string };
 	lenses?: string[];
+	workers?: string[];
 }
 
 export interface SourceEntry {

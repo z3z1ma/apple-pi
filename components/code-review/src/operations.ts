@@ -15,6 +15,7 @@ export const ReviewRequestSchema = Type.Object(
 			Type.Union([Type.Object({ text }, object), Type.Object({ path: Type.String({ minLength: 1 }) }, object)]),
 		),
 		lenses: Type.Optional(Type.Array(text)),
+		workers: Type.Optional(Type.Array(text)),
 	},
 	object,
 );
