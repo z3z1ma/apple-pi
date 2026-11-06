@@ -178,6 +178,19 @@ test("an ordinary non-manager can run a headless role peer; closing waits for it
 	expect(readFileSync(join(state.agentDir, "peer-records", `${id}.jsonl`), "utf8")).toContain("Report the result.");
 });
 
+test("closing a reviewer that ignores SIGTERM and its closed input kills it after the grace period", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ unresponsive: true }));
+	const program = await programFor();
+	const id = await createPeer(program);
+	const launch = JSON.parse(readFileSync(join(state.agentDir, "peer-records", `${id}.launch.json`), "utf8"));
+	const started = Date.now();
+	await program.close();
+	expect(Date.now() - started).toBeGreaterThanOrEqual(30_000);
+	expect(processGone(launch.pid)).toBe(true);
+	expect(existsSync(join(state.agentDir, "peer-records", `${id}.stopped`))).toBe(false);
+	cleanOwnership();
+}, 90_000);
+
 test("an attached lasting person runs in its own session and is never owned or closed by the program", async () => {
 	const id = randomUUID();
 	const started = await sendCommand(id, {

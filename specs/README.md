@@ -6,6 +6,12 @@ These are apple-pi's own formal models of its runtime and of its verification to
 npx vitest run tests/formal-verification.test.ts tests/lifecycle-models.test.ts tests/verification-models.test.ts --maxWorkers=1
 ```
 
+## Waiting for a review
+
+| Model | Engine | Claim |
+| --- | --- | --- |
+| `review-wait.tla` | TLC, with weak fairness | `read_review` with `wait` always returns: through runtime crashes (bounded) and restarts, reviewer turns that stall forever, and reviewer processes that ignore SIGTERM, every attempt fails or completes, each pass is retried once, and the job settles. It assumes a turn that keeps showing activity eventually ends. Turning off either the silence watchdog (`WatchdogOn`) or SIGKILL escalation (`KillEscalation`) gives a temporal violation; its test requires both. |
+
 ## The verification tools themselves
 
 | Model | Engine | Claim |

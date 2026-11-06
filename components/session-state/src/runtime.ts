@@ -111,6 +111,7 @@ import {
 type WorkRecord = Extract<Command, { kind: "task_opened" | "task_moved" | "link_record" | "link_resolve" }>;
 
 const TMUX_POLL_MS = 1000;
+const PEER_KILL_GRACE_MS = 30_000;
 const PAGE_TOOLS = "'explain_change', 'sign_off_code', 'sign_off_document', 'sign_off_task'";
 
 type Fields = Record<string, string | number>;
@@ -268,6 +269,7 @@ export class Runtime {
 	private readonly discarding = new Set<string>();
 	private readonly discardRequests = new Map<string, Set<string>>();
 	private readonly signalled = new Map<string, Set<string>>();
+	private readonly peerTerminatedAt = new Map<string, number>();
 	private programTimer?: NodeJS.Timeout;
 	private cleaningPrograms = false;
 
@@ -2143,6 +2145,29 @@ export class Runtime {
 		return ids;
 	}
 
+	private signalProgramPeer(id: string, pid: number, key: string): void {
+		let sent = this.signalled.get(id);
+		if (!sent) {
+			sent = new Set();
+			this.signalled.set(id, sent);
+		}
+		const terminatedAt = this.peerTerminatedAt.get(key);
+		const signal = !sent.has(key)
+			? "SIGTERM"
+			: terminatedAt !== undefined && Date.now() - terminatedAt >= PEER_KILL_GRACE_MS
+				? "SIGKILL"
+				: undefined;
+		if (!signal) return;
+		try {
+			process.kill(pid, signal);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+		}
+		sent.add(key);
+		if (signal === "SIGTERM") this.peerTerminatedAt.set(key, Date.now());
+		else this.peerTerminatedAt.delete(key);
+	}
+
 	private async stopProgramPeer(
 		id: string,
 		db: DatabaseSync,
@@ -2191,20 +2216,7 @@ export class Runtime {
 			if (state === "gone") continue;
 			waiting = true;
 			if (state === "unknown") throw new Error(`Cannot verify process ${proc.pid} of temporary peer ${id}`);
-			const key = `${proc.pid}:${proc.process_started_at}`;
-			let sent = this.signalled.get(id);
-			if (!sent) {
-				sent = new Set();
-				this.signalled.set(id, sent);
-			}
-			if (!sent.has(key)) {
-				try {
-					process.kill(proc.pid, "SIGTERM");
-				} catch (error) {
-					if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-				}
-				sent.add(key);
-			}
+			this.signalProgramPeer(id, proc.pid, `${proc.pid}:${proc.process_started_at}`);
 		}
 		if (waiting) return false;
 
@@ -2533,6 +2545,7 @@ export class Runtime {
 				}
 				for (const id of stopped) {
 					this.discarding.delete(id);
+					for (const key of this.signalled.get(id) ?? []) this.peerTerminatedAt.delete(key);
 					this.signalled.delete(id);
 				}
 			}

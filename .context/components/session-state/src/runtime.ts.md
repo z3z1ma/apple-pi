@@ -189,7 +189,9 @@ Verify: components/session-state/tests/program-peers.test.ts
 
 ## symbol:Runtime.stopProgramPeer
 
-Prove OS process death before discarding ownership, including ended or superseded incarnations. A bridge shutdown can precede process exit. SIGTERM lets native Pi clean its detached tool processes; PID/start-time checks protect reused PIDs.
+Prove OS process death before discarding ownership, including ended or superseded incarnations. A bridge shutdown can precede process exit. SIGTERM lets native Pi clean its detached tool processes; PID/start-time checks protect reused PIDs. A peer process still alive `PEER_KILL_GRACE_MS` (30 seconds) after SIGTERM gets SIGKILL (`signalProgramPeer`), once; its detached tool processes may then outlive it.
+Why: a hung peer ignores SIGTERM, and without escalation its program close, the review attempt and every wait on the review never ended. Departure writers deliberately keep waiting instead; they are not temporary peers.
+Verify: components/session-state/tests/program-peers.test.ts, tests/lifecycle-models.test.ts
 
 Before the first hello, recovery may have only a launch record. The tmux initial command identifies a window even if its name changed before the returned pane id was recorded. A renamed-window crash test caught disposal falsely succeeding while the process still ran when recovery used only the name.
 Coupled: components/session-state/src/tmux.ts, components/session-state/src/program-peers.ts

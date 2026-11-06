@@ -55,11 +55,14 @@ const stop = () => {
 	for (const run of controlledRuns.values()) run.abort();
 	if (controlledRuns.size === 0) finishStop();
 };
-process.on("SIGTERM", stop);
-process.on("SIGHUP", stop);
+const stopUnlessUnresponsive = () => {
+	if (!control.unresponsive) stop();
+};
+process.on("SIGTERM", stopUnlessUnresponsive);
+process.on("SIGHUP", stopUnlessUnresponsive);
 if (process.argv.includes("rpc")) {
 	process.stdin.resume();
-	process.stdin.on("end", stop);
+	process.stdin.on("end", stopUnlessUnresponsive);
 }
 if (control.failStartup) process.exit(1);
 while (control.helloGate && !existsSync(control.helloGate)) await new Promise((resolve) => setTimeout(resolve, 20));

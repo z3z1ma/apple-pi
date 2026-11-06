@@ -14,6 +14,18 @@ import { openPeerProgram, type PeerProgram } from "./program-client.js";
 
 export class ReviewStop extends Error {}
 
+export const REVIEWER_SILENCE_MS = 15 * 60_000;
+const SILENCE_CHECK_MS = 30_000;
+
+export function watchSilence(lastActivity: () => number, onSilent: () => void): () => void {
+	const timer = setInterval(() => {
+		if (Date.now() - lastActivity() < REVIEWER_SILENCE_MS) return;
+		clearInterval(timer);
+		onSilent();
+	}, SILENCE_CHECK_MS);
+	return () => clearInterval(timer);
+}
+
 export interface ReviewPassRequest {
 	id: string;
 	role: string;
@@ -158,10 +170,8 @@ export async function runReviewAttempt(
 			throw new ReviewStop("The reviewer did not select its recorded role/model policy; no review turn was sent");
 		if (JSON.stringify(resolve()) !== JSON.stringify(policy))
 			throw new ReviewStop("The review policy changed during startup; no review turn was sent");
-		const receipt = await program.command(
-			person,
-			{ kind: "run_turn", ...input },
-			{ signal, commandId: `${id}:turn`, result: saveResult },
+		const receipt = await watchedTurn(db, program, person, signal, (peer) =>
+			peer.command(person, { kind: "run_turn", ...input }, { signal, commandId: `${id}:turn`, result: saveResult }),
 		);
 		if (receipt.stage !== "applied" || receipt.result?.status !== "completed")
 			throw new Error(receipt.reason ?? receipt.result?.error ?? "The review turn did not complete");
@@ -225,6 +235,42 @@ function rolePolicy(source: string, role: string, depth: ReviewDepth | undefined
 	} catch (error) {
 		throw new ReviewStop(message(error));
 	}
+}
+
+async function watchedTurn<T>(
+	db: DatabaseSync,
+	program: PeerProgram,
+	person: string,
+	signal: AbortSignal,
+	turn: (program: PeerProgram) => Promise<T>,
+): Promise<T> {
+	const started = Date.now();
+	let silent = false;
+	const stopWatching = watchSilence(
+		() => {
+			if (!db.isOpen) return Date.now();
+			const row = db.prepare("select updated_at from sessions where id = ?").get(person) as
+				| { updated_at: number }
+				| undefined;
+			return Math.max(started, row?.updated_at ?? 0);
+		},
+		() => {
+			silent = true;
+			void program.close().catch(() => {});
+		},
+	);
+	const stalled = () =>
+		new Error(`The reviewer showed no activity for ${REVIEWER_SILENCE_MS / 60_000} minutes, so its turn was stopped`);
+	let result: T;
+	try {
+		result = await turn(program);
+	} catch (error) {
+		throw silent && !signal.aborted ? stalled() : error;
+	} finally {
+		stopWatching();
+	}
+	if (silent) throw stalled();
+	return result;
 }
 
 async function setThinking(
