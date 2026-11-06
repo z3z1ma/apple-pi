@@ -1,6 +1,6 @@
 # 06: Propose retiring capabilities that stopped earning their place
 
-**What to build:** On the steward's schedule, list rules that have not fired and saved programs that have not been called since they were adopted (or since the last change to their surface), and bring a removal proposal with those counts to sign-off.
+**What to build:** On each steward run, list rules that have not fired and saved programs that have not been called since they were adopted (or since the last change to their surface), and bring a removal proposal with those counts to sign-off.
 
 **Blocked by:** 03
 

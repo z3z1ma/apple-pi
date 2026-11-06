@@ -30,6 +30,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
 		tools: [
 			"context_lint",
 			"repo_rules",
+			"replay_rule",
 			"wiki_references",
 			"wiki_lint",
 			"notes",
@@ -48,7 +49,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
 		guidance: [
 			"Knowledge lives in homes, listed from most durable to most fleeting. When two disagree about how the system behaves, the higher one wins; what to do and how far comes from your task and whoever gave it. What you learn moves up to the most durable home that fits:",
 			"- **The repository**: code, tests, docs and `AGENTS.md` own behavior. `.pi/rules/`, when present, checks every edit and command; when you meet a mistake a machine can catch, write a rule there.",
-			"  `repo_rules` shows how often each rule fired.",
+			"  `repo_rules` shows how often each rule fired, and `replay_rule` shows what a candidate rule would have refused in the edits and commands recorded here since a date or commit.",
 			"- **Context files**: `.context/<path>.md` beside each source path holds what the code cannot show (invariants, hazards, why, with `Coupled:` and `Verify:` paths). A top-level read brings it along; a read inside a program does not.",
 			"  Editing the source stays blocked until the context file's current version is in front of you, and `context_lint` checks it after you change one or move its source.",
 			{

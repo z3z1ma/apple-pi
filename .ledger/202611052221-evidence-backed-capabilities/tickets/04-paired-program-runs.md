@@ -6,9 +6,9 @@
 
 **Status:** planned
 
-This is the riskiest ticket: model variance and spend decide whether the comparison means anything, and the spend limit is the operator's decision.
+This is the riskiest ticket: model variance and spend decide whether the comparison means anything. The operator decided the steward asks him before each evaluation, with its estimated cost.
 
 - [ ] Both arms of a task start from the same commit and the same prompt; only the program's availability differs.
 - [ ] The report lists every sample, not only medians, and says when the arms do not differ beyond their spread.
-- [ ] A run that exceeds the operator's spend limit stops and reports what it measured so far.
+- [ ] Before running, the evaluation states its task set, sample count and estimated cost, and runs only after the operator agrees.
 - [ ] Every worktree and temporary peer is cleaned up on success, failure and cancellation.

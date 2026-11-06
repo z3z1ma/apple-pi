@@ -9,6 +9,7 @@ import { addedComments } from "./comments.js";
 import { firingsIn, recordFirings } from "./firings.js";
 import { runRules } from "./grit.js";
 import { gritPath, loadRepoRules, RULES_DIR, rulesFor, rulesRootOf } from "./policy.js";
+import { createReplayTool } from "./replay.js";
 
 export const REPO_RULES_PROMPT_TAG = "repo-rules";
 export const REPO_RULES_TOOL_NAME = "repo_rules";
@@ -130,6 +131,7 @@ function createRulesTool() {
 export function installRepoRules(pi: ExtensionAPI): void {
 	const writingBatches = new Set<string>();
 	pi.registerTool(createRulesTool());
+	pi.registerTool(createReplayTool());
 	pi.on("before_agent_start", (event, ctx) => {
 		const optedIn = existsSync(join(ctx.cwd, RULES_DIR));
 		setSystemPromptSection(event.systemPromptOptions, REPO_RULES_PROMPT_TAG, optedIn ? OPTED_IN : NOT_OPTED_IN);

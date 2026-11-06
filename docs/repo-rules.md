@@ -72,6 +72,15 @@ Each refusal is recorded per repository and rule in `~/.pi/agent/repo-rules/firi
 `repo_rules` tool lists every rule with how often it fired and when it last did, so a rule that blocks good code can be
 narrowed and one that never fires can be questioned.
 
+## Replaying a candidate
+
+`replay_rule` shows what a rule would have done before it exists: give it a GritQL query (with `includes` globs) or an
+action pattern, and a window start (a date, or a revision such as the last commit that changed what the rule guards). It
+reads the Pi session logs of this repository from then on and lists every recorded edit, write or shell command the rule
+would have refused, each with an `entry:<session>/<id>` reference that `search_session` opens, plus anything the engine
+could not evaluate. Edits are checked on the text they added. A replay records no firings and changes nothing; calls
+made from codemode scripts are not recorded as tool calls and are not replayed.
+
 ## In every repository
 
 A commit sent in the same message as an `edit` or `write` is refused everywhere: parallel calls run concurrently, so

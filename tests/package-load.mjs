@@ -217,6 +217,7 @@ try {
 		"wiki_references",
 		"context_lint",
 		"repo_rules",
+		"replay_rule",
 		"tlc_check",
 		"tla_symbolic_check",
 		"alloy_check",

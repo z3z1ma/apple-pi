@@ -48,7 +48,7 @@ Evidence is expensive: real tasks, run by models, several times.
 
 ## Who runs it
 
-A new role, `capability-steward`, writes files and manages no one. Its charter: run the loop on a schedule, bring each candidate as one ledger bundle with evidence to the operator, never adopt anything itself, and propose retirements. A schedule (`schedule_mail`) wakes it; the operator sets the cadence. The steward borrows challengers as temporary peers in advisory roles.
+A new role, `capability-steward`, writes files and manages no one. Its charter: run the loop when asked, bring each candidate as one ledger bundle with evidence to the operator, never adopt anything itself, and propose retirements. An explicit slash command starts a run. The steward borrows challengers as temporary peers in advisory roles.
 
 ## Build order
 
@@ -61,12 +61,12 @@ A new role, `capability-steward`, writes files and manages no one. Its charter: 
 
 Rules first because their evidence is cheap and their first target is already known; programs second because their evidence costs model time and the post-codemode usage that would justify them is only a day old.
 
-## Open decisions for the operator
+## Decisions (operator, 2026-11-05)
 
-1. **Cadence and spend.** How often the steward runs, and how much model time a program evaluation may use. No number is proposed without data.
-2. **Cross-repository programs.** Add a user-global programs directory, or keep programs per repository.
-3. **Harness guards in scope.** Track A can propose changes to harness code itself (the batching guard), not only `.pi/rules` entries. Recommended: yes, as ordinary reviewed changes.
-4. **Where candidates land.** Recommended: a ledger bundle per candidate, opened as a sign-off page; a Workplace view can come later.
+1. **Cadence:** no schedule. An explicit slash command starts a steward run.
+2. **Program spend:** the steward estimates a paired evaluation's cost and asks the operator before each one. No fixed limit.
+3. **Programs stay per repository.** No user-global programs directory.
+4. **Harness guards are in scope** as ordinary reviewed changes, and **each candidate lands as a ledger bundle** opened as a sign-off page (approved with the proposal).
 
 ## What is not claimed
 
