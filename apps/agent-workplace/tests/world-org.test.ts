@@ -767,6 +767,7 @@ test("each organization is its own workspace with only its own tree, people and 
 			"Sleeping head organization (1)",
 			"Solo organization (1)",
 			"Survivor organization (1)",
+			"Leave Ada organization\u2026",
 		]);
 		await page.keyboard.press("Escape");
 		const directory = page.getByRole("table", { name: "People", exact: true });

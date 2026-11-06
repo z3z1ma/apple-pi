@@ -25,6 +25,8 @@ export function DepartureDialog({
 	onHide,
 	onClose,
 	onUnsettled,
+	heading,
+	handoffs = "all",
 }: {
 	selection: DepartureSelection;
 	open: boolean;
@@ -32,13 +34,15 @@ export function DepartureDialog({
 	onHide: () => void;
 	onClose: () => void;
 	onUnsettled: (value: boolean) => void;
+	heading?: string;
+	handoffs?: "all" | "managers" | "none";
 }) {
 	const dialog = useRef<HTMLDialogElement>(null);
 	const cancel = useRef<HTMLButtonElement>(null);
 	const lock = useRef(false);
 	const title = useId();
 	const [reason, setReason] = useState("");
-	const [mode, setMode] = useState("all");
+	const [mode, setMode] = useState<string>(handoffs);
 	const [permanent, setPermanent] = useState(false);
 	const [request, setRequest] = useState<RetirePeopleRequest>();
 	const [progress, setProgress] = useState<RetirePeopleProgress>();
@@ -112,7 +116,7 @@ export function DepartureDialog({
 				onHide();
 			}}
 		>
-			<h2 id={title}>Let {selection.people.length} people go</h2>
+			<h2 id={title}>{heading ?? `Let ${selection.people.length} people go`}</h2>
 			<div className="wp-departure-body">
 				<p>
 					Remove only these people and their private resources permanently. Current turns can be stopped. Unfinished

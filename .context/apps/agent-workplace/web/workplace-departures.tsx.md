@@ -6,5 +6,7 @@ Keep the native dialog outside the People table/overview conditional. Org's gene
 
 Pending/uncertain work contributes to Org's existing shared leave guard. Hiding is not cancellation. Reload loses the in-memory display while the main-process batch can continue; quitting stops unsent requests, not accepted daemon work. This is deliberately not a durable batch history UI.
 
-Coupled: apps/agent-workplace/web/workplace-departures.css, apps/agent-workplace/web/workplace-org-chart.tsx, apps/agent-workplace/web/workplace-org.tsx, apps/agent-workplace/src/backend/departures.ts, apps/agent-workplace/src/backend/projection.ts
+The shell's Leave organization entry reuses this dialog with its own heading and `handoffs="none"` preselected; the operator can still change the choice before sending.
+
+Coupled: apps/agent-workplace/web/workplace.tsx, apps/agent-workplace/web/workplace-departures.css, apps/agent-workplace/web/workplace-org-chart.tsx, apps/agent-workplace/web/workplace-org.tsx, apps/agent-workplace/src/backend/departures.ts, apps/agent-workplace/src/backend/projection.ts
 Verify: apps/agent-workplace/tests/world-lifecycle.test.ts

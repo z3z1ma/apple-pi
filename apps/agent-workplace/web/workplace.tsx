@@ -23,6 +23,7 @@ import { ChannelBrowser } from "./workplace-channels.js";
 import { WorkplaceCode } from "./workplace-code.js";
 import { Connections } from "./workplace-connections.js";
 import { useWorkplaceMenu, WorkplaceMenuProvider } from "./workplace-context-menu.js";
+import { DepartureDialog, type DepartureSelection } from "./workplace-departures.js";
 import {
 	activityItems,
 	ChannelHeader,
@@ -353,12 +354,17 @@ function Workplace() {
 		history.replaceState(null, "", "?workplace=code");
 	}, []);
 	const [planState, setPlanState] = useState({ dirty: false, started: false });
+	const brand = useRef<HTMLButtonElement>(null);
+	const [leaving, setLeaving] = useState<DepartureSelection & { name: string }>();
+	const [leavingOpen, setLeavingOpen] = useState(false);
+	const [leavingUnsettled, setLeavingUnsettled] = useState(false);
 	useEffect(() => {
 		const protectDrafts = (event: BeforeUnloadEvent) => {
 			if (
 				!codeDirty &&
 				terminalCount === 0 &&
 				!planState.dirty &&
+				!leavingUnsettled &&
 				!document.querySelector(".wp-world-frame[data-world-dirty]")
 			)
 				return;
@@ -367,7 +373,7 @@ function Workplace() {
 		};
 		window.addEventListener("beforeunload", protectDrafts);
 		return () => window.removeEventListener("beforeunload", protectDrafts);
-	}, [codeDirty, terminalCount, planState.dirty]);
+	}, [codeDirty, terminalCount, planState.dirty, leavingUnsettled]);
 	const [requestedDM, setRequestedDM] = useState<{ id: string; key: string }>();
 	const [requestedChannel, setRequestedChannel] = useState<{ id: string; key: string }>();
 	const openChannel = (id: string) => {
@@ -406,13 +412,39 @@ function Workplace() {
 		? scoped.characters.filter((person) => person.facts?.unseen && !silenced.has(`dm:${person.id}`)).length +
 			[...channelUnreads(scoped)].filter(([id, count]) => count > 0 && !silenced.has(`channel:${id}`)).length
 		: 0;
-	const workspaceMenu = allWorkspaces.map((each) => {
-		const count = world && each.id !== workspace?.id ? workspaceUnread(world, each) : 0;
-		return {
-			label: `${each.id === workspace?.id ? "\u2713 " : ""}${each.name}${count ? ` (${count})` : ""}`,
-			onSelect: () => switchWorkspace(each.id),
-		};
-	});
+	const workspaceMenu = [
+		...allWorkspaces.map((each) => {
+			const count = world && each.id !== workspace?.id ? workspaceUnread(world, each) : 0;
+			return {
+				label: `${each.id === workspace?.id ? "\u2713 " : ""}${each.name}${count ? ` (${count})` : ""}`,
+				onSelect: () => switchWorkspace(each.id),
+			};
+		}),
+		...(world && workspace && !leaving
+			? [
+					{
+						label: `Leave ${workspace.name}\u2026`,
+						onSelect: () => {
+							setLeaving({
+								id: crypto.randomUUID(),
+								trigger: brand.current!,
+								name: workspace.name,
+								people: orgPeople(world)
+									.filter((person) => workspace.members.has(person.character.id))
+									.map((person) => ({
+										person: person.character.id,
+										name: person.character.name,
+										manager: person.character.role === "coordinator",
+									})),
+							});
+							setLeavingOpen(true);
+						},
+					},
+				]
+			: leaving
+				? [{ label: "Leaving progress\u2026", onSelect: () => setLeavingOpen(true) }]
+				: []),
+	];
 	return (
 		<div
 			className={`wp-app wp-${["org", "code", "git", "reviews", "issues"].includes(view) ? `${view}-view` : view}`}
@@ -422,6 +454,7 @@ function Workplace() {
 		>
 			<nav className="wp-rail" aria-label="Applications">
 				<button
+					ref={brand}
 					type="button"
 					className="wp-brand"
 					aria-label={`Workspace: ${workspace?.name ?? "pi"}. Switch workspace`}
@@ -617,6 +650,22 @@ function Workplace() {
 					</div>
 				)}
 			</div>
+			{leaving && world && (
+				<DepartureDialog
+					key={leaving.id}
+					selection={leaving}
+					heading={`Leave ${leaving.name}: let its ${leaving.people.length} ${leaving.people.length === 1 ? "person" : "people"} go`}
+					handoffs="none"
+					open={leavingOpen}
+					connected={world.connected}
+					onUnsettled={setLeavingUnsettled}
+					onHide={() => setLeavingOpen(false)}
+					onClose={() => {
+						setLeaving(undefined);
+						setLeavingOpen(false);
+					}}
+				/>
+			)}
 		</div>
 	);
 }

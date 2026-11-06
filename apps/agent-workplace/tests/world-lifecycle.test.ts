@@ -525,6 +525,41 @@ test.each([
 	}
 });
 
+test("Leave in the workspace menu lets the whole organization go without handoffs, after explicit consent", async () => {
+	const { page, errors } = await openLifecycle();
+	try {
+		await page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ }).click();
+		await page.getByRole("menuitem", { name: "Leave Ada organization\u2026", exact: true }).click();
+		const dialog = page.getByRole("dialog", { name: "Leave Ada organization: let its 7 people go", exact: true });
+		await dialog.waitFor();
+		expect(await dialog.getByRole("radio", { name: "None", exact: true }).isChecked()).toBe(true);
+		expect((await dialog.getByRole("rowheader").allTextContents()).sort()).toEqual([
+			"Ada",
+			"Bea",
+			"Ben",
+			"Cleo",
+			"Daria",
+			"Erin",
+			"Mina",
+		]);
+		const send = dialog.getByRole("button", { name: "Let go", exact: true });
+		await dialog.getByRole("textbox", { name: "Reason for leaving" }).fill("No longer needed");
+		expect(await send.isDisabled()).toBe(true);
+		await shot(page, "leave-organization-light-1440");
+		await dialog.getByRole("checkbox", { name: "Permanently remove these 7 people" }).check();
+		await send.click();
+		await vi.waitFor(async () => expect((await calls(page)).retirePeople).toHaveLength(1));
+		const sent = (await calls(page)).retirePeople[0];
+		expect(sent.reason).toBe("No longer needed");
+		expect([...sent.people].sort((a, b) => a.person.localeCompare(b.person))).toEqual(
+			["ada", "bea", "ben", "cleo", "daria", "erin", "mina"].map((person) => ({ person, handoff: false })),
+		);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
 test("Org select-all is explicit and uncertain batch progress retains the same request", async () => {
 	const { page, errors } = await openLifecycle();
 	try {
