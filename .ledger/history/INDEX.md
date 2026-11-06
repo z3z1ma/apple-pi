@@ -193,3 +193,5 @@
 - `.ledger/history/202611052330-dependent-edit-batches/task.md` — done — Refuse dependent file checks beside parallel edits — Candidate batching guard: replay same-file read/check and edit collisions in recorded assistant batches; challenge and adopt only through operator sign-off.
 
 - `.ledger/history/202611052221-evidence-backed-capabilities/task.md` — done — Turn recurring lessons into tested rules and programs — Capability evolution: mine recurring lessons and failures across sessions, propose rules, guards and saved programs, prove them with replay or paired runs, challenge them, and adopt them only by operator sign-off; retire ones that stop earning their place.
+
+- `.ledger/history/202611061024-workplace-workspaces-and-review-workers/task.md` — done — Workplace workspaces per organization root, and review worker pools — Each organization root is a Slack-style workspace in Workplace (switcher on the pi mark); Chat, Mail, Org, Reviews and Desk scope to the root's subtree; Org tab becomes tree + directory split; review_code takes existing workers (forked continuations) before temps, with worker/temp badges.
