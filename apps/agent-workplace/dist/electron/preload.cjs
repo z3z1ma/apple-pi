@@ -113,6 +113,8 @@ var api = {
 	recruit: (request) => electron.ipcRenderer.invoke("world:recruit", request),
 	rename: (characterId, name) => electron.ipcRenderer.invoke("world:rename", characterId, name),
 	roles: () => electron.ipcRenderer.invoke("world:roles"),
+	organizationLifetime: (root) => electron.ipcRenderer.invoke("world:organization-lifetime", root),
+	incorporateOrganization: (root) => electron.ipcRenderer.invoke("world:incorporate-organization", root),
 	orgMove: (request) => electron.ipcRenderer.invoke("world:org-move", request),
 	orgStart: (request) => electron.ipcRenderer.invoke("world:org-start", request),
 	onOrgStart(listener) {

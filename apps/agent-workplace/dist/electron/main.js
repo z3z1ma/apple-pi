@@ -3577,6 +3577,51 @@ function openNotepads(snapshot, onChange) {
 	};
 }
 //#endregion
+//#region components/session-state/src/organization-lifetime.ts
+function dissolutionBlocker(db, person) {
+	const row = db.prepare(`select s.run_state, s.prompt, s.queue, s.retired_at,
+		i.process_state, i.ended_at from sessions s left join incarnations i
+		on i.session_id = s.id and i.generation = s.generation where s.id = ?`).get(person);
+	if (!row) return "Person no longer exists";
+	if (row.retired_at !== null) return "Finishing permanent departure resource cleanup";
+	if ((row.process_state === "alive" || row.process_state === "alive_bridge_lost") && (row.run_state !== "idle" || row.prompt || row.queue && JSON.parse(row.queue).pending)) return "Waiting for the current turn or pending input to settle";
+	if (db.prepare("select 1 from assignments where person = ? and ended_at is null").get(person)) return "Waiting for held assignments to finish or be reassigned";
+	if (db.prepare("select 1 from review_jobs where owner = ? and state not in ('completed', 'cancelled', 'no-changes')").get(person)) return "Waiting for owned reviews to finish or be reassigned";
+	if (db.prepare("select 1 from sessions where kind = 'root' and reports_to = ?").get(person)) return "Waiting for reports to leave and finish resource cleanup";
+	if (db.prepare("select 1 from program_scopes where caller = ?").get(person) || db.prepare("select 1 from program_peers where created_by = ?").get(person)) return "Waiting for program delegations to finish cleanup";
+	if (!db.prepare("select 1 from incarnations where session_id = ?").get(person)) return "Waiting for an observed process identity before safe cleanup";
+}
+function organizationLifetime(db, person) {
+	const root = rootOf$1(db, person);
+	if (!db.prepare("select 1 from pragma_table_info('sessions') where name = 'incorporated'").get()) return {
+		root,
+		incorporated: true,
+		closing: false,
+		waiting: []
+	};
+	const row = db.prepare("select incorporated, closing_generation, generation from sessions where id = ? and kind = 'root'").get(root);
+	if (!row) throw new Error("Unknown organization");
+	const closing = !row.incorporated && row.closing_generation === row.generation;
+	const waiting = [];
+	if (closing) {
+		const temporary = temporaryCallers(db);
+		for (const { id } of db.prepare("select id from sessions where kind = 'root' order by id").all()) {
+			if (rootOf$1(db, id) !== root) continue;
+			const reason = temporary.has(id) ? "Waiting for the owning program to dispose its temporary peer" : dissolutionBlocker(db, id);
+			waiting.push({
+				person: id,
+				reason: reason ?? "Ready for permanent departure"
+			});
+		}
+	}
+	return {
+		root,
+		incorporated: row.incorporated === 1,
+		closing,
+		waiting
+	};
+}
+//#endregion
 //#region apps/agent-workplace/src/backend/org.ts
 var ready = (person) => person.state === "ready" || person.state === "active";
 var bridgeLost = (person) => person && person.started_at !== null && person.ended_at === null && !person.awake;
@@ -3988,6 +4033,18 @@ function openOrg(paths, commands, snapshot) {
 		}
 	}
 	return {
+		organizationLifetime(person) {
+			const db = new DatabaseSync(paths.db, { readOnly: true });
+			try {
+				return organizationLifetime(db, person);
+			} finally {
+				db.close();
+			}
+		},
+		incorporateOrganization: (root) => commands.send(root, {
+			kind: "incorporate",
+			by: "operator"
+		}),
 		orgMove: (request) => move(request),
 		orgStart(request) {
 			const active = running.get(request.id);
@@ -13420,6 +13477,14 @@ function start() {
 	ipcMain.handle("world:retire-people", (_event, request) => {
 		if (!isRetirePeopleRequest(request)) throw new Error("A confirmed selection and reason are required.");
 		return departures.retirePeople(request);
+	});
+	ipcMain.handle("world:organization-lifetime", (_event, root) => {
+		if (typeof root !== "string" || !root) throw new Error("An organization root is required.");
+		return org.organizationLifetime(root);
+	});
+	ipcMain.handle("world:incorporate-organization", (_event, root) => typeof root === "string" && root ? org.incorporateOrganization(root) : {
+		ok: false,
+		reason: "An organization root is required."
 	});
 	ipcMain.handle("world:org-move", (_event, request) => isOrgMoveRequest(request) ? org.orgMove(request) : {
 		ok: false,

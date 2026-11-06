@@ -133,7 +133,20 @@ async function openLifecycle(appearance: "light" | "dark" = "light", width = 144
 				w.rejectLifecycle = reject;
 			});
 		};
+		w.lifetime = {
+			root: "ada",
+			incorporated: false,
+			closing: true,
+			waiting: [{ person: "ben", reason: "holds work" }],
+		};
+		w.incorporations = [];
 		w.agentWorkplace = {
+			organizationLifetime: async (root: string) => ({ ...w.lifetime, root }),
+			incorporateOrganization: async (root: string) => {
+				w.incorporations.push(root);
+				w.lifetime = { ...w.lifetime, incorporated: true, closing: false, waiting: [] };
+				return { ok: true };
+			},
 			snapshot: async () => current,
 			onUpdate: (listener: (snapshot: WorldSnapshot) => void) => {
 				listeners.add(listener);
@@ -554,6 +567,33 @@ test("Leave in the workspace menu lets the whole organization go without handoff
 		expect([...sent.people].sort((a, b) => a.person.localeCompare(b.person))).toEqual(
 			["ada", "bea", "ben", "cleo", "daria", "erin", "mina"].map((person) => ({ person, handoff: false })),
 		);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("the workspace menu shows a dissolving organization's blockers and incorporates it on request", async () => {
+	const { page, errors } = await openLifecycle();
+	try {
+		const switcher = page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ });
+		const menu = page.getByRole("menu", { name: "Actions", exact: true });
+		await switcher.click();
+		const waiting = menu.getByRole("menuitem", { name: "Dissolving; waiting on Ben (holds work)", exact: true });
+		await waiting.waitFor();
+		expect(await waiting.isDisabled()).toBe(true);
+		await shot(page, "dissolving-menu-light-1440");
+		await menu
+			.getByRole("menuitem", { name: "Incorporate this organization (stops it dissolving)", exact: true })
+			.click();
+		await vi.waitFor(async () => expect(await page.evaluate(() => (window as any).incorporations)).toEqual(["ada"]));
+		await vi.waitFor(async () => {
+			await switcher.click();
+			const kept = menu.getByRole("menuitem", { name: "Incorporated: kept after its session closes", exact: true });
+			const shown = await kept.count();
+			await page.keyboard.press("Escape");
+			expect(shown).toBe(1);
+		});
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

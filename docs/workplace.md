@@ -14,6 +14,8 @@ Drag the visible dividers to resize content sidebars, profiles, Org details, Cod
 
 Each organization (a root session with everyone who reports to it, at any depth) is its own workspace, like being signed in to several Slack workspaces. Click the mark at the top of the rail, which shows the current organization's initials, to switch; each workspace in the menu shows its unread count. The choice is remembered on this device.
 
+The menu also shows whether the current organization is incorporated. An organization that is not incorporated dissolves when its root closes; **Incorporate this organization** keeps it, and also stops a dissolution that is waiting. While one waits, the menu names each person it waits on and why.
+
 **Leave <organization>…** at the bottom of the same menu lets every lasting person in the current organization go, through the ordinary Let go dialog with no handoffs selected: it is permanent, needs a reason and explicit consent, and is refused for anyone with unfinished work until that work is finished or reassigned.
 
 Chat, Mail, Org, Reviews and the Desk show only the current workspace: its people, their DMs, the channels and mail they take part in, and the reviews they requested or own. A conversation that includes people from two organizations appears in both. Code, Git and Issues do not change with the workspace. There is one desk: it works in the workspace whose organization holds its coordinator, and every other workspace's Desk says where it is run from, with **Go there** and **Run the desk from here**.

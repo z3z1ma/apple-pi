@@ -358,6 +358,25 @@ function Workplace() {
 	const [leaving, setLeaving] = useState<DepartureSelection & { name: string }>();
 	const [leavingOpen, setLeavingOpen] = useState(false);
 	const [leavingUnsettled, setLeavingUnsettled] = useState(false);
+	const [lifetime, setLifetime] = useState<Awaited<ReturnType<typeof api.organizationLifetime>>>();
+	const [incorporateError, setIncorporateError] = useState<string>();
+	const workspaceId = workspace?.id;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: every snapshot can change the organization's lifetime.
+	useEffect(() => {
+		if (!workspaceId) return;
+		let live = true;
+		void Promise.resolve()
+			.then(() => api.organizationLifetime(workspaceId))
+			.then((value) => {
+				if (live) setLifetime(value);
+			})
+			.catch(() => {
+				if (live) setLifetime(undefined);
+			});
+		return () => {
+			live = false;
+		};
+	}, [workspaceId, world]);
 	useEffect(() => {
 		const protectDrafts = (event: BeforeUnloadEvent) => {
 			if (
@@ -412,6 +431,35 @@ function Workplace() {
 		? scoped.characters.filter((person) => person.facts?.unseen && !silenced.has(`dm:${person.id}`)).length +
 			[...channelUnreads(scoped)].filter(([id, count]) => count > 0 && !silenced.has(`channel:${id}`)).length
 		: 0;
+	const nameOf = (id: string) =>
+		world?.characters.find((person) => person.id === id)?.name ??
+		world?.dormant?.find((person) => person.id === id)?.name ??
+		id;
+	const lifetimeItems: { label: string; onSelect: () => void; disabled?: boolean }[] = [];
+	if (lifetime && workspace && lifetime.root === workspace.id) {
+		const note = (label: string) => lifetimeItems.push({ label, onSelect: () => {}, disabled: true });
+		if (lifetime.incorporated) note("Incorporated: kept after its session closes");
+		else
+			lifetimeItems.push({
+				label: `Incorporate this organization${lifetime.closing ? " (stops it dissolving)" : ""}`,
+				onSelect: () => {
+					setIncorporateError(undefined);
+					void api
+						.incorporateOrganization(workspace.id)
+						.then((result) => {
+							if (!result.ok) setIncorporateError(result.reason);
+							return api.organizationLifetime(workspace.id);
+						})
+						.then(setLifetime)
+						.catch((error) => setIncorporateError(String(error)));
+				},
+			});
+		if (lifetime.closing && lifetime.waiting.length)
+			note(
+				`Dissolving; waiting on ${lifetime.waiting.map(({ person, reason }) => `${nameOf(person)} (${reason})`).join(", ")}`,
+			);
+		if (incorporateError) note(`Incorporating failed: ${incorporateError}`);
+	}
 	const workspaceMenu = [
 		...allWorkspaces.map((each) => {
 			const count = world && each.id !== workspace?.id ? workspaceUnread(world, each) : 0;
@@ -420,6 +468,7 @@ function Workplace() {
 				onSelect: () => switchWorkspace(each.id),
 			};
 		}),
+		...lifetimeItems,
 		...(world && workspace && !leaving
 			? [
 					{
