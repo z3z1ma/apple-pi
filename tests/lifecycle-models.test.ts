@@ -31,7 +31,7 @@ test("a program comparison leaves no worktree and starts no sample beside a live
 	const leakedDirectory = await runTlc({ spec, config, constants: { CleanupOnAddFailure: "FALSE" } });
 	expect(leakedDirectory).toMatchObject({ verdict: "violation", property: "NothingLeftWhenSampleEnds" });
 	const continuedPastClose = await runTlc({ spec, config, constants: { StopOnCloseFailure: "FALSE" } });
-	expect(continuedPastClose).toMatchObject({ verdict: "violation", property: "NoNewSampleBesideALivePeer" });
+	expect(continuedPastClose).toMatchObject({ verdict: "violation", property: "RemoveOnlyAfterPeerCleanup" });
 }, 120_000);
 
 test("a program comparison gives both arms of every task the same runs, and replay never counts an unevaluated job", async () => {

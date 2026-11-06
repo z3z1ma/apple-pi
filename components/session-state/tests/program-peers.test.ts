@@ -277,6 +277,16 @@ test("a peer started without a directory gets the caller's and no trust override
 	await program.close();
 });
 
+test("closing a peer that exits on SIGTERM also stops the detached process it left behind", async () => {
+	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ detachedChild: true }));
+	const program = await programFor();
+	const id = await createPeer(program);
+	const child = Number(readFileSync(join(state.agentDir, "peer-records", `${id}.child`), "utf8"));
+	await program.close();
+	await vi.waitFor(() => expect(processGone(child)).toBe(true));
+	cleanOwnership();
+}, 90_000);
+
 test("closing a reviewer that ignores SIGTERM and its closed input kills it after the grace period", async () => {
 	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ unresponsive: true, detachedChild: true }));
 	const program = await programFor();

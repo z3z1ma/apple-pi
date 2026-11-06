@@ -289,6 +289,7 @@ export class Runtime {
 	private readonly discardRequests = new Map<string, Set<string>>();
 	private readonly signalled = new Map<string, Set<string>>();
 	private readonly peerTerminatedAt = new Map<string, number>();
+	private readonly peerDescendants = new Map<string, Map<string, { pid: number; startedAt: number }>>();
 	private programTimer?: NodeJS.Timeout;
 	private cleaningPrograms = false;
 
@@ -2177,16 +2178,38 @@ export class Runtime {
 				? "SIGKILL"
 				: undefined;
 		if (!signal) return;
-		for (const target of signal === "SIGKILL" ? [...descendantsOf(pid), pid] : [pid]) {
-			try {
-				process.kill(target, signal);
-			} catch (error) {
-				if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-			}
+		try {
+			process.kill(pid, signal);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
 		}
 		sent.add(key);
 		if (signal === "SIGTERM") this.peerTerminatedAt.set(key, Date.now());
 		else this.peerTerminatedAt.delete(key);
+	}
+
+	private ownDescendants(id: string, pid: number): void {
+		let owned = this.peerDescendants.get(id);
+		if (!owned) {
+			owned = new Map();
+			this.peerDescendants.set(id, owned);
+		}
+		for (const child of descendantsOf(pid)) {
+			const started = processStart(child);
+			if (typeof started === "number") owned.set(`${child}:${started}`, { pid: child, startedAt: started });
+		}
+	}
+
+	private stopDescendants(id: string): boolean {
+		const owned = this.peerDescendants.get(id);
+		if (!owned) return false;
+		for (const [key, child] of owned) {
+			const state = checkProcess(child.pid, child.startedAt);
+			if (state === "unknown") throw new Error(`Cannot verify process ${child.pid} started by temporary peer ${id}`);
+			if (state === "gone") owned.delete(key);
+			else this.signalProgramPeer(id, child.pid, key);
+		}
+		return owned.size > 0;
 	}
 
 	private async stopProgramPeer(
@@ -2237,8 +2260,10 @@ export class Runtime {
 			if (state === "gone") continue;
 			waiting = true;
 			if (state === "unknown") throw new Error(`Cannot verify process ${proc.pid} of temporary peer ${id}`);
+			this.ownDescendants(id, proc.pid);
 			this.signalProgramPeer(id, proc.pid, `${proc.pid}:${proc.process_started_at}`);
 		}
+		if (this.stopDescendants(id)) waiting = true;
 		if (waiting) return false;
 
 		if (pane && (pane.pid === launch.pid || (launch.pid === null && isLaunch(pane)))) {
@@ -2567,6 +2592,7 @@ export class Runtime {
 				for (const id of stopped) {
 					this.discarding.delete(id);
 					for (const key of this.signalled.get(id) ?? []) this.peerTerminatedAt.delete(key);
+					this.peerDescendants.delete(id);
 					this.signalled.delete(id);
 				}
 			}

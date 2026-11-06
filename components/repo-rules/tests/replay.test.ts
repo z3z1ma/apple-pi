@@ -93,9 +93,17 @@ test("every edit shape the edit tool accepts is replayed once, through path alia
 	mkdirSync(repo, { recursive: true });
 	mkdirSync(logs);
 	symlinkSync(repo, alias);
-	const write = (file: string, id: string, cwd: string, entries: [string, string, ReturnType<typeof call>[]][]) => {
+	const write = (
+		file: string,
+		id: string,
+		cwd: string,
+		entries: [string, string, ReturnType<typeof call>[]][],
+		fork?: { from: string; at: string },
+	) => {
 		const lines = [
-			{ type: "session", version: 3, id, timestamp: "2026-11-01T00:00:00Z", cwd },
+			fork
+				? { type: "session", version: 3, id, timestamp: fork.at, cwd, parentSession: fork.from }
+				: { type: "session", version: 3, id, timestamp: "2026-11-01T00:00:00Z", cwd },
 			...entries.map(([entry, timestamp, calls]) => ({
 				type: "message",
 				id: entry,
@@ -126,18 +134,54 @@ test("every edit shape the edit tool accepts is replayed once, through path alia
 			"2026-11-05T11:00:00Z",
 			[call("edit", { path: "src/f.js", edits: [{ oldText: "x", newText: "console.log(3);" }] })],
 		],
+		["broken", "2026-11-05T11:10:00Z", [call("edit", { path: "src/b.js", edits: "[{not json" })]],
+		["empty", "2026-11-05T11:20:00Z", [call("edit", { path: "src/e.js", edits: [null] })]],
+		["link", "2026-11-05T11:30:00Z", [call("write", { path: "src/link.js", content: "console.log(5);" })]],
 	];
+	mkdirSync(join(repo, "src"));
+	writeFileSync(join(repo, "src", "real.js"), "");
+	symlinkSync(join(repo, "src", "real.js"), join(repo, "src", "link.js"));
 	write("via-alias.jsonl", "aliased", alias, shapes);
-	write("fork.jsonl", "fork", repo, shapes);
+	write(
+		"fork.jsonl",
+		"fork",
+		repo,
+		[...shapes, ["own", "2026-11-06T02:00:00Z", [call("write", { path: "src/n.js", content: "console.log(6);" })]]],
+		{
+			from: join(logs, "via-alias.jsonl"),
+			at: "2026-11-06T01:00:00Z",
+		},
+	);
 	try {
-		const report = await replayRule({ grit: consoleRule }, { root: repo, since, sessionsDir: logs });
+		const report = await replayRule(
+			{
+				grit: consoleRule,
+				includes: [
+					"src/s.js",
+					"src/o.js",
+					"src/late.js",
+					"src/f.js",
+					"src/b.js",
+					"src/e.js",
+					"src/link.js",
+					"src/n.js",
+				],
+			},
+			{ root: repo, since, sessionsDir: logs },
+		);
 		expect(report.hits.map((hit) => [hit.ref.split("/")[1], hit.path])).toEqual([
 			["string", "src/s.js"],
 			["single", "src/o.js"],
 			["late", "src/late.js"],
 			["final", "src/f.js"],
+			["link", "src/link.js"],
+			["own", "src/n.js"],
 		]);
-		expect(report.evaluated).toBe(4);
+		expect(report.evaluated).toBe(6);
+		expect(report.notEvaluated.map((item) => [item.ref.split("/")[1], item.reason])).toEqual([
+			["broken", "its edits are not valid JSON"],
+			["empty", "an edit has no replacement text"],
+		]);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

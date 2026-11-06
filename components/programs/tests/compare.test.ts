@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -16,16 +16,22 @@ afterEach(() => {
 
 const program = { name: "dependency-chain", source: '// @program: {"description": "x"}\nreturn 1;\n' };
 
-test("a direct call or a script call of the program's tool counts as using it, under its normalized name", () => {
-	expect(usedProgram([{ ref: "pi.program_dependency_chain", args: {} }], "dependency-chain")).toBe(true);
+test("a direct call or an executed script call of the program's tool counts as using it, a mention does not", () => {
+	expect(usedProgram([{ ref: "pi.program_dependency_chain" }], "dependency-chain")).toBe(true);
 	expect(
 		usedProgram(
-			[{ ref: "pi.codemode", args: { code: "await tools.program_dependency_chain({})" } }],
+			[{ ref: "pi.codemode", result: { details: { calls: [{ name: "program_dependency_chain" }] } } }],
 			"dependency-chain",
 		),
 	).toBe(true);
-	expect(usedProgram([{ ref: "pi.program_dependency-chain", args: {} }], "dependency-chain")).toBe(false);
-	expect(usedProgram([{ ref: "pi.read", args: { path: "x" } }], "dependency-chain")).toBe(false);
+	expect(
+		usedProgram(
+			[{ ref: "pi.codemode", result: { content: [{ type: "text", text: "tools.program_dependency_chain" }] } }],
+			"dependency-chain",
+		),
+	).toBe(false);
+	expect(usedProgram([{ ref: "pi.program_dependency-chain" }], "dependency-chain")).toBe(false);
+	expect(usedProgram([{ ref: "pi.read" }], "dependency-chain")).toBe(false);
 });
 
 test("the program is written into the worktree's own programs directory and removed from the other arm", () => {
@@ -37,13 +43,32 @@ test("the program is written into the worktree's own programs directory and remo
 	expect(existsSync(file)).toBe(false);
 });
 
-test("a programs directory that resolves outside the worktree is refused, and nothing is written there", () => {
-	const copy = temp();
+test("a symlinked .pi, programs directory or candidate file is refused in both arms, and nothing is written outside", () => {
 	const outside = temp();
-	mkdirSync(join(copy, ".pi"));
-	symlinkSync(outside, join(copy, ".pi", "programs"));
-	expect(() => placeProgram(copy, program, "with")).toThrow(/outside the comparison's worktree/);
-	expect(existsSync(join(outside, "dependency-chain.js"))).toBe(false);
+	const links: [string, (copy: string) => void][] = [
+		[".pi", (copy) => symlinkSync(outside, join(copy, ".pi"))],
+		[
+			"programs",
+			(copy) => {
+				mkdirSync(join(copy, ".pi"));
+				symlinkSync(outside, join(copy, ".pi", "programs"));
+			},
+		],
+		[
+			"dangling candidate",
+			(copy) => {
+				mkdirSync(join(copy, ".pi", "programs"), { recursive: true });
+				symlinkSync(join(outside, "missing.js"), join(copy, ".pi", "programs", "dependency-chain.js"));
+			},
+		],
+	];
+	for (const [label, link] of links)
+		for (const arm of ["with", "without"] as const) {
+			const copy = temp();
+			link(copy);
+			expect(() => placeProgram(copy, program, arm), `${label} ${arm}`).toThrow(/inside the comparison's worktree/);
+		}
+	expect(readdirSync(outside)).toEqual([]);
 });
 
 test("the report lists every run with its measurements, under per-arm totals", () => {

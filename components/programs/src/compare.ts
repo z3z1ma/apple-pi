@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -82,11 +91,13 @@ async function runSample(
 		cost: 0,
 		seconds: 0,
 	};
+	let peerCleaned = true;
 	try {
 		await git(plan.root, ["worktree", "add", "--detach", copy, plan.base], { signal });
 		placeProgram(copy, plan, arm);
 		const program = await openPeerProgram(self, signal);
 		const started = Date.now();
+		peerCleaned = false;
 		try {
 			await runTurn(program, self, plan, task.task, copy, sample, signal);
 		} catch (error) {
@@ -94,38 +105,58 @@ async function runSample(
 			sample.error = error instanceof Error ? error.message : String(error);
 		} finally {
 			sample.seconds = Math.round((Date.now() - started) / 1000);
-			await program.close();
+			await program.close().catch((error) => {
+				throw new Error(
+					`The peer's cleanup failed, so its worktree ${copy} was kept for inspection: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			});
+			peerCleaned = true;
 		}
 		if (sample.completed) {
 			const checked = await runCommand(task.check, copy, process.env, { signal });
-			signal?.throwIfAborted();
 			sample.correct = checked.exitCode === 0;
 		}
 	} finally {
-		await removeCopy(plan.root, copy);
+		if (peerCleaned) await removeCopy(plan.root, copy);
 	}
+	signal?.throwIfAborted();
 	return sample;
 }
 
-export function usedProgram(operations: { ref: string; args: Record<string, unknown> }[], name: string): boolean {
+export function usedProgram(operations: { ref: string; result?: unknown }[], name: string): boolean {
 	const tool = programToolName(name);
-	return operations.some(
-		(operation) =>
-			operation.ref === `pi.${tool}` ||
-			(operation.ref === "pi.codemode" && String(operation.args.code ?? "").includes(`tools.${tool}`)),
-	);
+	return operations.some((operation) => {
+		if (operation.ref === `pi.${tool}`) return true;
+		const calls = (operation.result as { details?: { calls?: { name?: unknown }[] } } | undefined)?.details?.calls;
+		return Array.isArray(calls) && calls.some((call) => call?.name === tool);
+	});
+}
+
+function kindOf(path: string): "missing" | "directory" | "file" | "other" {
+	try {
+		const stat = lstatSync(path);
+		return stat.isDirectory() ? "directory" : stat.isFile() ? "file" : "other";
+	} catch {
+		return "missing";
+	}
 }
 
 export function placeProgram(copy: string, plan: Pick<ComparisonPlan, "name" | "source">, arm: Sample["arm"]): void {
-	const directory = join(copy, ".pi", "programs");
-	if (arm === "with") mkdirSync(directory, { recursive: true });
-	if (!existsSync(directory)) return;
-	const inside = relative(realpathSync(copy), realpathSync(directory));
-	if (inside.startsWith("..") || isAbsolute(inside))
-		throw new Error(`${directory} resolves outside the comparison's worktree`);
+	let directory = copy;
+	for (const part of [".pi", "programs"]) {
+		directory = join(directory, part);
+		const kind = kindOf(directory);
+		if (kind === "missing" && arm === "without") return;
+		if (kind === "missing") mkdirSync(directory);
+		else if (kind !== "directory")
+			throw new Error(`${directory} is not a plain directory inside the comparison's worktree`);
+	}
 	const file = join(directory, `${plan.name}.js`);
+	const kind = kindOf(file);
+	if (kind !== "missing" && kind !== "file")
+		throw new Error(`${file} is not a plain file inside the comparison's worktree`);
 	if (arm === "with") writeFileSync(file, plan.source);
-	else rmSync(file, { force: true });
+	else if (kind === "file") rmSync(file);
 }
 
 async function removeCopy(root: string, copy: string): Promise<void> {
@@ -279,7 +310,9 @@ export function installCompareTool(pi: ExtensionAPI): void {
 			const agreed = await ctx.ui.confirm(
 				`Compare program_${name}?`,
 				`${runs} peer turns: ${plan.tasks.length} tasks, ${plan.samples} samples, with and without the program, from ${plan.base.slice(0, 12)}. Estimated cost: ${estimate}.`,
+				{ signal },
 			);
+			signal?.throwIfAborted();
 			if (!agreed)
 				return {
 					content: [{ type: "text" as const, text: "The operator declined; nothing ran." }],

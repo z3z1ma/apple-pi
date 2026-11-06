@@ -80,9 +80,23 @@ beforeAll(() => {
 						type: "toolCall",
 						id: "c2",
 						name: "codemode",
-						arguments: { code: "return await tools.program_rpc_smoke({ prompt: 'x' });" },
+						arguments: {
+							code: "if (false) await tools.program_rpc_smoke({}); return await tools.program_rpc_smoke({});",
+						},
 					},
 				],
+			},
+		},
+		{
+			type: "message",
+			id: "p3",
+			timestamp: "2026-11-05T11:31:00Z",
+			message: {
+				role: "toolResult",
+				toolName: "codemode",
+				isError: false,
+				content: [{ type: "text", text: "done" }],
+				details: { calls: [{ id: "c2/1", name: "program_rpc_smoke", status: "ok" }] },
 			},
 		},
 	]);
@@ -112,7 +126,7 @@ test("learnings, refusals, failed calls and program calls in this repository's w
 		},
 		{ kind: "failure", ref: "entry:here/f2", tool: "edit", text: "Could not find the exact text to replace." },
 		{ kind: "program_call", ref: "entry:here/p1", tool: "program_rpc_smoke", text: "program_rpc_smoke" },
-		{ kind: "program_call", ref: "entry:here/p2", tool: "program_rpc_smoke", text: "program_rpc_smoke" },
+		{ kind: "program_call", ref: "entry:here/p3", tool: "program_rpc_smoke", text: "program_rpc_smoke" },
 	]);
 	expect(new Set(evidence.items.map((item) => item.file))).toEqual(new Set([join(sessionsDir, "here.jsonl")]));
 });

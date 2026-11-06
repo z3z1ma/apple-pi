@@ -55,12 +55,12 @@ export async function* sessionEntries(options: {
 	wanted: (line: string) => boolean;
 }): AsyncGenerator<LoggedEntry> {
 	const root = canonical(options.root);
-	const seen = new Set<string>();
 	for (const file of sessionFiles(options.sessionsDir)) {
 		if (statSync(file).mtimeMs < options.since) continue;
 		const input = createReadStream(file, "utf8");
 		const lines = createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY });
 		let session: LoggedSession | undefined;
+		let created = 0;
 		try {
 			for await (const line of lines) {
 				if (!session) {
@@ -68,15 +68,14 @@ export async function* sessionEntries(options: {
 					if (header?.type !== "session" || typeof header.id !== "string" || typeof header.cwd !== "string") break;
 					if (!within(root, canonical(header.cwd))) break;
 					session = { id: header.id, cwd: header.cwd, file };
+					created = typeof header.timestamp === "string" ? Date.parse(header.timestamp) : Number.NaN;
 					continue;
 				}
 				if (!options.wanted(line)) continue;
 				const entry = parsed(line);
-				if (typeof entry?.timestamp !== "string" || Date.parse(entry.timestamp) < options.since) continue;
-				const identity = `${entry.id}@${entry.timestamp}`;
-				if (seen.has(identity)) continue;
-				seen.add(identity);
-				yield { session, entry };
+				const at = typeof entry?.timestamp === "string" ? Date.parse(entry.timestamp) : Number.NaN;
+				if (!Number.isFinite(at) || at < options.since || at < created) continue;
+				yield { session, entry: entry! };
 			}
 		} finally {
 			lines.close();

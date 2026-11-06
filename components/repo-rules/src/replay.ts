@@ -1,4 +1,4 @@
-import { join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { defineTool, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { git } from "../../shared/src/git.js";
@@ -45,24 +45,29 @@ interface ToolCall {
 	arguments?: Record<string, unknown>;
 }
 
-function editsOf(args: Record<string, unknown>): { newText?: unknown }[] {
+const REPLAY_BATCH_BYTES = 8 << 20;
+
+function addedTexts(call: ToolCall): { texts: string[] } | { reason: string } {
+	const args = call.arguments ?? {};
+	if (call.name === "write")
+		return typeof args.content === "string" ? { texts: [args.content] } : { reason: "the write has no content" };
 	let edits = args.edits;
 	if (typeof edits === "string") {
 		try {
 			edits = JSON.parse(edits);
 		} catch {
-			edits = undefined;
+			return { reason: "its edits are not valid JSON" };
 		}
 	}
-	const list = Array.isArray(edits) ? [...edits] : edits && typeof edits === "object" ? [edits] : [];
+	const list: unknown[] = Array.isArray(edits) ? [...edits] : edits && typeof edits === "object" ? [edits] : [];
 	if (typeof args.oldText === "string" && typeof args.newText === "string") list.push({ newText: args.newText });
-	return list as { newText?: unknown }[];
-}
-
-function addedTexts(call: ToolCall): string[] {
-	const args = call.arguments ?? {};
-	if (call.name === "write") return typeof args.content === "string" ? [args.content] : [];
-	return editsOf(args).flatMap((edit) => (typeof edit.newText === "string" ? [edit.newText] : []));
+	const texts: string[] = [];
+	for (const edit of list) {
+		const text = edit && typeof edit === "object" ? (edit as { newText?: unknown }).newText : undefined;
+		if (typeof text !== "string") return { reason: "an edit has no replacement text" };
+		texts.push(text);
+	}
+	return texts.length ? { texts } : { reason: "the edit has no replacements" };
 }
 
 export const byInstant = (a: { at: string }, b: { at: string }) => Date.parse(a.at) - Date.parse(b.at);
@@ -78,11 +83,13 @@ export async function replayRule(
 	const hits: ReplayHit[] = [];
 	const notEvaluated: ReplayReport["notEvaluated"] = [];
 	let jobs: Job[] = [];
+	let pendingBytes = 0;
 	let evaluated = 0;
 	const runJobs = async () => {
 		if (candidate.grit === undefined || !jobs.length) return;
 		const batch = jobs;
 		jobs = [];
+		pendingBytes = 0;
 		const runs = await runRules(batch.map((job) => ({ query: candidate.grit!, path: job.path, content: job.content })));
 		for (const [index, run] of runs.entries()) {
 			const { content: _content, ...job } = batch[index]!;
@@ -118,11 +125,21 @@ export async function replayRule(
 				continue;
 			}
 			if (typeof args.path !== "string") continue;
-			const absolute = canonical(resolveToolPath(args.path, canonical(session.cwd)));
+			const lexical = resolveToolPath(args.path, session.cwd);
+			const absolute = join(canonical(dirname(lexical)), basename(lexical));
 			if (!within(root, absolute)) continue;
 			const path = relative(root, absolute);
 			if (!includedBy(candidate.includes, path)) continue;
-			for (const content of addedTexts(call)) jobs.push({ at, ref, file: session.file, path, content });
+			const added = addedTexts(call);
+			if ("reason" in added) {
+				notEvaluated.push({ at, ref, file: session.file, path, reason: added.reason });
+				continue;
+			}
+			for (const content of added.texts) {
+				jobs.push({ at, ref, file: session.file, path, content });
+				pendingBytes += content.length;
+			}
+			if (pendingBytes >= REPLAY_BATCH_BYTES) await runJobs();
 		}
 	}
 	await runJobs();

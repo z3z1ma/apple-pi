@@ -19,12 +19,12 @@ export interface EvidenceItem {
 	text: string;
 }
 
-const NESTED_PROGRAM = /\btools\.(program_[A-Za-z0-9_]+)\b/g;
-
-function programCalls(part: { name?: string; arguments?: Record<string, unknown> }): string[] {
-	if (part.name?.startsWith("program_")) return [part.name];
-	if (part.name !== "codemode" || typeof part.arguments?.code !== "string") return [];
-	return [...part.arguments.code.matchAll(NESTED_PROGRAM)].map((match) => match[1]!);
+function nestedProgramCalls(details: unknown): string[] {
+	const calls = (details as { calls?: { name?: unknown }[] } | undefined)?.calls;
+	if (!Array.isArray(calls)) return [];
+	return calls.flatMap((call) =>
+		typeof call?.name === "string" && call.name.startsWith("program_") ? [call.name] : [],
+	);
 }
 
 const NOTEBOOK = ["notebook.maintenance", "notebook.reflections.recorded"];
@@ -71,8 +71,12 @@ export async function sessionEvidence(options: {
 			role?: string;
 			toolName?: string;
 			isError?: boolean;
-			content?: { type?: string; name?: string; arguments?: Record<string, unknown> }[];
+			content?: { type?: string; name?: string }[];
+			details?: unknown;
 		};
+		if (message.role === "toolResult" && wanted.has("program_call"))
+			for (const name of nestedProgramCalls(message.details))
+				items.push({ kind: "program_call", at, ref, file, tool: name, text: name });
 		if (message.role === "toolResult" && message.isError === true) {
 			const text = textOf(message.content).trim();
 			const refused = text.startsWith("Refused");
@@ -82,9 +86,8 @@ export async function sessionEvidence(options: {
 		}
 		if (message.role === "assistant" && wanted.has("program_call") && Array.isArray(message.content))
 			for (const part of message.content)
-				if (part?.type === "toolCall")
-					for (const name of programCalls(part))
-						items.push({ kind: "program_call", at, ref, file, tool: name, text: name });
+				if (part?.type === "toolCall" && part.name?.startsWith("program_"))
+					items.push({ kind: "program_call", at, ref, file, tool: part.name, text: part.name });
 	}
 	items.sort(byInstant);
 	return { sessions: sessions.size, items };

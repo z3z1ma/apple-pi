@@ -147,7 +147,7 @@ export async function runReviewAttempt(
 	};
 	try {
 		program = await openPeerProgram(job.owner, signal, { paths, id: programId });
-		const receipt = await watchedTurn(db, program, person, signal, async (peer) => {
+		const receipt = await watchedTurn(db, program, person, signal, async (peer, configured) => {
 			const started = await peer.command(
 				person,
 				{
@@ -171,6 +171,7 @@ export async function runReviewAttempt(
 				throw new ReviewStop("The reviewer did not select its recorded role/model policy; no review turn was sent");
 			if (JSON.stringify(resolve()) !== JSON.stringify(policy))
 				throw new ReviewStop("The review policy changed during startup; no review turn was sent");
+			configured();
 			return peer.command(
 				person,
 				{ kind: "run_turn", ...input },
@@ -246,10 +247,15 @@ async function watchedTurn<T>(
 	program: PeerProgram,
 	person: string,
 	signal: AbortSignal,
-	turn: (program: PeerProgram) => Promise<T>,
+	turn: (program: PeerProgram, configured: () => void) => Promise<T>,
 ): Promise<T> {
 	const started = Date.now();
 	let silent = false;
+	let configuring = true;
+	const abandon = () => {
+		if (configuring) void program.close().catch(() => {});
+	};
+	signal.addEventListener("abort", abandon, { once: true });
 	const stopWatching = watchSilence(
 		() => {
 			if (!db.isOpen) return Date.now();
@@ -267,10 +273,14 @@ async function watchedTurn<T>(
 		new Error(`The reviewer showed no activity for ${REVIEWER_SILENCE_MS / 60_000} minutes, so its turn was stopped`);
 	let result: T;
 	try {
-		result = await turn(program);
+		result = await turn(program, () => {
+			configuring = false;
+		});
 	} catch (error) {
-		throw silent && !signal.aborted ? stalled() : error;
+		if (signal.aborted) throw signal.reason;
+		throw silent ? stalled() : error;
 	} finally {
+		signal.removeEventListener("abort", abandon);
 		stopWatching();
 	}
 	if (silent) throw stalled();
