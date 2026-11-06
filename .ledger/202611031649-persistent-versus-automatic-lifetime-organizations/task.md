@@ -26,7 +26,7 @@ Open, to settle in design (raise with the operator if a choice changes what he s
 
 - Flag, command and menu item share the name and mark the organization incorporated in the runtime's record.
 - Cleanup is crash-safe and restart-safe: modelled with `tlc_check` (three or more people, crashes and restarts mid-cleanup, a reopened root), with a control that must fail; existing departure guards (unfinished work, reports first) stay authoritative.
-- Existing rows migrate as incorporated; an older bridge still works against the new runtime.
+- Existing rows migrate as incorporated; an older bridge still works against the new runtime. After activation, check the live record: rsi (Tadhg, 01a18155-0ec7-71f5-9809-638184a366dd), fq-squad (Nana, floqast) and reporting (Bram, 01a183f2-16d5-7611-b2b7-165b9eea062d) are incorporated.
 - Focused tests over the real runtime; docs (`docs/organization.md`, `docs/workplace.md`) and runtime prompt guidance updated.
 - Committed and activated with the operator's consent.
 
