@@ -20,16 +20,7 @@ The operator asked for both mutation types to be scoped: rules and guards, and s
 
 ## Current State
 
-Closed; see Outcome.
-
-History:
-
-Approved by sign-off on 2026-11-05; the operator's decisions are in `proposal.md`.
-
-- Done: ticket 01 (`session_evidence`), 02 (`replay_rule`), 04 (`compare_program`, peers in worktrees with `--approve`).
-- Built, awaiting their acceptance runs: 03 (role `capability-steward`, prompt `/find-improvements`), 05 and 06 (the program and retirement steps of the same role).
-- Formal models: `specs/capability-candidate.tla` (design of the steward protocol), `specs/program-comparison.tla` (comparison cleanup, as built), `specs/program-comparison.lean` (balanced arms, replay counting); each TLA model has a control that fails.
-- The runtime change for ticket 04 is live only after a runtime restart.
+Closed 2026-11-06; see Outcome. The plan was approved by sign-off on 2026-11-05, and the operator's decisions are in `proposal.md`. The runtime changes (silence watchdog, peer kill escalation, peers in caller-named worktrees) went live with the runtime restart of 2026-11-06.
 
 ## Outcome
 
