@@ -191,3 +191,5 @@
 - `.ledger/history/202611041937-workplace-reviews-tab/task.md` — done — Workplace Reviews tab: code review as its own app with an updates badge — Move captured code reviews out of the Code tab into a first-class, more beautiful Reviews app; the rail badge counts reviews whose state changed since the operator last saw them.
 
 - `.ledger/history/202611052330-dependent-edit-batches/task.md` — done — Refuse dependent file checks beside parallel edits — Candidate batching guard: replay same-file read/check and edit collisions in recorded assistant batches; challenge and adopt only through operator sign-off.
+
+- `.ledger/history/202611052221-evidence-backed-capabilities/task.md` — done — Turn recurring lessons into tested rules and programs — Capability evolution: mine recurring lessons and failures across sessions, propose rules, guards and saved programs, prove them with replay or paired runs, challenge them, and adopt them only by operator sign-off; retire ones that stop earning their place.
