@@ -4,8 +4,8 @@
 
 **Blocked by:** 03
 
-**Status:** planned
+**Status:** done
 
-- [ ] Each entry states its window and its count in that window.
-- [ ] A rule adopted too recently to judge is listed as too new, not proposed for removal.
-- [ ] Removal happens only after the operator's sign-off.
+- [x] The acceptance run's retirement inventory (`report-v2.md`) lists every rule and the saved program with its behaviour window, its count there and its lifetime firings.
+- [x] Never-fired rules (hot-bounded-io, no-native-select, bsd-sed-in-place, full-test-suite) are listed as a watchlist with windows too new to judge; none was proposed for removal.
+- [x] No removal was due, so none needed sign-off; nothing changed on main.

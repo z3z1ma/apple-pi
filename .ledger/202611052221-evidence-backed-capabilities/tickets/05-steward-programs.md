@@ -4,8 +4,10 @@
 
 **Blocked by:** 03, 04
 
-**Status:** planned
+**Status:** done
 
-- [ ] Candidate procedures are counted only from 2026-11-04 (codemode) or the last later change to the tools involved.
-- [ ] The bundle holds the program, its assumptions and failure behaviour, the challenger's report and the paired-run report.
-- [ ] A program that does not beat the ordinary path on correctness at equal or lower cost is reported as not adopted, with its evidence kept.
+The role charter carries the program step; the acceptance run (Mateo Owusu, `report-v2.md` of task `work-f3ba1bd5`) found no recurring costly procedure that justified a program, so no paired comparison was spent.
+
+- [x] Candidate procedures were counted from the last change to the program surface (`daad00a8`, 2026-11-04); the only saved program had one call in that window.
+- [ ] Not exercised: no program bundle was produced, because none was justified; the paired-run path is covered by `compare_program`'s tests (ticket 04).
+- [x] The run reported that no program was proposed, with its evidence and its limits (session_evidence does not see ordinary successful tool sequences).
