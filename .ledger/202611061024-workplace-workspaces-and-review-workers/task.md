@@ -28,8 +28,12 @@ Settled with the operator:
 
 ## Current State
 
-Shaped; building.
+Delivered and live (runtime restarted at schema 53, Workplace relaunched, 2026-11-06).
 
 ## Outcome
 
-Pending.
+- Workspaces: b62c0a93, review fixes a597463e, Leave organization 55ac49c0.
+- Worker pools: a94441e7 and 3112c68c (Niamh Virtanen), review fixes 9d26e53d.
+- Review review-ed5a96a8 (with one existing worker in the pool) confirmed 11 findings; all 11 were fixed with tests that fail on the earlier commit, and answered fixed-claimed. No second review was run.
+- Verified: the focused browser suites (world-org, -desk, -communications, -lifecycle, -reviews, -code, -conversation, -file-links, -navigation, -issues, -git, -terminal), the build freshness test, reviews-backend, review-queue and review-workers, and the native Electron check against an isolated runtime. Screenshots of Org, Chat, Reviews Attempts and the Leave dialog were inspected.
+- Not verified: a full suite run, and the operator's own live use.
