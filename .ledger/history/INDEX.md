@@ -189,3 +189,5 @@
 - `.ledger/history/202611041856-workplace-git-tab/task.md` — done — Workplace Git tab: a GitKraken-like first-class tab — Split Git out of the Code tab into its own Workplace tab: commit graph, branches, remotes, tags, stashes, worktrees, staging, commit, fetch/pull/push and branch operations over the machine's git; rail overflow for the growing number of tabs. Code review tab follows later.
 
 - `.ledger/history/202611041937-workplace-reviews-tab/task.md` — done — Workplace Reviews tab: code review as its own app with an updates badge — Move captured code reviews out of the Code tab into a first-class, more beautiful Reviews app; the rail badge counts reviews whose state changed since the operator last saw them.
+
+- `.ledger/history/202611052330-dependent-edit-batches/task.md` — done — Refuse dependent file checks beside parallel edits — Candidate batching guard: replay same-file read/check and edit collisions in recorded assistant batches; challenge and adopt only through operator sign-off.
