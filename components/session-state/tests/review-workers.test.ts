@@ -8,7 +8,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import codeReview from "../../../extensions/code-review.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
 import { sendCommand } from "../src/client.js";
-import { readReviewPart } from "../src/review-read.js";
+import { type ReviewReadOptions, readReviewPart } from "../src/review-read.js";
 import { fakeBridge, query, standInProcess, startRuntime, stopRuntime, tempStateDir } from "./helpers.js";
 
 let state: ReturnType<typeof tempStateDir>;
@@ -88,16 +88,12 @@ async function enqueue(selected: string[]) {
 		{ socketPath: state.socketPath, commandId },
 	);
 	expect(receipt.stage, receipt.reason).toBe("applied");
-	return query<{ id: string }>(state.dbPath, "select id from review_jobs where command_id = ?", commandId)[0]!.id;
+	return (reviewPart(commandId, { part: "summary" }) as { id: string }).id;
 }
 async function settled(id: string, expected: string) {
 	await vi.waitFor(
 		() => {
-			const job = query<{ state: string; reason: string | null }>(
-				state.dbPath,
-				"select state, reason from review_jobs where id = ?",
-				id,
-			)[0]!;
+			const job = reviewPart(id, { part: "summary" }) as { state: string; reason: string | null };
 			expect(job.state, job.reason ?? "Review pending").toBe(expected);
 		},
 		{ timeout: 15000 },
@@ -109,6 +105,19 @@ function unchanged() {
 function noResources() {
 	expect(query(state.dbPath, "select id from program_scopes")).toEqual([]);
 	expect(query(state.dbPath, "select session_id from program_peers")).toEqual([]);
+	for (const name of readdirSync(join(state.agentDir, "peer-records")).filter((name) =>
+		name.endsWith(".launch.json"),
+	)) {
+		const { pid } = JSON.parse(readFileSync(join(state.agentDir, "peer-records", name), "utf8"));
+		let failure: unknown;
+		try {
+			process.kill(pid, 0);
+		} catch (error) {
+			failure = error;
+		}
+		expect(failure, `Reviewer process ${pid} must have exited`).toMatchObject({ code: "ESRCH" });
+	}
+	expect(() => process.kill(parent.pid, 0)).not.toThrow();
 	for (const worker of workers) {
 		expect(query(state.dbPath, "select id from sessions where id = ?", worker.id)).toHaveLength(1);
 		expect(
@@ -117,17 +126,20 @@ function noResources() {
 	}
 	unchanged();
 }
-function attempts(id: string) {
+function reviewPart(id: string, options: ReviewReadOptions) {
 	const db = new DatabaseSync(state.dbPath, { readOnly: true });
 	try {
-		return (
-			readReviewPart(db, "owner", id, { part: "attempts", limit: 100 }) as {
-				page: { rows: { id: string; pass: string; reviewer: { kind: string; person?: string }; state: string }[] };
-			}
-		).page;
+		return readReviewPart(db, "owner", id, options);
 	} finally {
 		db.close();
 	}
+}
+function attempts(id: string) {
+	return (
+		reviewPart(id, { part: "attempts", limit: 100 }) as {
+			page: { rows: { id: string; pass: string; reviewer: { kind: string; person?: string }; state: string }[] };
+		}
+	).page;
 }
 
 test("two existing workers fork in plan order before the third pass uses a temp", async () => {
@@ -139,23 +151,20 @@ test("two existing workers fork in plan order before the third pass uses a temp"
 		["deletion-authority", workers[1]!],
 	] as const) {
 		const attempt = page.find((entry) => entry.pass === pass)!;
-		const db = new DatabaseSync(state.dbPath, { readOnly: true });
-		try {
-			expect(readReviewPart(db, "owner", id, { part: "pass", pass })).toMatchObject({
-				attempt: { reviewer: { kind: "worker", person: worker.id } },
-			});
-			expect(readReviewPart(db, "owner", id, { part: "log", attempt: attempt.id })).toMatchObject([
-				{ reviewer: { kind: "worker", person: worker.id } },
-			]);
-		} finally {
-			db.close();
-		}
+		expect(reviewPart(id, { part: "pass", pass })).toMatchObject({
+			attempt: { reviewer: { kind: "worker", person: worker.id } },
+		});
+		expect(reviewPart(id, { part: "log", attempt: attempt.id })).toMatchObject([
+			{ reviewer: { kind: "worker", person: worker.id } },
+		]);
 		expect(attempt.reviewer).toMatchObject({ kind: "worker", person: worker.id });
-		const row = query<{ person: string; model: string }>(
-			state.dbPath,
-			"select person, model from review_attempts where id = ?",
-			attempt.id,
-		)[0]!;
+		const row = reviewPart(id, { part: "attempt", attempt: attempt.id }) as {
+			person: string;
+			model: string;
+			sessionFile: string;
+		};
+		expect(row.person).not.toBe(worker.id);
+		expect(readFileSync(row.sessionFile, "utf8")).toContain(`Worker ${workers.indexOf(worker)} history`);
 		const launch = JSON.parse(readFileSync(join(state.agentDir, "peer-records", `${row.person}.launch.json`), "utf8"));
 		expect(launch.args).toContain("--fork");
 		expect(launch.args[launch.args.indexOf("--fork") + 1]).toBe(worker.file);
@@ -191,13 +200,9 @@ test("cancellation disposes fork processes without altering their workers", asyn
 	const id = await enqueue(workers.slice(0, 2).map(({ id }) => id));
 	await vi.waitFor(
 		() =>
-			expect(
-				query(
-					state.dbPath,
-					"select id from review_attempts where review_id = ? and kind != 'planner' and state = 'running'",
-					id,
-				),
-			).toHaveLength(3),
+			expect(attempts(id).rows.filter((entry) => entry.pass !== "planner" && entry.state === "running")).toHaveLength(
+				3,
+			),
 		{ timeout: 15000 },
 	);
 	const receipt = await sendCommand(
@@ -207,11 +212,9 @@ test("cancellation disposes fork processes without altering their workers", asyn
 	);
 	expect(receipt.stage, receipt.reason).toBe("applied");
 	await settled(id, "cancelled");
-	expect(
-		attempts(id)
-			.rows.filter((entry) => entry.reviewer.kind === "worker")
-			.every((entry) => entry.state === "cancelled"),
-	).toBe(true);
+	const cancelled = attempts(id).rows.filter((entry) => entry.reviewer.kind === "worker");
+	expect(cancelled).toHaveLength(2);
+	for (const attempt of cancelled) expect(attempt.state).toBe("cancelled");
 	noResources();
 }, 30000);
 
@@ -244,12 +247,9 @@ test("native capture and fresh rerun retain their worker pool", async () => {
 		const rerun = await call("manage_review", { review: admitted.review.id, action: "rerun" });
 		expect(rerun.stage).toBe("applied");
 		await settled(rerun.review.id, "completed");
-		expect(attempts(rerun.review.id).rows.filter((entry) => entry.reviewer.kind === "worker")).toHaveLength(1);
-		expect(
-			query<{ request: string }>(state.dbPath, "select request from review_jobs where id = ?", rerun.review.id).map(
-				(row) => JSON.parse(row.request).workers,
-			),
-		).toEqual([[workers[0]!.id]]);
+		expect(attempts(rerun.review.id).rows.filter((entry) => entry.reviewer.kind === "worker")).toMatchObject([
+			{ pass: "value-correctness", reviewer: { kind: "worker", person: workers[0]!.id }, state: "completed" },
+		]);
 		noResources();
 	} finally {
 		await run.session.abort();
