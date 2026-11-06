@@ -6,7 +6,7 @@ When the agent calls the tool, the harness:
 
 1. Snapshots the workspace, including uncommitted and untracked files, as a base commit, without touching your index.
 2. Asks a fork of the conversation for a list of distinct approaches, best first, and runs the first `attempts` of them.
-3. Runs each approach in parallel as a fork of the conversation in its own git worktree. Every fork shares the parent's prompt-cache prefix and sees the goal, its approach, and the gates and judges it will be scored by.
+3. Runs each approach in parallel as a fork of the conversation in its own git worktree. Every fork preserves the parent's conversation prefix, uses its own provider session ID, and sees the goal, its approach, and the gates and judges it will be scored by.
 4. Commits each attempt's work and puts its protected paths back to their base content. It then runs one command at a time: each attempt's gates, then the judges on the attempts that passed every gate. A judge with `repeat` runs round-robin across those attempts (run 1 of each, then run 2 of each, ...), so drift of the machine favors none of them.
 5. Among the attempts that pass every gate and whose every judge printed a number, ranks by the judges' medians in order and direction, then by smaller diff, then by attempt ID. With `judge.profile` set and two or more such attempts, a model on that profile reads their diffs and judge values and chooses among them.
 6. Applies the winner's diff when the workspace still holds the base, otherwise reports a merge command.
@@ -40,7 +40,7 @@ Example:
 Commands run with `CI=1`, each in its own process group, which is killed when it settles or outlives its `timeoutSec`. Without `timeoutSec` a command has no time limit.
 
 - The call blocks until the search ends and returns the report; the conversation gains no other message.
-- The search forks the conversation through the assistant message that holds the call: the enumerator and every attempt receive their prompt as the result of that call, so their requests share the main agent's prompt cache. The call must therefore be the only tool call in its message; otherwise it fails with `Call search_branches on its own, …` and starts nothing.
+- The search forks the conversation through the assistant message that holds the call: the enumerator and every attempt receive their prompt as the result of that call, preserving the main agent's conversation prefix. Each fork has its own provider session ID; cache reuse across IDs is provider-dependent and is not guaranteed. The call must therefore be the only tool call in its message; otherwise it fails with `Call search_branches on its own, …` and starts nothing.
 - Progress streams as tool updates, `branching <phase>`: `enumerate`, `run`, `score`, `judge` (the judge model), `apply`.
 - Aborting the call (for example with Escape) cancels the search; the call returns once cleanup has finished. Switching sessions, navigating the session tree, shutting down, or reloading also cancels it and waits for cleanup.
 - One search runs per session. Inside any fork the tool is refused.
