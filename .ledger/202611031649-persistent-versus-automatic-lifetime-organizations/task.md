@@ -1,4 +1,4 @@
-Status: planning
+Status: ready
 Created: 2026-10-30
 Updated: 2026-11-06
 
@@ -19,16 +19,20 @@ Settled with the operator (2026-11-06):
 Open, to settle in design (raise with the operator if a choice changes what he sees):
 
 - Which endings of a root's process count as "closes" (quit, window close, `end_session`) versus a crash or runtime restart, which must not dissolve anything.
-- Reopening an unincorporated root before cleanup finishes cancels the dissolution.
+- Whether reopening an unincorporated root before cleanup finishes cancels the dissolution (expected: yes).
 - Whether a person moved into an incorporated organization from an unincorporated one keeps the target's status (expected: status belongs to the root's organization, not the person).
 
 ## Acceptance
 
 - Flag, command and menu item share the name and mark the organization incorporated in the runtime's record.
 - Cleanup is crash-safe and restart-safe: modelled with `tlc_check` (three or more people, crashes and restarts mid-cleanup, a reopened root), with a control that must fail; existing departure guards (unfinished work, reports first) stay authoritative.
-- Existing rows migrate as incorporated; an older bridge still works against the new runtime. After activation, check the live record: rsi (Tadhg, 01a18155-0ec7-71f5-9809-638184a366dd), fq-squad (Nana, floqast) and reporting (Bram, 01a183f2-16d5-7611-b2b7-165b9eea062d) are incorporated.
+- Existing rows migrate as incorporated; an older bridge still works against the new runtime. After activation, check the live record: the operator's three organizations are incorporated. Their roots, with the Workplace display names he gave them (device-local, not in the runtime): rsi = Tadhg Marinescu (01a18155-0ec7-71f5-9809-638184a366dd), fq-squad = Nana Komatsu (`floqast`), reporting = Bram Nygaard (01a183f2-16d5-7611-b2b7-165b9eea062d).
 - Focused tests over the real runtime; docs (`docs/organization.md`, `docs/workplace.md`) and runtime prompt guidance updated.
 - Committed and activated with the operator's consent.
+
+## Current State
+
+Assigned to Niamh Virtanen (runtime task work-2706768c-b5c4-4d27-89fb-1774ffc63e70), owned by Tadhg Marinescu. Next: she traces how a root's process ending is observed and the existing departure path, models cleanup with `tlc_check`, and sends recommendations on the open points to Tadhg, who settles them with the operator before anything irreversible is built. Tadhg builds the Workplace menu item once the runtime API exists, and owns runtime restart and activation.
 
 ## Outcome
 
