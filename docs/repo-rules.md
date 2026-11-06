@@ -89,3 +89,16 @@ commands that exited nonzero, and calls of saved programs), each with its entry 
 
 A commit sent in the same message as an `edit` or `write` is refused everywhere: parallel calls run concurrently, so
 the commit would take the files before the edits land.
+
+The same batch check also refuses a top-level `read` of an edited path and a `bash` call that names it as a literal
+argument. Two `edit`/`write` calls for the same normalized path are both refused. The edit may still run when its
+sibling check is refused; send the check in the next message. Unrelated paths and later messages remain allowed.
+
+Shell detection is conservative and best-effort, not dependency analysis: a literal path mention can be independent
+(such as printing a filename), while a directory-wide test can depend on an edited file without naming it. Variables,
+substitutions, heredocs, line continuations, unsupported compound syntax and commands that change directory away from
+the current cwd are skipped.
+Quoted paths and escaped spaces are supported; symlink aliases, globs, indirect imports and nested codemode calls are
+outside the guarantee. The check reads the finalized executing assistant message in both root sessions and forked
+continuations; a later message transformation does not create a separate exemption. Use sequential calls inside
+scripts for dependent work. This is a workflow guard, not a sandbox.

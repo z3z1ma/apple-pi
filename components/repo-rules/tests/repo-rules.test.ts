@@ -137,24 +137,23 @@ test("action rules refuse matching commands, and a commit beside an edit is refu
 		on: (name: string, handler: any) => handlers.set(name, handler),
 		registerTool: () => undefined,
 	} as never);
-	const ctx = { cwd: tmpdir() };
-	handlers.get("message_end")!({
-		message: {
-			role: "assistant",
-			content: [
-				{ type: "toolCall", id: "e1", name: "edit" },
-				{ type: "toolCall", id: "b1", name: "bash" },
-			],
+	let content = [
+		{ type: "toolCall", id: "e1", name: "edit" },
+		{ type: "toolCall", id: "b1", name: "bash" },
+	];
+	const ctx = {
+		cwd: tmpdir(),
+		sessionManager: {
+			getSessionId: () => "rules-test",
+			buildSessionProjection: () => ({ messages: [{ role: "assistant", content }] }),
 		},
-	});
+	};
 	const commit = await handlers.get("tool_call")!(
 		{ toolName: "bash", toolCallId: "b1", input: { command: "git commit -m x" } },
 		ctx,
 	);
 	expect(commit?.block).toBe(true);
-	handlers.get("message_end")!({
-		message: { role: "assistant", content: [{ type: "toolCall", id: "b2", name: "bash" }] },
-	});
+	content = [{ type: "toolCall", id: "b2", name: "bash" }];
 	expect(
 		await handlers.get("tool_call")!(
 			{ toolName: "bash", toolCallId: "b2", input: { command: "git commit -m x" } },

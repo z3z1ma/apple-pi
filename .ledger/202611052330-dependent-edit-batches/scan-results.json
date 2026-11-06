@@ -1,0 +1,1194 @@
+{
+  "since": "2026-11-04T16:01:52.000Z",
+  "until": "2026-11-06T06:28:36.000Z",
+  "counts": {
+    "sessions": 3,
+    "batches": 1200,
+    "mutationBatches": 312,
+    "mixedReadOrShell": 139,
+    "matchedBatches": 59,
+    "duplicateCopies": 0,
+    "malformed": 0,
+    "unavailableWorkingDirectories": 0,
+    "matcherErrors": 0
+  },
+  "records": [
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/e72fcf53",
+      "at": "2026-11-04T16:11:50.724Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "components/formal-verification/tests/alloy.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/formal-verification/tests/alloy.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/994a2776",
+      "at": "2026-11-04T16:12:51.396Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "components/formal-verification/tests/lean.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/formal-verification/tests/lean.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/0cecf59c",
+      "at": "2026-11-04T16:14:51.341Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "tests/package-load.mjs"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "tests/package-load.mjs",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/d1f1f909",
+      "at": "2026-11-04T16:20:39.397Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/formal-verification/src/alloy.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/formal-verification/src/alloy.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/d4dce879",
+      "at": "2026-11-04T16:41:43.117Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/formal-verification/src/index.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/formal-verification/src/index.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/a4fca6c5",
+      "at": "2026-11-04T16:42:30.450Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/formal-verification/tests/alloy.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/formal-verification/tests/alloy.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/fe788c37",
+      "at": "2026-11-04T16:44:26.311Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "components/formal-verification/tests/lean.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/formal-verification/tests/lean.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/48b3efee",
+      "at": "2026-11-04T17:10:51.482Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/formal-verification/src/lean.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/formal-verification/src/lean.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/2f4295f3",
+      "at": "2026-11-04T18:03:25.615Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/formal-verification/src/lean.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/formal-verification/src/lean.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/eaccca1f",
+      "at": "2026-11-04T18:28:55.740Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/formal-verification/src/alloy.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/formal-verification/src/alloy.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/44a8a61d",
+      "at": "2026-11-04T19:27:38.594Z",
+      "tools": [
+        "edit",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/system-prompt/src/toolbox.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/system-prompt/src/toolbox.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/7dfb11f2",
+      "at": "2026-11-04T19:42:01.311Z",
+      "tools": [
+        "edit",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "tests/verification-models.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "tests/verification-models.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/f78d3429",
+      "at": "2026-11-04T19:48:18.387Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/formal-verification/tests/lean.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/formal-verification/tests/lean.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/0a6a5b87",
+      "at": "2026-11-05T02:01:31.772Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/tests/git-backend.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/tests/git-backend.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/66a7a8f9",
+      "at": "2026-11-05T02:01:55.773Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/tests/git-backend.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/tests/git-backend.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/9c8328f6",
+      "at": "2026-11-05T02:02:23.902Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/tests/git-backend.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/tests/git-backend.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/3b3e6c04",
+      "at": "2026-11-05T02:03:08.629Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/web/workplace-code.tsx"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/web/workplace-code.tsx",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/fdb9cc0b",
+      "at": "2026-11-05T02:03:36.005Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/web/workplace-code.tsx"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/web/workplace-code.tsx",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/63f9bcb4",
+      "at": "2026-11-05T02:12:39.819Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/tests/world-code.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/tests/world-code.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/73636705",
+      "at": "2026-11-05T02:13:07.048Z",
+      "tools": [
+        "edit",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/tests/world-terminal.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/tests/world-terminal.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/0ca8cc14",
+      "at": "2026-11-05T02:14:38.579Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/tests/world-git.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/tests/world-git.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/bd711965",
+      "at": "2026-11-05T02:31:05.061Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "<outside-repository>"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "<outside-repository>",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/b4cce7d9",
+      "at": "2026-11-05T02:38:40.039Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/src/review-read.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/src/review-read.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/646c08bd",
+      "at": "2026-11-05T02:38:50.524Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/tests/review-queue.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/tests/review-queue.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/7395debd",
+      "at": "2026-11-05T02:39:28.932Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/tests/reviews-backend.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/tests/reviews-backend.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/e97f36e3",
+      "at": "2026-11-05T02:52:09.260Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/tests/world-code.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/tests/world-code.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/593f4418",
+      "at": "2026-11-05T02:55:58.489Z",
+      "tools": [
+        "edit",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "docs/workplace.md"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "docs/workplace.md",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/96d6a2e9",
+      "at": "2026-11-05T02:56:03.686Z",
+      "tools": [
+        "edit",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "docs/agent-workplace.md"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "docs/agent-workplace.md",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/458fa378",
+      "at": "2026-11-05T04:01:07.908Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/src/review-attempt.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/src/review-attempt.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/ed7efd37",
+      "at": "2026-11-05T04:04:38.026Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "tests/fixtures/review-reply.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "tests/fixtures/review-reply.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/6a73547f",
+      "at": "2026-11-05T04:09:19.316Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/tests/review-queue.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/tests/review-queue.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/6fb37d0e",
+      "at": "2026-11-05T04:10:01.192Z",
+      "tools": [
+        "edit",
+        "read"
+      ],
+      "paths": [
+        "components/session-state/tests/review-queue.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "read",
+          "path": "components/session-state/tests/review-queue.test.ts",
+          "kind": "read-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/fbd32c27",
+      "at": "2026-11-05T04:10:08.211Z",
+      "tools": [
+        "edit",
+        "read"
+      ],
+      "paths": [
+        "components/session-state/tests/review-queue.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "read",
+          "path": "components/session-state/tests/review-queue.test.ts",
+          "kind": "read-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/7ae19739",
+      "at": "2026-11-05T04:58:57.552Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/tests/review-queue.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/tests/review-queue.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/9f08e61f",
+      "at": "2026-11-05T05:04:27.865Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        ".ledger/202611042046-review-speed-and-robustness/task.md"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": ".ledger/202611042046-review-speed-and-robustness/task.md",
+          "kind": "shell-during-write",
+          "alreadyRefused": true
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/25981b58",
+      "at": "2026-11-05T06:01:35.703Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/tests/review-queue.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/tests/review-queue.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/c080ce1c",
+      "at": "2026-11-05T06:06:09.650Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/src/review-attempt.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/src/review-attempt.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/a4a13346",
+      "at": "2026-11-05T14:58:28.208Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/tests/peer-turns.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/tests/peer-turns.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/d222a4d1",
+      "at": "2026-11-05T18:50:18.300Z",
+      "tools": [
+        "edit",
+        "edit",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "apps/agent-workplace/src/backend/integrations/index.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "apps/agent-workplace/src/backend/integrations/index.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/4a6e5750",
+      "at": "2026-11-06T04:41:47.585Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "<outside-repository>"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "<outside-repository>",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/157b4703",
+      "at": "2026-11-06T04:46:24.084Z",
+      "tools": [
+        "bash",
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/tests/review-silence.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/tests/review-silence.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        },
+        {
+          "tool": "bash",
+          "path": "components/session-state/tests/review-silence.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/e67c62d9",
+      "at": "2026-11-06T04:47:17.940Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/src/review-attempt.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/src/review-attempt.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/820dd723",
+      "at": "2026-11-06T04:47:36.240Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/src/review-attempt.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/src/review-attempt.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/6cf0878e",
+      "at": "2026-11-06T04:53:04.050Z",
+      "tools": [
+        "edit",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "tests/lifecycle-models.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "tests/lifecycle-models.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/7e40edf5",
+      "at": "2026-11-06T05:03:41.427Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "<outside-repository>"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "<outside-repository>",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/af093e4e",
+      "at": "2026-11-06T05:43:00.341Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "components/repo-rules/tests/replay.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/repo-rules/tests/replay.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/bb7f5f42",
+      "at": "2026-11-06T05:44:31.388Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "docs/repo-rules.md"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "docs/repo-rules.md",
+          "kind": "shell-during-write",
+          "alreadyRefused": true
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/c45ed24c",
+      "at": "2026-11-06T05:57:54.169Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "<outside-repository>"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "<outside-repository>",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/2dba4944",
+      "at": "2026-11-06T05:58:51.049Z",
+      "tools": [
+        "write",
+        "bash"
+      ],
+      "paths": [
+        "components/repo-rules/tests/evidence.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/repo-rules/tests/evidence.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/f5eefba3",
+      "at": "2026-11-06T06:01:33.082Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/src/runtime.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/src/runtime.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/0283f110",
+      "at": "2026-11-06T06:01:50.312Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/tests/program-peers.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/tests/program-peers.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/640a1bdb",
+      "at": "2026-11-06T06:01:57.209Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/tests/program-peers.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/tests/program-peers.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/ed9c19e8",
+      "at": "2026-11-06T06:02:57.628Z",
+      "tools": [
+        "write",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/programs/src/compare.ts",
+        "components/programs/src/index.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/programs/src/compare.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        },
+        {
+          "tool": "bash",
+          "path": "components/programs/src/index.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/1399ee19",
+      "at": "2026-11-06T06:03:20.842Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/session-state/tests/program-peers.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/session-state/tests/program-peers.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/888b31b1",
+      "at": "2026-11-06T06:03:50.992Z",
+      "tools": [
+        "edit",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/system-prompt/src/toolbox.ts",
+        "tests/package-load.mjs"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/system-prompt/src/toolbox.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        },
+        {
+          "tool": "bash",
+          "path": "tests/package-load.mjs",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/45e9bd56",
+      "at": "2026-11-06T06:04:32.197Z",
+      "tools": [
+        "edit",
+        "edit",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/repo-rules/src/replay.ts",
+        "components/repo-rules/src/evidence.ts",
+        "components/programs/src/compare.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/repo-rules/src/replay.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        },
+        {
+          "tool": "bash",
+          "path": "components/repo-rules/src/evidence.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        },
+        {
+          "tool": "bash",
+          "path": "components/programs/src/compare.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/3145c3db",
+      "at": "2026-11-06T06:05:31.597Z",
+      "tools": [
+        "edit",
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "tests/package-load.mjs",
+        "components/system-prompt/src/toolbox.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "tests/package-load.mjs",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        },
+        {
+          "tool": "bash",
+          "path": "components/system-prompt/src/toolbox.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/2a64dca7",
+      "at": "2026-11-06T06:06:40.828Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "components/programs/src/compare.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "components/programs/src/compare.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    },
+    {
+      "ref": "entry:01a18155-0ec7-71f5-9809-638184a366dd/2f04af7d",
+      "at": "2026-11-06T06:09:25.067Z",
+      "tools": [
+        "edit",
+        "bash"
+      ],
+      "paths": [
+        "tests/lifecycle-models.test.ts"
+      ],
+      "conflicts": [
+        {
+          "tool": "bash",
+          "path": "tests/lifecycle-models.test.ts",
+          "kind": "shell-during-write",
+          "alreadyRefused": false
+        }
+      ]
+    }
+  ],
+  "unclassified": []
+}

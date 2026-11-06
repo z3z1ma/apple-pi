@@ -1,9 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { forkCwd, forkMessages } from "../../shared/src/fork-context.js";
 import { setSystemPromptSection } from "../../shared/src/system-prompt-section.js";
 import { resolveToolPath } from "../../shared/src/tool-path.js";
+import { type BatchCall, batchConflicts } from "./batches.js";
 import { ruleFileRefusal } from "./checks.js";
 import { addedComments } from "./comments.js";
 import { createEvidenceTool } from "./evidence.js";
@@ -23,9 +25,20 @@ const OPTED_IN = `This repository keeps its rules in \`.pi/rules/\`, and the har
 - Add rules liberally: whenever you meet a mistake a machine can detect (in review, while fixing a bug, from a lesson or a user correction), write a rule instead of prose. Write the \`.grit\` file, then list it in \`policy.json\` with its paths, a \`fires\` sample it must flag and a \`passes\` sample it must allow; the harness refuses a rule that does not load or does not behave on its samples. A shell-command pattern becomes an \`actions\` entry with \`fires\` and \`passes\` commands. Then fix what the new rule flags.
 - \`repo_rules\` lists each rule with how often it fired; narrow a rule that blocks good code and question one that never fires.`;
 
-const NOT_OPTED_IN = `The harness can enforce repository rules: a repository that has \`.pi/rules/\` gets every edit checked against its GritQL rules and comment policy, and every shell command against its action rules. This repository has none. When you meet a mistake a machine could detect, tell the user it could become a rule and offer to set up \`.pi/rules/\`; create it only when they agree, because the rules are committed for everyone who works here.`;
+const NOT_OPTED_IN = `With \`.pi/rules/\`, the harness checks edits against GritQL/comment rules and shell commands against action rules. This repository has none. Offer rules for repeated detectable mistakes; create them after user agreement because contributors share them.`;
 
 const COMMITS = /\bgit\s+(add|commit)\b/;
+const BATCH_GUIDANCE = `Check edits next message; other paths stay parallel. Same-file reads/literal shell checks and both colliding writers are refused. Sibling edits may run. Shell matching is heuristic; await script dependencies.`;
+
+function executingBatch(ctx: ExtensionContext, callId: string): BatchCall[] {
+	const messages =
+		forkMessages(ctx.sessionManager.getSessionId()) ?? ctx.sessionManager.buildSessionProjection().messages;
+	const message = messages.findLast(
+		(each) => each.role === "assistant" && each.content.some((part) => part.type === "toolCall" && part.id === callId),
+	);
+	if (message?.role !== "assistant") return [];
+	return message.content.filter((part) => part.type === "toolCall") as BatchCall[];
+}
 
 function proposedContent(path: string, input: Record<string, unknown>, toolName: string): string | undefined {
 	if (toolName === "write") return typeof input.content === "string" ? input.content : undefined;
@@ -130,28 +143,27 @@ function createRulesTool() {
 }
 
 export function installRepoRules(pi: ExtensionAPI): void {
-	const writingBatches = new Set<string>();
 	pi.registerTool(createRulesTool());
 	pi.registerTool(createReplayTool());
 	pi.registerTool(createEvidenceTool());
 	pi.on("before_agent_start", (event, ctx) => {
 		const optedIn = existsSync(join(ctx.cwd, RULES_DIR));
-		setSystemPromptSection(event.systemPromptOptions, REPO_RULES_PROMPT_TAG, optedIn ? OPTED_IN : NOT_OPTED_IN);
-	});
-	pi.on("message_end", (event) => {
-		const message = event.message as { role?: string; content?: unknown };
-		if (message.role !== "assistant" || !Array.isArray(message.content)) return undefined;
-		writingBatches.clear();
-		const calls = message.content.filter((part: { type?: string }) => part?.type === "toolCall") as {
-			id: string;
-			name: string;
-		}[];
-		if (calls.some((call) => call.name === "edit" || call.name === "write"))
-			for (const call of calls) writingBatches.add(call.id);
-		return undefined;
+		setSystemPromptSection(
+			event.systemPromptOptions,
+			REPO_RULES_PROMPT_TAG,
+			`${optedIn ? OPTED_IN : NOT_OPTED_IN}\n\n${BATCH_GUIDANCE}`,
+		);
 	});
 	pi.on("tool_call", async (event, ctx) => {
 		const input = event.input as Record<string, unknown>;
+		const cwd = forkCwd() ?? ctx.cwd;
+		const batch = event.parentToolCallId ? [] : executingBatch(ctx, event.toolCallId);
+		const conflict = batchConflicts(batch, cwd).find((each) => each.callId === event.toolCallId);
+		if (conflict)
+			return {
+				block: true,
+				reason: `Refused: this parallel batch edits ${conflict.path} and also ${conflict.kind === "duplicate-write" ? "edits it again" : "reads or uses it"}. Send the dependent call in the next message; a refused edit does not stop the other calls.`,
+			};
 		if (event.toolName === "edit" || event.toolName === "write") {
 			if (typeof input.path !== "string" || event.parentToolCallId) return undefined;
 			const reason = await editRefusal(resolveToolPath(input.path, ctx.cwd), event.toolName, input);
@@ -159,7 +171,7 @@ export function installRepoRules(pi: ExtensionAPI): void {
 		}
 		if (event.toolName !== "bash") return undefined;
 		const command = String(input.command ?? "");
-		if (writingBatches.delete(event.toolCallId) && COMMITS.test(command))
+		if (batch.some((call) => call.name === "edit" || call.name === "write") && COMMITS.test(command))
 			return {
 				block: true,
 				reason:
