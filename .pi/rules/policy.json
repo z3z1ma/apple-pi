@@ -4,28 +4,21 @@
     {
       "grit": "hot-bounded-io.grit",
       "message": "Hot paths use bounded file reads and asynchronous child processes; keep whole-file reads and synchronous subprocesses outside .hot.ts modules.",
-      "includes": [
-        "**/*.hot.ts"
-      ],
+      "includes": ["**/*.hot.ts"],
       "fires": "import { readFileSync } from \"node:fs\";\nexport const load = (path: string) => readFileSync(path, \"utf8\");\n",
       "passes": "import { open } from \"node:fs/promises\";\nexport const load = (path: string) => open(path, \"r\");\n"
     },
     {
       "grit": "no-native-select.grit",
       "message": "Use Select or Recipients from workplace-fields.tsx; native dropdowns look out of place in Workplace (operator, 2026-11-02).",
-      "includes": [
-        "apps/agent-workplace/web/workplace*.tsx"
-      ],
+      "includes": ["apps/agent-workplace/web/workplace*.tsx"],
       "fires": "export const Picker = () => <select value=\"a\"><option>a</option></select>;\n",
       "passes": "export const Picker = () => <Select value=\"a\" options={[]} />;\n"
     },
     {
       "grit": "workplace-palette.grit",
       "message": "Use a --wp-* theme variable: a hard-coded color does not follow the theme (lint/README.md).",
-      "includes": [
-        "apps/agent-workplace/web/workplace*.css",
-        "!apps/agent-workplace/web/workplace.css"
-      ],
+      "includes": ["apps/agent-workplace/web/workplace*.css", "!apps/agent-workplace/web/workplace.css"],
       "fires": ".badge {\n  color: #3b82f6;\n}\n",
       "passes": ".badge {\n  color: var(--wp-accent);\n  background: #fff;\n}\n"
     }
@@ -69,17 +62,38 @@
   ],
   "scripts": [
     {
+      "id": "git-action-root",
+      "on": "edit",
+      "script": "git-action-root.js",
+      "includes": ["apps/agent-workplace/web/workplace-git.tsx"],
+      "fires": [
+        {
+          "path": "apps/agent-workplace/web/workplace-git.tsx",
+          "content": "gitApi().run({ root: rootRef.current, action });"
+        }
+      ],
+      "passes": [{ "path": "apps/agent-workplace/web/workplace-git.tsx", "content": "gitApi().run({ root, action });" }]
+    },
+    {
       "id": "parallel-dependents",
       "on": "call",
       "script": "parallel-dependents.js",
       "fires": [
         { "tool": "read", "input": { "path": "a.ts" }, "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }] },
-        { "tool": "bash", "input": { "command": "npx biome check a.ts" }, "batch": [{ "tool": "write", "input": { "path": "./a.ts" } }] },
+        {
+          "tool": "bash",
+          "input": { "command": "npx biome check a.ts" },
+          "batch": [{ "tool": "write", "input": { "path": "./a.ts" } }]
+        },
         { "tool": "edit", "input": { "path": "a.ts" }, "batch": [{ "tool": "write", "input": { "path": "a.ts" } }] }
       ],
       "passes": [
         { "tool": "read", "input": { "path": "b.ts" }, "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }] },
-        { "tool": "bash", "input": { "command": "npx biome check $FILE a.ts" }, "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }] },
+        {
+          "tool": "bash",
+          "input": { "command": "npx biome check $FILE a.ts" },
+          "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }]
+        },
         { "tool": "read", "input": { "path": "a.ts" }, "batch": [{ "tool": "read", "input": { "path": "a.ts" } }] }
       ]
     },
@@ -89,11 +103,19 @@
       "script": "commit-beside-edit.js",
       "message": "This message also edits files, and parallel calls run concurrently, so this commit would take the files before the edits land. Commit in a later message.",
       "fires": [
-        { "tool": "bash", "input": { "command": "git add a.ts && git commit -m fix" }, "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }] }
+        {
+          "tool": "bash",
+          "input": { "command": "git add a.ts && git commit -m fix" },
+          "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }]
+        }
       ],
       "passes": [
         { "tool": "bash", "input": { "command": "git commit -m fix -- a.ts" } },
-        { "tool": "bash", "input": { "command": "git status" }, "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }] }
+        {
+          "tool": "bash",
+          "input": { "command": "git status" },
+          "batch": [{ "tool": "edit", "input": { "path": "a.ts" } }]
+        }
       ]
     }
   ]

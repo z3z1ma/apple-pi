@@ -3,6 +3,9 @@
 WorkplaceGit is the Git app: one repository or worktree root at a time, chosen from the known repositories, its linked worktrees or a typed absolute path, and remembered in localStorage. Every action goes through `window.agentWorkplace.git.run` with a typed GitAction; the renderer never builds command lines. After each action it rereads the overview and the first log page, so the graph, branches and working changes always come from Git rather than from optimistic local edits.
 Why: the backend owns argument validation and the exact git invocation. Rereading after every action is cheap next to a network fetch and avoids a renderer model of Git state that can drift.
 
+Code, Git and Knowledge share repository selection. Git action closures capture the originating root, including retained confirmations, name prompts and a force-delete continuation raised after an awaited refusal. Their dialogs name that root. The mutable root reference is for current-view reads, not deferred mutation authority.
+Why: another view can change the shared root while Git's confirmation is retained; looking up the current root only when Confirm is pressed would authorize the same path in a different repository.
+
 The view refreshes on activation and on window focus, and otherwise only on explicit Refresh. A refresh started for one root is dropped when the root changed before it returned.
 Why: there is no watcher; focus is the moment an outside change (a terminal, an agent) becomes relevant to the operator. A late response from the previous repository must not replace the current one.
 

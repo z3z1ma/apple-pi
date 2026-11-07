@@ -29,8 +29,16 @@ const gitApi = () => window.agentWorkplace.git;
 type Selection = { kind: "changes" } | { kind: "commit"; sha: string };
 type Toast = { kind: "done" | "failed"; title: string; text: string };
 type Ask =
-	| { kind: "confirm"; title: string; body: ReactNode; confirm: string; danger?: boolean; run(): void }
-	| { kind: "name"; title: string; label: string; value: string; confirm: string; run(value: string): void };
+	| { kind: "confirm"; root: string; title: string; body: ReactNode; confirm: string; danger?: boolean; run(): void }
+	| {
+			kind: "name";
+			root: string;
+			title: string;
+			label: string;
+			value: string;
+			confirm: string;
+			run(value: string): void;
+	  };
 
 export function repositoryLabel(path: string) {
 	return path.split("/").filter(Boolean).at(-1) ?? path;
@@ -644,7 +652,7 @@ export function WorkplaceGit({ active }: { active: boolean }) {
 	const run = useCallback(
 		async (label: string, action: GitAction, after?: () => void) => {
 			setBusy(label);
-			const result = await gitApi().run({ root: rootRef.current, action });
+			const result = await gitApi().run({ root, action });
 			setBusy(undefined);
 			if (result.ok) {
 				setToast({ kind: "done", title: label, text: result.output });
@@ -653,7 +661,7 @@ export function WorkplaceGit({ active }: { active: boolean }) {
 			await refresh();
 			return result.ok;
 		},
-		[refresh],
+		[root, refresh],
 	);
 
 	const loadMore = async () => {
@@ -699,7 +707,7 @@ export function WorkplaceGit({ active }: { active: boolean }) {
 	};
 
 	const confirm = (title: string, bodyText: ReactNode, label: string, action: () => void, danger = true) =>
-		setAsk({ kind: "confirm", title, body: bodyText, confirm: label, danger, run: action });
+		setAsk({ kind: "confirm", root, title, body: bodyText, confirm: label, danger, run: action });
 	const askName = (
 		title: string,
 		label: string,
@@ -708,7 +716,7 @@ export function WorkplaceGit({ active }: { active: boolean }) {
 		action: (name: string) => void,
 	) => {
 		setAskValue(value);
-		setAsk({ kind: "name", title, label, value, confirm: confirmLabel, run: action });
+		setAsk({ kind: "name", root, title, label, value, confirm: confirmLabel, run: action });
 	};
 	const newBranch = (from: string, fromLabel: string) =>
 		askName(
@@ -1236,6 +1244,9 @@ export function WorkplaceGit({ active }: { active: boolean }) {
 						else ask.run(askValue.trim());
 					}}
 				>
+					<p>
+						Repository: <code>{ask.root}</code>
+					</p>
 					{ask.kind === "confirm" ? (
 						<p>{ask.body}</p>
 					) : (

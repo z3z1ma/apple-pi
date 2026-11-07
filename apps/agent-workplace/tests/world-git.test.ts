@@ -6,6 +6,7 @@ import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { appFile, contentType } from "../src/app-files.js";
 import type { GitAction, GitCommit, GitDiffRequest, GitOverview } from "../src/git.js";
 import type { WorldSnapshot } from "../src/world.js";
+import { choose } from "./helpers/select.js";
 
 const APP = fileURLToPath(new URL("..", import.meta.url));
 const ORIGIN = "http://localhost";
@@ -389,3 +390,74 @@ test("when the rail is too short, apps it cannot fit move into More, which still
 		await page.close();
 	}
 }, 45_000);
+
+test.each(["discard", "delete branch"])(
+	"retained %s confirmations and continuations stay bound to their original repository",
+	async (action) => {
+		const { page, errors } = await openGit();
+		try {
+			await page.evaluate((root) => {
+				const w = window as any;
+				w.gitRequests = [];
+				w.agentWorkplace.workspace.repositories = async () => ({ ok: true, roots: [root, "/fixture/other"] });
+				w.agentWorkplace.workspace.tree = async ({ root }: { root: string }) => ({
+					ok: true,
+					root,
+					path: "",
+					entries: [],
+				});
+				const run = w.agentWorkplace.git.run;
+				w.agentWorkplace.git.run = async (request: { root: string; action: GitAction }) => {
+					w.gitRequests.push(request);
+					if (request.action.kind === "deleteBranch" && !request.action.force)
+						await new Promise<void>((resolve) => {
+							w.releaseDelete = resolve;
+						});
+					return run(request);
+				};
+			}, ROOT);
+			const git = await enter(page);
+			if (action === "discard") {
+				await git.getByRole("button", { name: "Discard changes: src/app.ts", exact: true }).click();
+			} else {
+				await git
+					.getByRole("complementary", { name: "Branches" })
+					.getByRole("button", { name: "feature/graph", exact: false })
+					.first()
+					.click({ button: "right" });
+				await page.getByRole("menuitem", { name: /Delete feature\/graph/ }).click();
+				await git
+					.getByRole("dialog", { name: "Delete branch feature/graph?" })
+					.getByRole("button", { name: "Delete", exact: true })
+					.click();
+				await vi.waitFor(async () =>
+					expect(await page.evaluate(() => typeof (window as any).releaseDelete)).toBe("function"),
+				);
+			}
+			await page.getByRole("button", { name: "Code", exact: true }).click();
+			await choose(page.getByRole("combobox", { name: "Code repository" }), "/fixture/other");
+			if (action !== "discard") await page.evaluate(() => (window as any).releaseDelete());
+			await page.getByRole("button", { name: "Git", exact: true }).click();
+			const dialog = git.getByRole("dialog", {
+				name: action === "discard" ? "Discard changes to src/app.ts?" : "Force delete feature/graph?",
+			});
+			expect(await dialog.textContent()).toContain(`Repository: ${ROOT}`);
+			await dialog
+				.getByRole("button", { name: action === "discard" ? "Discard" : "Force delete", exact: true })
+				.click();
+			await vi.waitFor(async () =>
+				expect((await page.evaluate(() => (window as any).gitRequests)).at(-1)).toEqual({
+					root: ROOT,
+					action:
+						action === "discard"
+							? { kind: "discard", paths: ["src/app.ts"] }
+							: { kind: "deleteBranch", name: "feature/graph", force: true },
+				}),
+			);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+	45000,
+);
