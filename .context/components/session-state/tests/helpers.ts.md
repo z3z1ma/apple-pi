@@ -20,6 +20,12 @@ Verify: components/session-state/tests/peers.test.ts, apps/agent-workplace/tests
 `dispose` alone emits no `session_shutdown`, so the bridge would stay connected and start a new runtime once the test stops the old one. `close` emits shutdown first.
 Why: a disposed session's link stays connected; when the test stops the runtime, the link starts a new one into a directory the test is deleting.
 
+## symbol:stopRuntime
+
+This stops the runtime and deletes the whole temporary state directory, so it cannot restart a runtime mid-test. To restart with state kept, send SIGTERM to `runtimePid(state.pidPath)`, wait until the socket file is gone, then call `startRuntime(state.socketPath)`.
+Why: after `stopRuntime`, opening the database fails with "unable to open database file".
+Verify: components/session-state/tests/stuck-work.test.ts, components/session-state/tests/channel-membership.test.ts
+
 ## symbol:sendCommand
 
 This test helper returns the collected receipts array; check `receipts.at(-1)?.stage` for the final receipt it observed. The production helper of the same name returns one receipt. Confirm the import before asserting a command's result.
