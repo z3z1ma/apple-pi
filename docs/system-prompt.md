@@ -36,6 +36,6 @@ Follow the model vendors' prompting guides ([OpenAI GPT-6](https://developers.op
 Then check:
 
 - `components/system-prompt/tests/system-prompt.test.ts` runs a real root session and checks that every active tool is taught and no taught tool is absent, and the order.
-- `tests/prompt-budgets.test.ts` measures each context's prompt. Lower its ceiling to the new measured size when the prompt shrinks.
+- `tests/prompt-budgets.test.ts` estimates each context's prompt and effective tool declarations as characters divided by four. The operator-approved root ceiling is 37,500, with modest headroom above the 36,877 baseline for small useful changes and checkout-path variation. It is a growth guardrail, not a production token limit or an exact-size target; preserve useful, efficient guidance rather than shaving text to match the baseline. Absolute skill and dependency-documentation paths affect this estimate, so compare equivalent paths when investigating an overage. Intern and BTW ceilings remain separate.
 - `npm run audit:cache` checks prefix caching in real session logs.
 - To see the exact prompt a real request carries, run `capture.mjs` and `render.mjs` in `.ledger/202611032038-custom-system-prompt/current-prompt/`. The capture never sends the request.

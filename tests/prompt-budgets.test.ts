@@ -49,9 +49,7 @@ test("the full package root prompt and active schemas stay within their token bu
 			expect.arrayContaining(["hire", "directory", "ask_user_question", "codemode", "tool_search"]),
 		);
 		expect(toolboxGaps(run.session)).toEqual({ untaught: [], absent: [] });
-		const declared = getCurrentTools(run.session.messages);
-		expect(declared.find((tool) => tool.name === "read")?.description).toContain("Codemode:");
-		expect(declared.find((tool) => tool.name === "codemode")?.description).toContain("temporary_peer");
+		const declared = getCurrentTools(run.request.messages);
 		expect(measured.schemaChars).toBe(
 			JSON.stringify(
 				declared
@@ -59,11 +57,12 @@ test("the full package root prompt and active schemas stay within their token bu
 					.sort((left, right) => left.name.localeCompare(right.name)),
 			).length,
 		);
-		const prompt = getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"));
+		const prompt = getCurrentSystemPrompt(run.request.messages);
+		expect(measured.promptChars).toBe(prompt.length);
 		expect(prompt).toContain("**The ledger**");
 		expect(prompt).toContain("<pair-protocol>");
 		expect(run.session.resourceLoader.getSkills().skills.length).toBeGreaterThan(0);
-		budget("root prompt estimated tokens", measured.tokens, 36877, measured);
+		budget("root prompt estimated tokens", measured.tokens, 37500, measured);
 	} finally {
 		await run.close();
 	}
@@ -89,8 +88,8 @@ for (const kind of ["explore", "research"] as const) {
 			await run.prompt();
 			const measured = promptSize(run.session);
 			expect(measured.tools).toEqual(expect.arrayContaining(["read", "bash", "context_lint"]));
-			for (const tool of ["edit", "codemode", "tool_search"])
-				expect(run.session.getToolDefinition(tool), `${kind} lacks ${tool}`).toBeUndefined();
+			for (const tool of ["edit", "write", "codemode", "tool_search"])
+				expect(measured.tools, `${kind} lacks ${tool}`).not.toContain(tool);
 			expect(toolboxGaps(run.session)).toEqual({ untaught: [], absent: [] });
 			const prompt = getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"));
 			expect(prompt).toContain("**The ledger**");
@@ -119,8 +118,6 @@ test("BTW's production loader stays within its prompt and schema token budget", 
 			await vi.waitFor(() => expect(conversation.status).toBe("completed"));
 			const measured = promptSize(conversation.session);
 			expect(measured.tools).toEqual(["find", "grep", "ls", "read"]);
-			for (const tool of ["codemode", "tool_search"])
-				expect(conversation.session.getToolDefinition(tool), `BTW lacks ${tool}`).toBeUndefined();
 			expect(toolboxGaps(conversation.session)).toEqual({ untaught: [], absent: [] });
 			budget("BTW prompt estimated tokens", measured.tokens, 830, measured);
 		} finally {

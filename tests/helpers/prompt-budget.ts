@@ -1,4 +1,10 @@
-import { getCurrentSystemMessage, getCurrentSystemPrompt, getCurrentTools, type Model } from "@earendil-works/pi-ai";
+import {
+	getCurrentSystemMessage,
+	getCurrentSystemPrompt,
+	getCurrentTools,
+	type Model,
+	type TranscriptContext,
+} from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream, fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import {
 	type AgentSession,
@@ -37,7 +43,9 @@ export async function promptSession(options: {
 		maxTokens: 1000,
 	} as Model<string>;
 	const { modelRuntime } = fauxModelBackend(model);
-	const stream = () => {
+	let request!: TranscriptContext;
+	const stream = (_model: Model<string>, context: TranscriptContext) => {
+		request = context;
 		const events = createAssistantMessageEventStream();
 		const message = fauxAssistantMessage("Budget fixture completed.");
 		events.push({ type: "done", reason: "stop", message });
@@ -118,6 +126,9 @@ export async function promptSession(options: {
 		});
 	return {
 		session,
+		get request() {
+			return request;
+		},
 		async prompt() {
 			await session.prompt("Measure the initial package loadout.");
 			expect(errors).toEqual([]);
