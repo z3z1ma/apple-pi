@@ -13,6 +13,9 @@ VIPs is the Chat label for organization heads whose complete current reporting t
 Batch departures use the public People checkboxes, confirmation and preload API. Assert the actual selected names/IDs and per-person handoff/outcome cells, including after a name changes, a worker gains reports, or a selected person disappears. Preserve the confirmed request through Hide/tab switches and uncertain recovery. Use the control's associated label when checking text alignment, rather than a particular wrapper or child position.
 Why: a whole-dialog status or total alone can pass when the wrong person receives that status, and a checkbox count can pass with the wrong selection. Roster changes must not reinterpret already confirmed consent.
 
+The embedded World renders its rows before `main.tsx` connects its place actions to the API (theme loading is awaited first), so a click in that window is silently ignored. Wait for the World canvas, which exists only after the connection, before driving World actions.
+Why: without that wait the End session test clicked a working button that never reached the API.
+
 Run against the current built assets and verify build freshness, with one Chrome worker on the shared machine. AGENT_WORLD_SHOTS records captures. The fixture does not build assets or mutate real people.
 
 Coupled: apps/agent-workplace/web/workplace-person-actions.tsx, apps/agent-workplace/web/workplace-context-menu.tsx, apps/agent-workplace/web/workplace.tsx, apps/agent-workplace/web/workplace-people.tsx, apps/agent-workplace/web/workplace-org-chart.tsx, apps/agent-workplace/src/call-in.ts, apps/agent-workplace/web/workplace-departures.tsx
