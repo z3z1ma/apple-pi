@@ -43,8 +43,8 @@ Command: NODE_OPTIONS="--import=$PWD/components/session-state/src/register.mjs" 
 
  Test Files  2 passed (2)
       Tests  17 passed (17)
-   Start at  15:40:08
-   Duration  26.63s (transform 410ms, setup 25ms, import 1.54s, tests 24.87s, environment 0ms)
+   Start at  15:41:39
+   Duration  26.41s (transform 370ms, setup 13ms, import 1.35s, tests 24.87s, environment 0ms)
 
 > apple-pi@0.1.0 typecheck
 > tsc --noEmit && tsc --noEmit -p tsconfig.web.json
