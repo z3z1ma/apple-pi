@@ -144,7 +144,11 @@ async function openLifecycle(appearance: "light" | "dark" = "light", width = 144
 			organizationLifetime: async (root: string) => ({ ...w.lifetime, root }),
 			incorporateOrganization: async (root: string) => {
 				w.incorporations.push(root);
-				if (w.holdIncorporation) return new Promise((resolve) => (w.releaseIncorporation = resolve));
+				if (w.holdIncorporation)
+					return new Promise((resolve) => {
+						w.releaseIncorporation = resolve;
+						w.incorporationReleases = { ...w.incorporationReleases, [root]: resolve };
+					});
 				w.lifetime = { ...w.lifetime, incorporated: true, closing: false, waiting: [] };
 				return { ok: true };
 			},
@@ -628,6 +632,100 @@ test("an incorporation that settles after a workspace switch changes nothing in 
 		await menu.getByRole("menuitem", { name: /^Incorporate this organization/ }).waitFor();
 		expect(await menu.getByRole("menuitem", { name: /Incorporating failed/ }).count()).toBe(0);
 		await page.keyboard.press("Escape");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("a late incorporation refusal in one workspace keeps another workspace's refusal", async () => {
+	const snapshot = world();
+	snapshot.characters.push(awake("zoe", "Zoe", null));
+	const { page, errors } = await openLifecycle("light", 1440, snapshot);
+	try {
+		const switcher = page.getByRole("button", { name: /^Workspace: .*Switch workspace$/ });
+		const menu = page.getByRole("menu", { name: "Actions", exact: true });
+		const incorporate = menu.getByRole("menuitem", { name: /^Incorporate this organization/ });
+		await page.evaluate(() => {
+			(window as any).holdIncorporation = true;
+		});
+		await switcher.click();
+		await incorporate.click();
+		await switcher.click();
+		await menu.getByRole("menuitem", { name: /^Zoe organization/ }).click();
+		await page.getByRole("button", { name: "Workspace: Zoe organization. Switch workspace", exact: true }).waitFor();
+		await switcher.click();
+		await incorporate.click();
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).incorporations)).toEqual(["ada", "zoe"]),
+		);
+		await page.evaluate(() => (window as any).incorporationReleases.zoe({ ok: false, reason: "Zoe failed" }));
+		await switcher.click();
+		const zoeFailure = menu.getByRole("menuitem", { name: "Incorporating failed: Zoe failed", exact: true });
+		await zoeFailure.waitFor();
+		await page.keyboard.press("Escape");
+		await page.evaluate(() => (window as any).incorporationReleases.ada({ ok: false, reason: "Ada failed" }));
+		await page.evaluate(
+			() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+		);
+		await switcher.click();
+		await zoeFailure.waitFor();
+		expect(await menu.getByRole("menuitem", { name: /Ada failed/ }).count()).toBe(0);
+		await page.keyboard.press("Escape");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("after incorporating, a busy refusal of Send home asks to interrupt and the next click confirms", async () => {
+	const snapshot = world();
+	snapshot.characters = snapshot.characters.map((person) => (person.id === "ada" ? awake("ada", "Ada", null) : person));
+	const { page, errors } = await openLifecycle("light", 1440, snapshot);
+	try {
+		await page.getByRole("button", { name: /^Ada/ }).first().click();
+		await page.getByRole("button", { name: "Person actions: Ada", exact: true }).click();
+		await page.getByRole("menuitem", { name: "Send home", exact: true }).click();
+		const dialog = page.getByRole("dialog", { name: "Send Ada home", exact: true });
+		await vi.waitFor(async () => expect((await calls(page)).home).toEqual([{ person: "ada", confirmed: false }]));
+		await release(page, { ok: false, dissolve: true, reason: "Ada's organization is not incorporated." });
+		await dialog.getByRole("button", { name: "Incorporate and send home", exact: true }).click();
+		await vi.waitFor(async () => expect((await calls(page)).home).toHaveLength(2));
+		await release(page, { ok: false, confirm: true, reason: "Ada started a turn; confirm interruption." });
+		await dialog.getByText("Ada started a turn; confirm interruption.", { exact: true }).waitFor();
+		expect(await dialog.getByRole("region", { name: "Organization not incorporated" }).count()).toBe(0);
+		expect(await dialog.innerText()).toMatch(/busy|interrupt/i);
+		await dialog.getByRole("button", { name: "Send home", exact: true }).click();
+		await vi.waitFor(async () =>
+			expect((await calls(page)).home).toEqual([
+				{ person: "ada", confirmed: false },
+				{ person: "ada", confirmed: false },
+				{ person: "ada", confirmed: true },
+			]),
+		);
+		expect(await page.evaluate(() => (window as any).incorporations)).toEqual(["ada"]);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test("World's End session on an unincorporated head opens the Send home choice", async () => {
+	const { page, errors } = await openLifecycle();
+	try {
+		await page.getByRole("button", { name: "World", exact: true }).click();
+		const frame = page.frameLocator('iframe[title="World"]');
+		await frame.locator("canvas").waitFor();
+		await frame.getByRole("button", { name: /^Ada/ }).first().click();
+		await frame.getByRole("button", { name: "End Ada's session", exact: true }).click();
+		await vi.waitFor(async () => expect((await calls(page)).home).toEqual([{ person: "ada", confirmed: false }]), {
+			timeout: 5000,
+		});
+		await release(page, { ok: false, dissolve: true, reason: "Ada's organization is not incorporated." });
+		const dialog = page.getByRole("dialog", { name: "Send Ada home", exact: true });
+		await dialog.getByRole("region", { name: "Organization not incorporated", exact: true }).waitFor();
+		await dialog.getByRole("button", { name: "Incorporate and send home", exact: true }).waitFor();
+		expect((await calls(page)).home).toHaveLength(1);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

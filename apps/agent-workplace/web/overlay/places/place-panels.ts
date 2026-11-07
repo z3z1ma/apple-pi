@@ -115,6 +115,8 @@ export const placeActions = {
 			if (receipt.ok) view?.notify(say(themeStore.get(), "session-ended", { name: character.name }));
 			else if (receipt.confirm)
 				update({ confirmEnd: { id: character.id, name: character.name, reason: receipt.reason } });
+			else if (receipt.dissolve && window.parent.agentWorkplaceSendHome)
+				window.parent.agentWorkplaceSendHome(character.id);
 			else view?.notify(receipt.reason);
 		} catch (error) {
 			view?.notify(failure(error));

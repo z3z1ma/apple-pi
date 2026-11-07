@@ -24,8 +24,14 @@ type Operation = {
 	affected: { id: string; name: string }[];
 	expected: string[];
 	problem?: string;
+	dissolving?: boolean;
 };
 type MenuEvent = MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>;
+declare global {
+	interface Window {
+		agentWorkplaceSendHome?: (id: string) => void;
+	}
+}
 type Actions = {
 	world: WorldSnapshot;
 	menu: (event: MenuEvent, id: string, extra?: { label: string; onSelect: () => void }[]) => void;
@@ -115,12 +121,20 @@ export function WorkplacePersonActions({ world, children }: { world: WorldSnapsh
 	const current = useRef(world);
 	current.current = world;
 	const [operation, setOperation] = useState<Operation>();
-	const begin = (action: Action, id: string, trigger: HTMLElement) => {
+	const begin = (action: Action, id: string, trigger: HTMLElement, dissolving?: boolean) => {
 		const person = personIn(current.current, id);
 		if (!person || (action === "home" && !person.awake) || (action === "call" && person.awake)) return;
 		const plan = action === "call" ? callPlan(current.current, id) : { affected: [], expected: [] };
-		setOperation({ id: crypto.randomUUID(), person, action, trigger, ...plan });
+		setOperation({ id: crypto.randomUUID(), person, action, trigger, dissolving, ...plan });
 	};
+
+	useEffect(() => {
+		window.agentWorkplaceSendHome = (id) =>
+			begin("home", id, document.activeElement instanceof HTMLElement ? document.activeElement : document.body, true);
+		return () => {
+			window.agentWorkplaceSendHome = undefined;
+		};
+	});
 
 	const menu = (event: MenuEvent, id: string, extra: { label: string; onSelect: () => void }[] = []) => {
 		const person = personIn(current.current, id);
@@ -168,7 +182,7 @@ function PersonActionDialog({
 	const [permanent, setPermanent] = useState(false);
 	const [handoff, setHandoff] = useState(true);
 	const [busyWarning, setBusyWarning] = useState(operation.person.busy);
-	const [dissolving, setDissolving] = useState(false);
+	const [dissolving, setDissolving] = useState(!!operation.dissolving);
 	const [dissolveConsent, setDissolveConsent] = useState(false);
 	const [receipt, setReceipt] = useState<CommandReceipt>();
 	const [callResult, setCallResult] = useState<CallResult>();
@@ -199,14 +213,15 @@ function PersonActionDialog({
 				setCallResult(
 					await window.agentWorkplace.callIn({ id: operation.id, person: person.id, expected: operation.expected }),
 				);
-			} else if (action === "home" && choice === "incorporate") {
-				const incorporated = await window.agentWorkplace.incorporateOrganization(person.id);
-				const result = incorporated.ok
-					? await window.agentWorkplace.endSession(person.id, busy)
-					: { ok: false as const, reason: incorporated.reason };
-				setReceipt(result);
-				if (result.ok) setDissolving(false);
 			} else {
+				if (choice === "incorporate") {
+					const incorporated = await window.agentWorkplace.incorporateOrganization(person.id);
+					if (!incorporated.ok) {
+						setReceipt(incorporated);
+						return;
+					}
+					setDissolving(false);
+				}
 				const result =
 					action === "home"
 						? await window.agentWorkplace.endSession(person.id, automatic ? false : busy, choice === "dissolve")
@@ -247,7 +262,8 @@ function PersonActionDialog({
 	}, [onClose]);
 	useEffect(() => {
 		const immediate =
-			(action === "call" && operation.expected.length === 1) || (action === "home" && !operation.person.busy);
+			(action === "call" && operation.expected.length === 1) ||
+			(action === "home" && !operation.person.busy && !operation.dissolving);
 		if (immediate && !operation.problem && !autoStarted.current) {
 			autoStarted.current = true;
 			void submitRef.current(true);

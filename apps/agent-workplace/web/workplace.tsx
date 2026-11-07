@@ -359,7 +359,9 @@ function Workplace() {
 	const [leavingOpen, setLeavingOpen] = useState(false);
 	const [leavingUnsettled, setLeavingUnsettled] = useState(false);
 	const [lifetime, setLifetime] = useState<Awaited<ReturnType<typeof api.organizationLifetime>>>();
-	const [incorporateError, setIncorporateError] = useState<{ root: string; reason: string }>();
+	const [incorporateErrors, setIncorporateErrors] = useState<Record<string, string>>({});
+	const setIncorporateError = (root: string, reason?: string) =>
+		setIncorporateErrors(({ [root]: _, ...rest }) => (reason === undefined ? rest : { ...rest, [root]: reason }));
 	const workspaceId = workspace?.id;
 	const shownWorkspace = useRef(workspaceId);
 	shownWorkspace.current = workspaceId;
@@ -447,24 +449,25 @@ function Workplace() {
 				onSelect: () => {
 					const root = workspace.id;
 					const stillShown = () => shownWorkspace.current === root;
-					setIncorporateError(undefined);
+					setIncorporateError(root);
 					void api
 						.incorporateOrganization(root)
 						.then((result) => {
-							if (!result.ok) setIncorporateError({ root, reason: result.reason });
+							if (!result.ok) setIncorporateError(root, result.reason);
 							return api.organizationLifetime(root);
 						})
 						.then((value) => {
 							if (stillShown()) setLifetime(value);
 						})
-						.catch((error) => setIncorporateError({ root, reason: String(error) }));
+						.catch((error) => setIncorporateError(root, String(error)));
 				},
 			});
 		if (lifetime.closing && lifetime.waiting.length)
 			note(
 				`Dissolving; waiting on ${lifetime.waiting.map(({ person, reason }) => `${nameOf(person)} (${reason})`).join(", ")}`,
 			);
-		if (incorporateError?.root === workspace.id) note(`Incorporating failed: ${incorporateError.reason}`);
+		const failed = incorporateErrors[workspace.id];
+		if (failed !== undefined) note(`Incorporating failed: ${failed}`);
 	}
 	const workspaceMenu = [
 		...allWorkspaces.map((each) => {
