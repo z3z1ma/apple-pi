@@ -297,21 +297,29 @@ test("existing active people are moved through runtime authority without starts 
 	});
 });
 
-test("unfinished assignments block planned boundary changes before any preparation", async () => {
-	person("existing-worker", "seed", false, "implementation-engineer");
-	db.prepare(
-		"insert into work_tasks (id, bundle, project, organization, ephemeral, thread) values ('held', '/held', '/', 'seed', 1, 'task:held')",
-	).run();
-	db.prepare(
-		"insert into assignments (person, task_id, assigned_by, assigned_at) values ('existing-worker', 'held', 'seed', 1)",
-	).run();
-	const request = plan();
-	request.positions[0]!.person = "existing-worker";
-	const result = await org.orgStart(request);
-	expect(result.people.every((member) => member.state === "blocked")).toBe(true);
-	expect(result.people[0]!.tasks).toEqual(["held"]);
-	expect(sent).toEqual([]);
-});
+test.each(["live", "departed"])(
+	"%s task anchors block planned boundary changes before any preparation",
+	async (anchor) => {
+		person("existing-worker", "seed", false, "implementation-engineer");
+		if (anchor === "live") person("old", "seed");
+		else
+			db.prepare(
+				"insert into events (at, source, session_id, type, data) values (0, 'runtime', 'old', 'person_departed', ?)",
+			).run(JSON.stringify({ reportsTo: "seed" }));
+		db.prepare(
+			"insert into work_tasks (id, bundle, project, organization, ephemeral, thread) values ('held', '/held', '/', 'old', 1, 'task:held')",
+		).run();
+		db.prepare(
+			"insert into assignments (person, task_id, assigned_by, assigned_at) values ('existing-worker', 'held', 'seed', 1)",
+		).run();
+		const request = plan();
+		request.positions[0]!.person = "existing-worker";
+		const result = await org.orgStart(request);
+		expect(result.people.every((member) => member.state === "blocked")).toBe(true);
+		expect(result.people[0]!.tasks).toEqual(["held"]);
+		expect(sent).toEqual([]);
+	},
+);
 
 test("a proven stopped prepared person wakes under the same identity without another goal", async () => {
 	const request = plan();

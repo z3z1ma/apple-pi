@@ -279,14 +279,18 @@ function nameOf$1(db, id) {
 }
 //#endregion
 //#region components/session-state/src/tree.ts
-function rootOf$1(db, person) {
+function rootOf(db, person, reporting) {
 	const seen = /* @__PURE__ */ new Set();
 	let root = person;
+	let previous = person;
 	while (!seen.has(root)) {
 		seen.add(root);
-		const row = db.prepare("select reports_to from sessions where id = ?").get(root);
-		if (!row?.reports_to || !db.prepare("select 1 from sessions where id = ?").get(row.reports_to)) return root;
-		root = row.reports_to;
+		const row = reporting?.has(root) ? { reports_to: reporting.get(root) } : db.prepare("select reports_to from sessions where id = ?").get(root);
+		const manager = row ? row.reports_to : departureOf(db, root)?.reportsTo;
+		if (manager === void 0) return previous;
+		if (manager === null) return root;
+		previous = root;
+		root = manager;
 	}
 	throw new Error("The organization has a cycle");
 }
@@ -3128,7 +3132,7 @@ function dissolutionBlocker(db, person) {
 	if (!db.prepare("select 1 from incarnations where session_id = ?").get(person)) return "Waiting for an observed process identity before safe cleanup";
 }
 function organizationLifetime(db, person) {
-	const root = rootOf$1(db, person);
+	const root = rootOf(db, person);
 	if (!db.prepare("select 1 from pragma_table_info('sessions') where name = 'incorporated'").get()) return {
 		root,
 		incorporated: true,
@@ -3142,7 +3146,7 @@ function organizationLifetime(db, person) {
 	if (closing) {
 		const temporary = temporaryCallers(db);
 		for (const { id } of db.prepare("select id from sessions where kind = 'root' order by id").all()) {
-			if (rootOf$1(db, id) !== root) continue;
+			if (rootOf(db, id) !== root) continue;
 			const reason = temporary.has(id) ? "Waiting for the owning program to dispose its temporary peer" : dissolutionBlocker(db, id);
 			waiting.push({
 				person: id,
@@ -4250,16 +4254,6 @@ function branchOf(people, head) {
 	}
 	return [...branch].sort();
 }
-function rootOf(id, parents) {
-	const seen = /* @__PURE__ */ new Set();
-	while (!seen.has(id)) {
-		seen.add(id);
-		const parent = parents.get(id);
-		if (!parent || !parents.has(parent)) return id;
-		id = parent;
-	}
-	return id;
-}
 function openOrg(paths, commands, snapshot) {
 	const listeners = /* @__PURE__ */ new Set();
 	const running = /* @__PURE__ */ new Map();
@@ -4385,10 +4379,10 @@ function openOrg(paths, commands, snapshot) {
 						seen.add(id);
 						id = parents.get(id) ?? null;
 					}
-					if (rootOf(identity(position.id), parents) !== headId) return reject("Every position must belong to the planned head's tree.");
+					if (read((db) => rootOf(db, identity(position.id), parents)) !== headId) return reject("Every position must belong to the planned head's tree.");
 				}
 				const before = new Map([...people.values()].map((person) => [person.id, person.reports_to]));
-				const stranded = read((db) => db.prepare(`select a.person, a.task_id, t.organization from assignments a join work_tasks t on t.id = a.task_id where a.ended_at is null`).all().filter((assignment) => rootOf(assignment.person, before) === rootOf(assignment.organization, before) && rootOf(assignment.person, parents) !== rootOf(assignment.organization, parents)).map((assignment) => assignment.task_id));
+				const stranded = read((db) => db.prepare(`select a.person, a.task_id, t.organization from assignments a join work_tasks t on t.id = a.task_id where a.ended_at is null`).all().filter((assignment) => rootOf(db, assignment.person, before) === rootOf(db, assignment.organization, before) && rootOf(db, assignment.person, parents) !== rootOf(db, assignment.organization, parents)).map((assignment) => assignment.task_id));
 				if (stranded.length) return reject("Unfinished work needs an explicit handoff before starting this team.", [...new Set(stranded)]);
 			};
 			const treeError = validateTree();
@@ -6444,7 +6438,7 @@ var columns = `id, command_id as commandId, requester, owner, organization, orig
 function organization(db, actor) {
 	if (actor === "operator") return null;
 	if (!db.prepare("select 1 from sessions where id = ? and kind = 'root' and retired_at is null").get(actor)) throw new Error("Review reading needs a current person");
-	return rootOf$1(db, actor);
+	return rootOf(db, actor);
 }
 function readReview(db, actor, id) {
 	const scope = organization(db, actor);
@@ -6455,7 +6449,7 @@ function readReview(db, actor, id) {
 		if (pointer) row = db.prepare(`select ${columns} from review_jobs where id = ?`).get(pointer.review);
 	}
 	if (!row) throw new Error(`Unknown or not yet admitted review: ${id}`);
-	if (scope && rootOf$1(db, row.organization) !== scope) throw new Error("The review belongs to another organization");
+	if (scope && rootOf(db, row.organization) !== scope) throw new Error("The review belongs to another organization");
 	return {
 		...row,
 		request: JSON.parse(row.request),
@@ -6648,7 +6642,7 @@ function scopeClause(db, actor) {
 		where: [],
 		args: []
 	};
-	const roots = db.prepare("select distinct organization from review_jobs").all().filter((row) => rootOf$1(db, row.organization) === scope).map((row) => row.organization);
+	const roots = db.prepare("select distinct organization from review_jobs").all().filter((row) => rootOf(db, row.organization) === scope).map((row) => row.organization);
 	return {
 		where: [`organization in (${roots.map(() => "?").join(",")})`],
 		args: roots

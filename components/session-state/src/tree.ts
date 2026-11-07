@@ -1,15 +1,22 @@
 import type { DatabaseSync } from "node:sqlite";
+import { departureOf } from "./departures.js";
 
-export function rootOf(db: DatabaseSync, person: string): string {
+export function rootOf(db: DatabaseSync, person: string, reporting?: ReadonlyMap<string, string | null>): string {
 	const seen = new Set<string>();
 	let root = person;
+	let previous = person;
 	while (!seen.has(root)) {
 		seen.add(root);
-		const row = db.prepare("select reports_to from sessions where id = ?").get(root) as
-			| { reports_to: string | null }
-			| undefined;
-		if (!row?.reports_to || !db.prepare("select 1 from sessions where id = ?").get(row.reports_to)) return root;
-		root = row.reports_to;
+		const row = reporting?.has(root)
+			? { reports_to: reporting.get(root)! }
+			: (db.prepare("select reports_to from sessions where id = ?").get(root) as
+					| { reports_to: string | null }
+					| undefined);
+		const manager = row ? row.reports_to : departureOf(db, root)?.reportsTo;
+		if (manager === undefined) return previous;
+		if (manager === null) return root;
+		previous = root;
+		root = manager;
 	}
 	throw new Error("The organization has a cycle");
 }

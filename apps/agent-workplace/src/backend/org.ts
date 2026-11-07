@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { organizationLifetime } from "../../../../components/session-state/src/organization-lifetime.js";
+import { rootOf } from "../../../../components/session-state/src/tree.js";
 import type { OrgMoveRequest, OrgMoveResult, OrgStartProgress, OrgStartRequest } from "../org.js";
 import type { CommandResult, WorldSnapshot } from "../world.js";
 import type { Commands } from "./commands.js";
@@ -62,17 +63,6 @@ function branchOf(people: Map<string, Person>, head: string): string[] {
 	}
 	return [...branch].sort();
 }
-function rootOf(id: string, parents: Map<string, string | null>): string {
-	const seen = new Set<string>();
-	while (!seen.has(id)) {
-		seen.add(id);
-		const parent = parents.get(id);
-		if (!parent || !parents.has(parent)) return id;
-		id = parent;
-	}
-	return id;
-}
-
 export function openOrg(paths: { db: string; agentDir: string }, commands: Commands, snapshot: () => WorldSnapshot) {
 	const listeners = new Set<(progress: OrgStartProgress) => void>();
 	const running = new Map<string, Promise<OrgStartProgress>>();
@@ -238,7 +228,7 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 						seen.add(id);
 						id = parents.get(id) ?? null;
 					}
-					if (rootOf(identity(position.id), parents) !== headId)
+					if (read((db) => rootOf(db, identity(position.id), parents)) !== headId)
 						return reject("Every position must belong to the planned head's tree.");
 				}
 				const before = new Map([...people.values()].map((person) => [person.id, person.reports_to]));
@@ -252,8 +242,8 @@ export function openOrg(paths: { db: string; agentDir: string }, commands: Comma
 					)
 						.filter(
 							(assignment) =>
-								rootOf(assignment.person, before) === rootOf(assignment.organization, before) &&
-								rootOf(assignment.person, parents) !== rootOf(assignment.organization, parents),
+								rootOf(db, assignment.person, before) === rootOf(db, assignment.organization, before) &&
+								rootOf(db, assignment.person, parents) !== rootOf(db, assignment.organization, parents),
 						)
 						.map((assignment) => assignment.task_id),
 				);

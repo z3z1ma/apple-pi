@@ -2054,7 +2054,13 @@ export class Runtime {
 		sessionId: string,
 		command: Extract<Command, { kind: "organization_move" }>,
 	): void {
-		const refused = this.organizationMove(sessionId, command);
+		let refused: string | undefined;
+		try {
+			refused = this.organizationMove(sessionId, command);
+		} catch (error) {
+			this.setCommandStage(commandId, "failed", error instanceof Error ? error.message : String(error));
+			return;
+		}
 		if (refused) this.setCommandStage(commandId, "failed", refused);
 		else {
 			this.setCommandStage(commandId, "applied");
@@ -2123,17 +2129,6 @@ export class Runtime {
 		if (from === command.manager) return undefined;
 		const next = new Map(managerOf);
 		next.set(command.person, command.manager);
-		const rootIn = (id: string, tree: Map<string, string | null>) => {
-			const seen = new Set<string>();
-			let current = id;
-			while (!seen.has(current)) {
-				seen.add(current);
-				const manager = tree.get(current);
-				if (!manager || !tree.has(manager)) return current;
-				current = manager;
-			}
-			return current;
-		};
 		const open = db
 			.prepare(
 				`select a.person, a.task_id as work_id, t.organization from assignments a
@@ -2145,8 +2140,8 @@ export class Runtime {
 			...new Set(
 				open
 					.filter((row) => {
-						const before = rootIn(row.person, managerOf) === rootIn(row.organization, managerOf);
-						const after = rootIn(row.person, next) === rootIn(row.organization, next);
+						const before = rootOf(db, row.person, managerOf) === rootOf(db, row.organization, managerOf);
+						const after = rootOf(db, row.person, next) === rootOf(db, row.organization, next);
 						return before && !after;
 					})
 					.map((row) => row.work_id),
