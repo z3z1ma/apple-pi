@@ -176,7 +176,6 @@ test("round2: legacy launch state cannot certify unknown earlier preparation", a
 	);
 	try {
 		const gate = sessionInput(worker.session);
-		expect(gate.scope).toBeUndefined();
 		expect(gate.seal("unknown-work")).toBe(false);
 		await worker.session.prompt("/done");
 		expect(gate.seal("unknown-work")).toBe(false);

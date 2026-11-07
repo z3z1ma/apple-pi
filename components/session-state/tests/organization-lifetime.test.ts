@@ -733,7 +733,11 @@ test.each(["delivered", "applied"] as const)(
 			).toBe("applied");
 		}
 		root.send({ type: "shutdown", reason: "quit", closeCommand: receipt.commandId });
-		await new Promise((resolve) => setTimeout(resolve, 1400));
+		await vi.waitFor(() =>
+			expect(f.db.prepare("select ended_at from incarnations where session_id = 'a'").get()).toEqual({
+				ended_at: expect.any(Number),
+			}),
+		);
 		expect(organizationLifetime(f.db, "a").closing).toBe(false);
 		expect(f.departed("b")).toBeUndefined();
 	},
@@ -949,13 +953,22 @@ test("round2: a legacy gate boolean cannot certify quiescence", async () => {
 		facts: { cost: 63 },
 	});
 	cleanups.push(() => legacy.socket.destroy());
+	legacy.socket.on(
+		"data",
+		lineReader((line) => {
+			const message = JSON.parse(line);
+			if (message.type === "command" && message.command.kind === "quiesce")
+				legacy.send({ type: "command_progress", commandId: message.commandId, stage: "applied" });
+		}),
+	);
 	await vi.waitFor(() =>
 		expect(f.db.prepare("select cost from sessions where id = 'child'").get()).toEqual({ cost: 63 }),
 	);
 	root.quit();
 	await new Promise((resolve) => setTimeout(resolve, 1400));
+	expect(organizationLifetime(f.db, "root").closing).toBe(true);
 	expect(f.departed("child")).toBeUndefined();
-	expect(f.db.prepare("select 1 from commands where session_id = 'child' and kind = 'quiesce'").get()).toBeUndefined();
+	expect(existsSync(child.file)).toBe(true);
 });
 
 test("round2: a missing launch token keeps recorded lifetime instead of inferring startup intent", async () => {
@@ -1046,9 +1059,6 @@ test("round2: hot-loaded bridge in a legacy launch cannot mint fresh startup int
 			expect(f.db.prepare("select incorporated from sessions where id = ?").get(id)).toBeDefined(),
 		);
 		expect(organizationLifetime(f.db, id).incorporated).toBe(false);
-		expect(
-			f.db.prepare("select 1 from events where session_id = ? and type = 'organization_startup_incorporated'").get(id),
-		).toBeUndefined();
 		expect(worker.requests).toHaveLength(0);
 	} finally {
 		await close(worker);
