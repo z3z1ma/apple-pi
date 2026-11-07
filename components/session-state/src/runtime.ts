@@ -759,12 +759,7 @@ export class Runtime {
 			return "This person has permanently departed and cannot accept new commands.";
 		if (startsTurn(command.kind) && this.inputAgreements.has(person))
 			return "Input is sealed for automatic departure; reopen or incorporate before retrying";
-		if (
-			command.kind === "close" &&
-			command.dissolve !== true &&
-			this.db!.prepare("select 1 from sessions where id = ?").get(person) &&
-			closeNeedsConsent(this.db!, person)
-		)
+		if (command.kind === "close" && command.dissolve !== true && closeNeedsConsent(this.db!, person))
 			return DISSOLUTION_CONSENT;
 		return undefined;
 	}

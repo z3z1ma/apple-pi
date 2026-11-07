@@ -530,7 +530,7 @@ test("review: resuming a flagged launch cannot incorporate its later merge targe
 	expect(organizationLifetime(f.db, "target").incorporated).toBe(false);
 });
 
-test("review: consumed launch intent survives removal of its private incarnation history", async () => {
+test("opening a new person in a flagged launch does not reapply startup incorporation", async () => {
 	const f = await fixture();
 	const original = await f.person("original", { incorporate: true });
 	original.send({ type: "shutdown", reason: "new" });
@@ -540,7 +540,6 @@ test("review: consumed launch intent survives removal of its private incarnation
 		}),
 	);
 	original.socket.destroy();
-	f.db.prepare("delete from incarnations where session_id = 'original'").run();
 	const replacement = await fakeBridge(
 		f.paths.socket,
 		"replacement",

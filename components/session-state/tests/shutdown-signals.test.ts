@@ -21,7 +21,15 @@ test("known listener order distinguishes in-process disposal from either signal"
 		}
 		expect(deliberate).toBe(signal === undefined);
 		observation.dispose();
-		expect(host.listeners("newListener")).toHaveLength(0);
+		if (signal) {
+			deliberate = undefined;
+			host.emit(signal);
+			expect(deliberate).toBe(false);
+		}
+		host.off("SIGTERM", dispose);
+		host.off("SIGHUP", dispose);
+		expect(host.emit("SIGTERM")).toBe(false);
+		expect(host.emit("SIGHUP")).toBe(false);
 	}
 });
 

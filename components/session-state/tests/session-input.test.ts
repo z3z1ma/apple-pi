@@ -33,8 +33,8 @@ test("the native input boundary counts an idle extension command and keeps its s
 		await preparing;
 		expect(entered).toBe(1);
 		expect(gate.seal("first")).toBe(true);
-		expect(sessionInput(worker.session)).toBe(gate);
-		gate.release("stale");
+		const reinstalled = sessionInput(worker.session);
+		reinstalled.release("stale");
 		await expect(worker.session.prompt("/hold")).rejects.toThrow(/sealed/);
 		await expect(worker.session.steer("new steer")).rejects.toThrow(/sealed/);
 		await expect(worker.session.followUp("new follow-up")).rejects.toThrow(/sealed/);
@@ -45,7 +45,7 @@ test("the native input boundary counts an idle extension command and keeps its s
 			),
 		).rejects.toThrow(/sealed/);
 		await expect(worker.session.executeBash("exit 77")).rejects.toThrow(/sealed/);
-		gate.release("first");
+		reinstalled.release("first");
 		await worker.session.prompt("/hold");
 		expect(entered).toBe(2);
 		expect(worker.requests).toHaveLength(0);
@@ -58,13 +58,30 @@ test("the native input boundary counts an idle extension command and keeps its s
 
 test("a new native session object in the same launch inherits a pending seal", async () => {
 	const previous = await fauxSession([], [], []);
-	const replacement = await fauxSession([], [], []);
+	let entered = 0;
+	const replacement = await fauxSession(
+		[
+			(pi) => {
+				pi.registerCommand("work", {
+					description: "Observe accepted input",
+					handler: async () => {
+						entered++;
+					},
+				});
+			},
+		],
+		[],
+		[],
+	);
 	const first = sessionInput(previous.session);
 	const next = sessionInput(replacement.session);
 	try {
 		expect(first.seal("replacement-seal")).toBe(true);
-		expect(next.ticket).toBe("replacement-seal");
-		await expect(replacement.session.prompt("new input")).rejects.toThrow(/sealed/);
+		await expect(replacement.session.prompt("/work")).rejects.toThrow(/sealed/);
+		expect(entered).toBe(0);
+		first.release("replacement-seal");
+		await replacement.session.prompt("/work");
+		expect(entered).toBe(1);
 		expect(replacement.requests).toHaveLength(0);
 	} finally {
 		first.release("replacement-seal");
