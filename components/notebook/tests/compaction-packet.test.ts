@@ -65,25 +65,21 @@ describe("pair programmer notebook compaction packet", () => {
 	it("keeps one persisted learning packet after each native Pi compaction", async () => {
 		let summaryReply = "";
 		let recorded = false;
-		const { session, requests, dispose } = await fauxSession(
-			[
-				(pi) => {
-					registerMainNotebookTool(pi, new Runtime());
-					registerNotebookCompactionPacket(pi);
-				},
-			],
-			() => {
-				if (!recorded) {
-					recorded = true;
-					return fauxAssistantMessage(
-						fauxToolCall("update_notebook", { reflections: [{ content: reflection.content }] }, { id: "note-1" }),
-						{ stopReason: "toolUse" },
-					);
-				}
-				return fauxAssistantMessage(summaryReply || "Implementation complete.");
+		const { session, requests, dispose } = await fauxSession([
+			(pi) => {
+				registerMainNotebookTool(pi, new Runtime());
+				registerNotebookCompactionPacket(pi);
 			},
-			["update_notebook"],
-		);
+		], () => {
+			if (!recorded) {
+				recorded = true;
+				return fauxAssistantMessage(
+					fauxToolCall("update_notebook", { reflections: [{ content: reflection.content }] }, { id: "note-1" }),
+					{ stopReason: "toolUse" },
+				);
+			}
+			return fauxAssistantMessage(summaryReply || "Implementation complete.");
+		}, ["update_notebook"]);
 		try {
 			session.settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } });
 			await session.prompt("Preserve the public API.");
