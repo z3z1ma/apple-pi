@@ -18,7 +18,7 @@ Settled with the operator (2026-11-06):
 
 Additional operator decisions (2026-11-06, task-thread message 13518):
 
-- **Closing means quit or end only:** TUI quit, window close, or explicit end/send-home from Workplace or a manager. `/new`, `/resume`, reload, crashes, lost sockets, runtime restarts and a headless stop without a recorded end preserve the organization. When uncertain, keep it.
+- **Closing means quit or end only** (superseded by "Typed quit only" and "Send home warns" below): TUI quit, window close, or explicit end/send-home from Workplace or a manager. `/new`, `/resume`, reload, crashes, lost sockets, runtime restarts and a headless stop without a recorded end preserve the organization. When uncertain, keep it.
 - **Reopen or incorporate while waiting** stops further automatic departures. People already let go stay gone; the root goes last.
 - **Splits retain incorporation:** a person moved out of an incorporated organization to stand alone stays incorporated. Merging adopts the target organization's status.
 - **Backlog remains:** an unassigned unfinished task anchored to the root does not block cleanup and stays in the task store. Held work, owned unfinished reviews, reports and program scopes still block through the existing departure guards.
