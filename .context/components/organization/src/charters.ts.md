@@ -1,6 +1,6 @@
 ## file
 
-The shared organization guidance teaches that closing an unincorporated root removes its idle, work-free tree and the operator can keep it with /incorporate. Keep that lifecycle distinct from closing an ordinary member's process or explicitly letting someone go. Prompt-budget compliance comes from concise equivalent wording, not higher ceilings. Retain the direct-work/delegation choice and separate reporting/task/decision responsibilities when shortening staffing prose.
+The shared organization guidance distinguishes deliberate in-Pi quit or explicitly consented runtime close from uncertain process loss. An unincorporated root's authorized close removes its settled tree; incorporation keeps it. Retained-context send_home guidance applies to members and incorporated roots, while an unincorporated root requires explicit dissolution consent. Keep that lifecycle distinct from closing an ordinary member's process or explicitly letting someone go. Prompt-budget compliance comes from concise equivalent wording, not higher ceilings. Retain the direct-work/delegation choice and separate reporting/task/decision responsibilities when shortening staffing prose.
 Coupled: components/session-state/src/organization-lifetime.ts, components/session-state/src/bridge.ts
 Verify: tests/prompt-budgets.test.ts, components/organization/tests/roles.test.ts
 

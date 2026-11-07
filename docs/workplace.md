@@ -14,7 +14,7 @@ Drag the visible dividers to resize content sidebars, profiles, Org details, Cod
 
 Each organization (a root session with everyone who reports to it, at any depth) is its own workspace, like being signed in to several Slack workspaces. Click the mark at the top of the rail, which shows the current organization's initials, to switch; each workspace in the menu shows its unread count. The choice is remembered on this device.
 
-The menu also shows whether the current organization is incorporated. An organization that is not incorporated dissolves when its root closes; **Incorporate this organization** keeps it, and also stops a dissolution that is waiting. While one waits, the menu names each person it waits on and why.
+The menu also shows whether the current organization is incorporated. An organization that is not incorporated dissolves after its root deliberately quits inside Pi or the operator explicitly chooses dissolution when sending it home; **Incorporate this organization** keeps it, and also stops a dissolution that is waiting. While one waits, the menu names each person it waits on and why.
 
 **Leave <organization>…** at the bottom of the same menu lets every lasting person in the current organization go, through the ordinary Let go dialog with no handoffs selected: it is permanent, needs a reason and explicit consent, and is refused for anyone with unfinished work until that work is finished or reassigned.
 
@@ -58,7 +58,7 @@ An independent branch remains independent on reconnect or call-in: a recorded nu
 
 Right-click a DM, VIP or sleeping row for its person actions; with the name button focused, Shift+F10 or the keyboard's context-menu key opens the same menu. The sidebar has no extra menu buttons. DM headers, profiles and People directory rows retain their person-menu buttons. In the Org chart, right-click a real person's card, or focus it and press Shift+F10, for the same actions. Opening the menu does not read or acknowledge a conversation. Organization-name work history and Rename remain separate controls.
 
-**Send home** closes only the selected person's session, preserving their identity, work and history. Idle people go home immediately; interrupting someone busy or awaiting input requires confirmation. If they become busy after selection, the backend can require a fresh confirmation. Their reports stay where they are.
+**Send home** preserves members and incorporated roots, including their history and reports. An unincorporated root instead requires a choice: **Incorporate and send home**, or **Send home and dissolve** after acknowledging permanent organization removal. Dissolution lets the settled tree go without handoffs and deletes owned raw sessions. Busy-turn interruption is a separate confirmation, not dissolution consent; the backend and runtime enforce that distinction. A person who becomes busy after selection can require fresh interruption confirmation.
 
 **Call in** includes the selected person and any absent managers up to the organization head, including absent ancestors above a manager who is already awake. It never calls in their reports. When additional people would start, review their names and confirm once; a single-person call-in starts immediately. Managers start highest-first. Ordinary call-in can resume existing focused work or queued mail; it does not invent a task or promise that everyone stays idle. An attached tmux terminal must be available for these sessions; without one, Call in refuses before starting anyone.
 

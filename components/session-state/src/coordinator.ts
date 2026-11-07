@@ -180,12 +180,23 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "send_home",
 			label: "send_home",
 			description:
-				"Send a person home: its Pi process quits, it stays in your organization at home, and call_in brings it back with its history. Check first with directory that it is idle; sending a working person home stops its work.",
-			parameters: Type.Object({ person: personParameter }, { additionalProperties: false }),
+				"Close Pi. Members and incorporated roots retain history. Unincorporated roots need operator dissolve:true: permanent no-handoff departure and raw-session deletion. Check idle/work first.",
+			parameters: Type.Object(
+				{
+					person: personParameter,
+					dissolve: Type.Optional(Type.Boolean()),
+				},
+				{ additionalProperties: false },
+			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const id = resolvePerson(ctx.sessionManager.getSessionId(), params.person);
-				await run(id, { kind: "close" }, signal);
-				return reply(`${params.person} went home (${id}).`, { sessionId: id });
+				await run(id, { kind: "close", ...(params.dissolve ? { dissolve: true } : {}) }, signal);
+				return reply(
+					params.dissolve
+						? `${params.person} closed with dissolution consent (${id}).`
+						: `${params.person} went home (${id}).`,
+					{ sessionId: id },
+				);
 			},
 		}),
 	);

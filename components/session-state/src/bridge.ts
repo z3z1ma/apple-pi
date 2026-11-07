@@ -12,6 +12,7 @@ import {
 	sessionSelf,
 	sessionSoulLine,
 } from "../../organization/src/index.js";
+import { liveSession } from "../../shared/src/forked-continuation.js";
 import { OPERATOR_PAGE_CHANNEL, type OpenOperatorPage } from "../../shared/src/operator-page-events.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
 import { mainToolArgument } from "../../shared/src/tool-activity.js";
@@ -39,6 +40,8 @@ import {
 } from "./protocol.js";
 import { coveredByReviewWait } from "./review-waits.js";
 import { type RunObservation, RunObserver, type RunSnapshot } from "./run-observation.js";
+import { type SessionInput, sessionInput } from "./session-input.js";
+import { observeShutdownSignals } from "./shutdown-signals.js";
 import { goalText } from "./work.js";
 
 function mailBody(command: Extract<Command, { kind: "mail" }>, covered: boolean, session: string): string {
@@ -180,9 +183,9 @@ class StateLink {
 		this.send({ type: "tool_end", id, name, durationMs, isError, current: current ?? null });
 	}
 
-	close(reason?: string): void {
+	close(reason?: string, provenance?: { deliberate: boolean; closeCommand?: string }): void {
 		if (this.closed) return;
-		if (reason) this.send({ type: "shutdown", reason });
+		if (reason) this.send({ type: "shutdown", reason, ...provenance });
 		this.closed = true;
 		clearInterval(this.heartbeat);
 		clearTimeout(this.retry);
@@ -451,6 +454,30 @@ function heldFollowUps(sessionId: string): { commandId: string; text: string }[]
 	return held;
 }
 
+function applyInputCommand(
+	target: StateLink,
+	commandId: string,
+	command: Extract<Command, { kind: "quiesce" | "release_input" }>,
+	ctx: ExtensionContext,
+	input: SessionInput | undefined,
+): void {
+	if (command.kind === "quiesce") {
+		if (!input || !ctx.isIdle() || ctx.hasPendingMessages() || !input.seal(commandId)) {
+			target.progress(
+				commandId,
+				"failed",
+				"Waiting for host input preparation, pending input or the current turn to settle",
+			);
+			return;
+		}
+		target.hello.session.inputSeal = commandId;
+	} else {
+		input?.release(command.ticket);
+		if (target.hello.session.inputSeal === command.ticket) delete target.hello.session.inputSeal;
+	}
+	target.progress(commandId, "applied");
+}
+
 export default function sessionStateBridge(pi: ExtensionAPI): void {
 	pi.registerFlag("reports-to", {
 		type: "string",
@@ -492,6 +519,9 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	const peerTurns = installPeerTurns(pi);
 	let link: StateLink | undefined;
 	let observations: RunObserver | undefined;
+	let signals: ReturnType<typeof observeShutdownSignals> | undefined;
+	let closeCommand: string | undefined;
+	let input: SessionInput | undefined;
 	let current: ExtensionContext | undefined;
 	let skills: string[] = [];
 	let mcpServers: string[] = [];
@@ -705,7 +735,12 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 					}
 					return;
 				}
+				case "quiesce":
+				case "release_input":
+					applyInputCommand(target, commandId, command, ctx, input);
+					break;
 				case "close":
+					closeCommand = commandId;
 					target.progress(commandId, "applied");
 
 					ctx.abort();
@@ -727,6 +762,9 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 	};
 
 	pi.on("session_start", (event, ctx) => {
+		signals?.dispose();
+		signals = ctx.hasUI ? observeShutdownSignals(process) : undefined;
+		closeCommand = undefined;
 		observations?.close(event.reason === "reload");
 		link?.close();
 		stop();
@@ -758,8 +796,13 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 				if (observations) link?.observe(observation, observations.snapshot());
 			},
 		);
+		const native = liveSession(ctx);
+		input = native ? sessionInput(native) : undefined;
+		const hello = helloFor(pi, ctx, skills, mcpServers, previous);
+		hello.session.quiescence = input !== undefined;
+		hello.session.inputSeal = input?.ticket;
 		link = new StateLink(
-			{ ...helloFor(pi, ctx, skills, mcpServers, previous), execution: observations.snapshot() },
+			{ ...hello, execution: observations.snapshot() },
 			warn,
 			(from, commandId, command, replay) => {
 				void apply(from, commandId, command, replay);
@@ -773,6 +816,9 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		watcher.unref();
 	});
 	pi.on("session_shutdown", (event) => {
+		const deliberate = event.reason === "quit" && signals?.deliberate() === true;
+		signals?.dispose();
+		signals = undefined;
 		observations?.close(event.reason === "reload");
 		observations = undefined;
 		stop();
@@ -788,7 +834,10 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 					`Session state: the close notice to ${reportsTo} was not sent: the runtime is unreachable\n`,
 				);
 		}
-		link?.close(event.reason === "reload" ? undefined : event.reason);
+		link?.close(event.reason === "reload" ? undefined : event.reason, {
+			deliberate,
+			...(closeCommand ? { closeCommand } : {}),
+		});
 		link = undefined;
 		current = undefined;
 	});

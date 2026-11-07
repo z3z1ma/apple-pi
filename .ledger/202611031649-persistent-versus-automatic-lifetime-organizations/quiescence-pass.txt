@@ -1,0 +1,3 @@
+TLC 1.7.4 on organization-quiescence.tla: PASS. Model checking completed. No error has been found.
+7009 states generated, 2004 distinct, 0 left on queue, depth 16.
+workers: 2; timeLimit: 60; UnsafeSnapshot = FALSE.

@@ -1,0 +1,10 @@
+TLC 1.7.4 on organization-quiescence.tla: VIOLATION. Invariant NoUnsafeDeparture is violated.
+23 states generated, 20 distinct, 15 left on queue, depth 3.
+workers: 2; timeLimit: 60; UnsafeSnapshot = TRUE.
+
+Counterexample, relevant state projection:
+1. Init: input="none", observedIdle=TRUE, connected=TRUE, frozen=FALSE, reservation=FALSE, ticket=0, proofTicket=0, departed=FALSE, unsafe=FALSE.
+2. RemoteInput: input="accepted"; observedIdle remains TRUE, reservation remains FALSE, proofTicket remains 0.
+3. Commit: input remains "accepted"; departed=TRUE, unsafe=TRUE.
+
+Other state in all three states: closing=TRUE, up=TRUE, heldTicket=0, replyTicket=0, replyBinding=0, binding=0. The normal design requires a live matching quiescence agreement instead of the stale observedIdle value. This control is intentionally faulty design, not a passing implementation claim.

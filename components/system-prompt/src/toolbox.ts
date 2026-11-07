@@ -137,7 +137,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
 			"After an uncertain send, check `communication_status` instead of sending again.",
 			"`escalate` takes a decision or blocker beyond your authority up the tree.",
 			"Your self is yours: rewrite it with `update_self` when the harness asks you to reflect, after you finish a task and before compaction.",
-			"When you staff and steer: `experience` shows who already knows an area, `hire` adds a lasting colleague from the role catalog, and `assign` gives a person a goal (`unassign` takes it back). `call_in` wakes someone at home with their history, `send_home` lets an idle person rest, and `let_go` ends a person for good once their work and reports are handed on. `rename` and `move` change a name or a manager.",
+			"When you staff and steer: `experience` finds prior knowledge, `hire` adds a lasting catalog-role colleague, `assign` gives a goal and `unassign` removes it. `call_in` wakes with history. `send_home` preserves members and incorporated roots; unincorporated roots require explicit dissolution consent. `let_go` is permanent after work and reports move. `rename` changes a name; `move` changes a manager.",
 			"To see how work is going: `progress` for what was delivered and what remains, `bottlenecks` when work seems stuck and you need what it waits on, `coordination` to see whether discussion connects to the work. Each starts from an overview; counts are observations, not scores. `economics` compares value, delay and compute in dollars, and `predictions` checks recorded forecasts against what happened.",
 		],
 	},

@@ -248,7 +248,7 @@ export const NAME_MAX = 60;
 
 export type CommandReceipt =
 	| { ok: true; stage: "accepted" | "delivered" | "applied"; note?: string }
-	| { ok: false; reason: string; confirm?: boolean };
+	| { ok: false; reason: string; confirm?: boolean; dissolve?: true };
 
 export interface RecruitRequest {
 	name: string;
@@ -469,7 +469,7 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	onReply(listener: (event: ReplyStreamEvent) => void): () => void;
 	wake(characterId: string): Promise<CommandReceipt>;
 	callIn(request: CallInRequest): Promise<CallInResult>;
-	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
+	endSession(characterId: string, confirmed?: boolean, dissolve?: boolean): Promise<CommandReceipt>;
 	sendMail(characterId: string, body: string): Promise<CommandReceipt>;
 	readThread(thread: string): Promise<ThreadRead>;
 	replyThread(thread: string, body: string): Promise<CommandReceipt>;

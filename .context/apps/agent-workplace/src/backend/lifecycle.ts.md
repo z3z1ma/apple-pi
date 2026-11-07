@@ -9,8 +9,8 @@ Why: the runtime owns the tree: it seeds `reports_to` from the flag at a session
 Coupled: components/session-state/src/runtime.ts, apps/agent-workplace/src/backend/inn.ts
 Verify: apps/agent-workplace/tests/inn.test.ts
 
-Ending a session is refused with `confirm: true` while the character's run state is not `idle`, and nothing is sent; only `endSession(id, true)` sends `close` then. Wake and close resolve at applied, or report the last receipt when their wait expires. Mail is delegated to `openMailbox` in `mail.ts`: its thread post applies when stored, even if a recipient sleeps, and the receipt names sleeping recipients.
-Why: decision 13 confirms interrupting a busy agent and nothing else; the command client (`commands.ts`) resolves only on applied or failed.
+endSession(id, confirmed?, dissolve?) first refuses an unincorporated independent root with dissolve:true on the failure variant and no wire command unless the third argument explicitly consents. Members and incorporated roots retain reversible sleep. Separately, a busy character returns confirm:true until interruption is confirmed; the second argument never supplies dissolution consent. Preload and main forward both independent flags, with exact true required. Runtime independently enforces the same root choice. Wake and close resolve at applied, or report the last receipt when their wait expires. Mail is delegated to `openMailbox` in `mail.ts`: its thread post applies when stored, even if a recipient sleeps, and the receipt names sleeping recipients.
+Why: busy-turn confirmation authorizes interruption only, not permanent organization removal; the command client (`commands.ts`) resolves only on applied or failed.
 Coupled: apps/agent-workplace/src/backend/commands.ts, apps/agent-workplace/web/overlay/places/place-panels.ts
 Verify: apps/agent-workplace/tests/inn.test.ts
 

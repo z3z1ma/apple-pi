@@ -9,6 +9,10 @@ export interface OrganizationLifetime {
 	waiting: { person: string; reason: string }[];
 }
 
+export function startsTurn(kind: string): boolean {
+	return ["talk", "steer", "follow_up", "run_turn", "mail"].includes(kind);
+}
+
 export function dissolutionBlocker(db: DatabaseSync, person: string): string | undefined {
 	const row = db
 		.prepare(`select s.run_state, s.prompt, s.queue, s.retired_at,
@@ -26,7 +30,12 @@ export function dissolutionBlocker(db: DatabaseSync, person: string): string | u
 		| undefined;
 	if (!row) return "Person no longer exists";
 	if (row.retired_at !== null) return "Finishing permanent departure resource cleanup";
-	const alive = row.process_state === "alive" || row.process_state === "alive_bridge_lost";
+	if (row.process_state === "alive_bridge_lost") return "Waiting for a fresh live bridge input agreement";
+	const pending = db
+		.prepare("select kind from commands where session_id = ? and stage in ('accepted', 'delivered')")
+		.all(person) as { kind: string }[];
+	if (pending.some((command) => startsTurn(command.kind))) return "Waiting for accepted or preparing input to settle";
+	const alive = row.process_state === "alive";
 	if (alive && (row.run_state !== "idle" || row.prompt || (row.queue && JSON.parse(row.queue).pending)))
 		return "Waiting for the current turn or pending input to settle";
 	if (db.prepare("select 1 from assignments where person = ? and ended_at is null").get(person))
@@ -68,10 +77,21 @@ export function organizationLifetime(db: DatabaseSync, person: string): Organiza
 			const reason = temporary.has(id)
 				? "Waiting for the owning program to dispose its temporary peer"
 				: dissolutionBlocker(db, id);
-			waiting.push({ person: id, reason: reason ?? "Ready for permanent departure" });
+			waiting.push({ person: id, reason: reason ?? "Awaiting current input and writer preflight" });
 		}
 	}
 	return { root, incorporated: row.incorporated === 1, closing, waiting };
+}
+
+export const DISSOLUTION_CONSENT =
+	"This unincorporated root's close permanently lets its organization go without handoffs and deletes owned raw sessions. Incorporate it to keep it, or explicitly choose dissolve:true.";
+
+export function closeNeedsConsent(db: DatabaseSync, person: string): boolean {
+	if (!db.prepare("select 1 from pragma_table_info('sessions') where name = 'incorporated'").get()) return false;
+	const row = db
+		.prepare("select incorporated from sessions where id = ? and kind = 'root' and reports_to is null")
+		.get(person) as { incorporated: number } | undefined;
+	return row?.incorporated === 0;
 }
 
 export function incorporateOrganization(db: DatabaseSync, person: string, by: string): void {

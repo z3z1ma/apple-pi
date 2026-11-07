@@ -223,8 +223,10 @@ function start() {
 			? lifecycle.callIn(request)
 			: { ok: false, people: [], reason: "A valid confirmed call-in is required." },
 	);
-	ipcMain.handle("world:end-session", (_event, characterId: unknown, confirmed: unknown) =>
-		typeof characterId === "string" ? lifecycle.endSession(characterId, confirmed === true) : unnamed,
+	ipcMain.handle("world:end-session", (_event, characterId: unknown, confirmed: unknown, dissolve: unknown) =>
+		typeof characterId === "string"
+			? lifecycle.endSession(characterId, confirmed === true, dissolve === true)
+			: unnamed,
 	);
 	ipcMain.handle("world:send-mail", (_event, characterId: unknown, body: unknown) =>
 		typeof characterId === "string" && typeof body === "string" ? lifecycle.sendMail(characterId, body) : unnamed,

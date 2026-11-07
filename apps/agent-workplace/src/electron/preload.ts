@@ -183,8 +183,8 @@ const api: AgentWorkplaceApi = {
 	},
 	wake: (characterId) => ipcRenderer.invoke("world:wake", characterId) as Promise<CommandReceipt>,
 	callIn: (request) => ipcRenderer.invoke("world:call-in", request) as ReturnType<AgentWorkplaceApi["callIn"]>,
-	endSession: (characterId, confirmed) =>
-		ipcRenderer.invoke("world:end-session", characterId, confirmed) as Promise<CommandReceipt>,
+	endSession: (characterId, confirmed, dissolve) =>
+		ipcRenderer.invoke("world:end-session", characterId, confirmed, dissolve) as Promise<CommandReceipt>,
 	sendMail: (characterId, body) => ipcRenderer.invoke("world:send-mail", characterId, body) as Promise<CommandReceipt>,
 	readThread: (thread) => ipcRenderer.invoke("world:read-thread", thread) as Promise<ThreadRead>,
 	replyThread: (thread, body) => ipcRenderer.invoke("world:reply-thread", thread, body) as Promise<CommandReceipt>,

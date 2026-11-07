@@ -198,7 +198,9 @@ export type Command =
 			goal?: { text: string; by: string; title?: string } & Worth;
 			prompt?: string;
 	  }
-	| { kind: "close" }
+	| { kind: "close"; dissolve?: boolean }
+	| { kind: "quiesce" }
+	| { kind: "release_input"; ticket: string }
 	| { kind: "transfer"; manager: string; by: string }
 	| { kind: "organization_move"; person: string; manager: string | null; branch: string[] }
 	| { kind: "incorporate"; by: string }
@@ -285,6 +287,8 @@ export interface Hello {
 		program?: { id: string; parent: string };
 		forkOffset?: number;
 		interactive?: boolean;
+		quiescence?: boolean;
+		inputSeal?: string;
 		incorporate?: boolean;
 	};
 	process: { pid: number; startedAt: number };
@@ -322,7 +326,7 @@ export type BridgeMessage =
 	| Subscribe
 	| Omit<ReplyDelta, "sessionId">
 	| Omit<ReplyEnd, "sessionId">
-	| { type: "shutdown"; reason: string };
+	| { type: "shutdown"; reason: string; deliberate?: boolean; closeCommand?: string };
 
 export const HEARTBEAT_MS = 1000;
 export const SILENCE_MS = 5000;

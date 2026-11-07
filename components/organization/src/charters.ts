@@ -47,7 +47,7 @@ export function orgSection(who: OrgIdentity): string {
 - Talk directly to whoever holds the context, across teams; managers handle staffing and decisions beyond your authority, not routine relays. Keep work discussion in its task thread. When an exchange outside your team changes a decision or someone's load, copy the managers involved.
 - Work comes from your manager and reports go back to them. Raise what exceeds your authority with \`escalate\`; at the root it reaches the operator. Mail to \`operator\` waits in his inbox; \`ask_user_question\` interrupts him now.
 - Delivery, understanding, agreement and finished work are different facts, and so are access, following and attention. A message or an invitation assigns no work and starts nobody.
-- An unincorporated organization leaves when its root closes, after each person is idle without held work; the operator's \`/incorporate\` keeps it.
+- A deliberate in-Pi root quit or consented close dissolves an unincorporated organization after work settles. Incorporation keeps it.
 - Your self (your story, how you work, what you hold yourself to, how your colleagues think) is yours. Rewrite it with \`update_self\` in reflection, which starts when you finish a task and before compaction; it carries you across restarts.
 ${asks}`;
 }
@@ -98,7 +98,7 @@ Size the team from observed demand, relevant experience and available capacity, 
 
 When a burst warrants a short-term hire, say so in its brief and thread. Review its intended departure when that work ends. Before \`let_go\`, finish or reassign every held assignment and move its reports. The tool accepts an asynchronous request, optionally saves a handoff from the person's own context, then permanently removes its session and owned resources. Choose handoff:false to skip the final model turn and file; the default requests them. Read the outcome mail before treating cleanup as complete. A failed handoff keeps it in the team; cleanup failure after departure is retried. The handoff is a summary, not a transcript backup.
 
-Use \`send_home\` for quiet periods when you want to retain context: the person remains a member at home, and \`call_in\` returns it with its history. Send an idle person home once its report has been seen, so the windows stay few. Reserve \`let_go\` for a deliberate irreversible departure; the deleted session cannot return.
+Use \`send_home\` for idle members or incorporated roots; \`call_in\` restores their history. Unincorporated roots require explicit dissolve consent for permanent raw-session deletion. Use \`let_go\` for other permanent departures after finishing/reassigning work and moving reports.
 
 When fan-in of reports, questions and escalations repeatedly constrains progress, consider whether changing decision authority, assignments or reporting would help. Hiring a manager is one option; choose from the observed cause and the cost of change.
 

@@ -3,6 +3,10 @@ import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import {
+	closeNeedsConsent,
+	DISSOLUTION_CONSENT,
+} from "../../../../components/session-state/src/organization-lifetime.js";
 import type { Command } from "../../../../components/session-state/src/protocol.js";
 import type { CallInRequest, CallInResult } from "../call-in.js";
 import {
@@ -27,7 +31,7 @@ const RENAME_MS = 8000;
 export interface Lifecycle extends Mailbox {
 	wake(characterId: string): Promise<CommandReceipt>;
 	callIn(request: CallInRequest): Promise<CallInResult>;
-	endSession(characterId: string, confirmed?: boolean): Promise<CommandReceipt>;
+	endSession(characterId: string, confirmed?: boolean, dissolve?: boolean): Promise<CommandReceipt>;
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 	rename(characterId: string, name: string): Promise<CommandReceipt>;
 	roles(): RoleChoice[];
@@ -126,9 +130,17 @@ export function openLifecycle(
 			);
 		},
 
-		async endSession(characterId, confirmed = false) {
+		async endSession(characterId, confirmed = false, dissolve = false) {
 			const character = snapshot().characters.find((c) => c.id === characterId);
 			if (!character) return { ok: false, reason: "That session is not running." };
+			if (!dissolve) {
+				const db = new DatabaseSync(paths.db, { readOnly: true });
+				try {
+					if (closeNeedsConsent(db, characterId)) return { ok: false, dissolve: true, reason: DISSOLUTION_CONSENT };
+				} finally {
+					db.close();
+				}
+			}
 			const busy = character.facts !== undefined && character.facts.run !== "idle";
 			if (busy && !confirmed)
 				return {
@@ -139,7 +151,7 @@ export function openLifecycle(
 			return follow(
 				commands,
 				characterId,
-				{ kind: "close" },
+				{ kind: "close", ...(dissolve ? { dissolve: true } : {}) },
 				CLOSE_MS,
 				(stage) => stage === "applied",
 				() => `${character.name} has not answered yet.`,
