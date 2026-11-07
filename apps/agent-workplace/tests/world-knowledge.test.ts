@@ -384,6 +384,28 @@ test("graph zoom, pan, drag and neighbour highlights work; every rail app stays 
 				expect(found.y + found.height).toBeLessThanOrEqual(graphBox.y + graphBox.height);
 			}
 		});
+		const contrast = (name: string) =>
+			page.evaluate((label) => {
+				const canvas = document.querySelector<HTMLCanvasElement>(".wp-knowledge-graph canvas")!;
+				const hit = document.querySelector(`.wp-knowledge-hits button[aria-label="${label}"]`)!.getBoundingClientRect();
+				const frame = canvas.getBoundingClientRect();
+				const ratio = canvas.width / frame.width;
+				const context = canvas.getContext("2d")!;
+				const pixel = (x: number, y: number) =>
+					context.getImageData(Math.round(x * ratio), Math.round(y * ratio), 1, 1).data;
+				const node = pixel(hit.left + hit.width / 2 - frame.left, hit.top + hit.height / 2 - frame.top);
+				const space = pixel(4, 4);
+				return Math.abs(node[0]! - space[0]!) + Math.abs(node[1]! - space[1]!) + Math.abs(node[2]! - space[2]!);
+			}, name);
+		expect(await contrast("Read tests/utility.test.ts")).toBeGreaterThan(150);
+		const lit = await centre("Read src/app.ts");
+		await page.mouse.move(lit.x, lit.y);
+		await vi.waitFor(async () => {
+			expect(await contrast("Read tests/utility.test.ts")).toBeLessThan(100);
+			expect(await contrast("Read src/utility.ts")).toBeGreaterThan(150);
+		});
+		await page.mouse.move(graphBox.x + graphBox.width - 10, graphBox.y + graphBox.height - 10);
+		await vi.waitFor(async () => expect(await contrast("Read tests/utility.test.ts")).toBeGreaterThan(150));
 		await node.focus();
 		await page.keyboard.press("Enter");
 		await page.getByRole("complementary", { name: "Knowledge reader" }).waitFor();
@@ -424,13 +446,6 @@ test("graph zoom, pan, drag and neighbour highlights work; every rail app stays 
 		});
 		await page.mouse.up();
 		expect(await node.getAttribute("aria-pressed")).toBe("true");
-		const hovered = await centre("Read src/app.ts");
-		await page.mouse.move(hovered.x, hovered.y);
-		await vi.waitFor(async () =>
-			expect(await page.locator(".wp-knowledge-graph canvas").evaluate((element) => element.style.cursor)).toBe(
-				"pointer",
-			),
-		);
 		const rail = page.getByRole("navigation", { name: "Applications" });
 		const labelBounds = await rail.getByRole("button", { name: "Knowledge", exact: true }).evaluate((button) => {
 			const range = document.createRange();

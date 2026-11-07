@@ -41,7 +41,7 @@ function markdownParser(wikiLinks?: Record<string, string>) {
 						const value = String(token.text);
 						const target = value.split(/[|#]/)[0]!.trim().normalize("NFKC").toLowerCase();
 						const label = value.includes("|") ? value.slice(value.indexOf("|") + 1) : value;
-						const id = wikiLinks[target];
+						const id = Object.hasOwn(wikiLinks, target) ? wikiLinks[target] : undefined;
 						return id
 							? `<a class="aw-md-link" href="#knowledge/${encodeURIComponent(id)}">${escapeHtml(label)}</a>`
 							: `<span class="aw-md-link-dead">${escapeHtml(label)}</span>`;
