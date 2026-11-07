@@ -1,18 +1,39 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { livePeers } from "../../session-state/src/peers.js";
-import { pickName } from "./names.js";
+import { namesTaken } from "../../session-state/src/peers.js";
+import type { Pronouns } from "./culture.js";
+import { pickIdentity } from "./names.js";
 
 export const SESSION_TITLE_ENTRY = "session-title";
 
 type Stage = "name" | "provisional" | "refined" | "ledger";
-export type SessionTitleEntry = { title: string; stage: Stage } | { stopped: true };
+export interface Origin {
+	people: string;
+	place: string;
+	pronouns: Pronouns;
+}
+export type SessionTitleEntry = ({ title: string; stage: Stage } & Partial<Origin>) | { stopped: true };
 
-function liveNames(self: string): string[] {
+function taken(self: string, manager: string | undefined) {
 	try {
-		return livePeers(self).flatMap((peer) => (peer.name ? [peer.name] : []));
+		return namesTaken(self, manager);
 	} catch {
-		return [];
+		return { names: [], firstNames: [] };
 	}
+}
+
+export function sessionOrigin(ctx: ExtensionContext): Origin | undefined {
+	let origin: Origin | undefined;
+	for (const entry of ctx.sessionManager.getEntries()) {
+		if (entry.type !== "custom" || entry.customType !== SESSION_TITLE_ENTRY) continue;
+		const data = entry.data as Partial<Origin> & { title?: unknown; stopped?: unknown };
+		if (data.stopped === true) origin = undefined;
+		else if (typeof data.title === "string")
+			origin =
+				data.people && data.place && data.pronouns
+					? { people: data.people, place: data.place, pronouns: data.pronouns }
+					: undefined;
+	}
+	return origin;
 }
 
 interface SessionState {
@@ -59,11 +80,14 @@ export default function registerSessionTitle(pi: ExtensionAPI): void {
 		const state = stateOf(ctx);
 		noticeRename(state);
 		if (state.stopped || state.lastStage === "name") return;
-		const name = pickName(liveNames(state.id));
+		const manager = pi.getFlag("reports-to");
+		const { name, people, place, pronouns } = pickIdentity(
+			taken(state.id, typeof manager === "string" && manager ? manager : undefined),
+		);
 		state.lastAuto = name;
 		state.lastStage = "name";
+		pi.appendEntry<SessionTitleEntry>(SESSION_TITLE_ENTRY, { title: name, stage: "name", people, place, pronouns });
 		pi.setSessionName(name);
-		pi.appendEntry<SessionTitleEntry>(SESSION_TITLE_ENTRY, { title: name, stage: "name" });
 	});
 	pi.on("session_info_changed", (_event, ctx) => {
 		if (ctx.mode === "tui" || ctx.mode === "rpc") noticeRename(stateOf(ctx));

@@ -9,9 +9,10 @@ import { sleeperCharacter } from "../web/game/layout.js";
 
 const firstSeen = Date.UTC(2026, 9, 20);
 const laterStart = Date.UTC(2026, 9, 21);
+const origin = { people: "Irish", place: "Galway", pronouns: "she" };
 
 test.each([false, true])(
-	"world profiles retain hire dates and specialization across incarnations with old-schema fallback (old schema: %s)",
+	"world profiles retain hire dates, specialization and origin across incarnations with old-schema fallback (old schema: %s)",
 	(legacy) => {
 		const dir = mkdtempSync(join(tmpdir(), "world-profile-"));
 		onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
@@ -19,16 +20,20 @@ test.each([false, true])(
 		const db = new DatabaseSync(path);
 		try {
 			migrate(db);
-			if (legacy) db.exec("alter table sessions drop column hired_at; alter table sessions drop column specialization");
+			if (legacy)
+				db.exec(
+					"alter table sessions drop column hired_at; alter table sessions drop column specialization; alter table sessions drop column origin",
+				);
 			for (const awake of [true, false]) {
 				for (const knownHire of [true, false]) {
 					const id = `${knownHire ? "hired" : "unknown"}-${awake ? "awake" : "asleep"}`;
 					db.prepare(`insert into sessions (id, kind, cwd, name, run_state, generation, source, updated_at)
 						values (?, 'root', '/example', ?, 'idle', 2, 'bridge', ?)`).run(id, id, laterStart);
 					if (knownHire && !legacy)
-						db.prepare("update sessions set hired_at = ?, specialization = ? where id = ?").run(
+						db.prepare("update sessions set hired_at = ?, specialization = ?, origin = ? where id = ?").run(
 							firstSeen,
 							"Data correctness\nKeep edge cases visible.",
+							JSON.stringify(origin),
 							id,
 						);
 					for (const generation of [1, 2]) {
@@ -61,11 +66,13 @@ test.each([false, true])(
 				expect(people?.find((person) => person.id === `hired-${suffix}`)).toMatchObject({
 					hiredAt: legacy ? null : firstSeen,
 					specialization: legacy ? null : "Data correctness\nKeep edge cases visible.",
+					origin: legacy ? null : origin,
 					startedAt: firstSeen,
 				});
 				expect(people?.find((person) => person.id === `unknown-${suffix}`)).toMatchObject({
 					hiredAt: null,
 					specialization: null,
+					origin: null,
 					startedAt: firstSeen,
 				});
 			}
@@ -73,6 +80,7 @@ test.each([false, true])(
 			expect(sleeperCharacter(sleeper).specialization).toBe(
 				legacy ? null : "Data correctness\nKeep edge cases visible.",
 			);
+			expect(sleeperCharacter(sleeper).origin).toEqual(legacy ? null : origin);
 		} finally {
 			world.close();
 		}

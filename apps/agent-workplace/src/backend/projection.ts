@@ -1,5 +1,13 @@
 import { basename } from "node:path";
-import { type Character, type Headquarters, isOutside, type PlaceRef, type Role, type Workplace } from "../world.js";
+import {
+	type Character,
+	type Headquarters,
+	isOutside,
+	type Origin,
+	type PlaceRef,
+	type Role,
+	type Workplace,
+} from "../world.js";
 
 export interface SessionRow {
 	id: string;
@@ -15,6 +23,7 @@ export interface SessionRow {
 	firstStartedAt: number | undefined;
 	hiredAt?: number | null;
 	specialization?: string | null;
+	origin?: Origin | null;
 	stoppedAt?: number;
 }
 
@@ -25,6 +34,7 @@ export interface Sleeper {
 	title: string | null;
 	hiredAt?: number | null;
 	specialization?: string | null;
+	origin?: Origin | null;
 	startedAt: number;
 	stoppedAt: number | null;
 	retiredAt: number | null;
@@ -108,6 +118,7 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 			title: session.title,
 			hiredAt: session.hiredAt ?? null,
 			specialization: session.specialization ?? null,
+			origin: session.origin ?? null,
 			startedAt: session.firstStartedAt ?? 0,
 			stoppedAt: session.stoppedAt ?? null,
 			retiredAt: session.retiredAt,
@@ -122,6 +133,7 @@ export function projectWorld(sessions: SessionRow[], remembered: RememberedWings
 		place: placeOf(session),
 		hiredAt: session.hiredAt ?? null,
 		specialization: session.specialization ?? null,
+		origin: session.origin ?? null,
 		startedAt: session.firstStartedAt ?? 0,
 	}));
 

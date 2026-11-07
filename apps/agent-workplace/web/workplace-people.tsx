@@ -142,6 +142,7 @@ export function PersonName({ id, name, className = "" }: { id: string; name: str
 }
 
 const PREVIEW_CHARACTERS = 200;
+const PRONOUNS: Record<string, string> = { she: "she/her", he: "he/him", they: "they/them" };
 const SELF_HEADINGS = new Set(["My story", "How I work", "What I hold myself to", "The people I work with"]);
 
 function ExpandableText({ text, field }: { text: string; field: string }) {
@@ -300,6 +301,20 @@ export function PersonProfile({
 							)}
 						<WorkHistory world={people.world} people={[id]} />
 						<dl>
+							{person.origin && (
+								<>
+									<div>
+										<dt>From</dt>
+										<dd>
+											{person.origin.place} ({person.origin.people})
+										</dd>
+									</div>
+									<div>
+										<dt>Pronouns</dt>
+										<dd>{PRONOUNS[person.origin.pronouns] ?? person.origin.pronouns}</dd>
+									</div>
+								</>
+							)}
 							{person.specialization && (
 								<div>
 									<dt>Specialization</dt>

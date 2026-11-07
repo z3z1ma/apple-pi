@@ -48,12 +48,13 @@ const FACT_COLUMNS: Record<keyof Facts, string> = {
 	onCall: "on_call",
 	soul: "soul",
 	self: "self",
+	origin: "origin",
 	parentSessionFile: "parent_session_file",
 	previousSession: "previous_session",
 	git: "git",
 	config: "config",
 };
-const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git"]);
+const JSON_FACTS = new Set<string>(["prompt", "queue", "config", "previousSession", "git", "origin"]);
 
 import { addActivityRule, removeActivityRule, triageActivity } from "./activity.js";
 import { ACTIVITY_POLL_MS, ActivityPoller, readSource } from "./activity-poller.js";

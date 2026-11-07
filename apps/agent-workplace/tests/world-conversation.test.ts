@@ -2067,6 +2067,20 @@ test("profiles load full Self only on demand, expand fields independently at 200
 		});
 		await profile.getByText("First seen", { exact: true }).waitFor();
 		expect(await profile.getByText("Hired", { exact: true }).count()).toBe(0);
+		expect(await profile.getByText("From", { exact: true }).count()).toBe(0);
+		await page.evaluate(async () => {
+			const w = window as any;
+			const current = await w.agentWorkplace.snapshot();
+			w.push({
+				...current,
+				characters: current.characters.map((person: any) => ({
+					...person,
+					origin: { people: "Irish", place: "Galway", pronouns: "she" },
+				})),
+			});
+		});
+		await profile.getByText("Galway (Irish)", { exact: true }).waitFor();
+		await profile.getByText("she/her", { exact: true }).waitFor();
 		expect(await profile.locator("time").getAttribute("datetime")).toBe(new Date(at(1)).toISOString());
 		await page.evaluate(async () => {
 			const w = window as any;

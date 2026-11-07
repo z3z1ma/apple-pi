@@ -59,6 +59,8 @@ export interface Facts {
 
 	self: string | null;
 
+	origin: { people: string; place: string; pronouns: string } | null;
+
 	parentSessionFile: string | null;
 
 	previousSession: { file: string; reason: string } | null;

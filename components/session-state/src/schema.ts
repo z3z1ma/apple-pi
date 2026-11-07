@@ -506,6 +506,8 @@ const MIGRATIONS = [
 	`alter table schedules add column task text;
 	create table task_snoozes (task text primary key, until integer not null, at integer not null, by text not null) strict;
 	create table task_notices (task text primary key, at integer not null) strict;`,
+
+	`alter table sessions add column origin text;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -6,9 +6,11 @@ import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
+import { namesTaken } from "../../session-state/src/peers.js";
 import { migrate } from "../../session-state/src/schema.js";
-import registerSessionTitle, { SESSION_TITLE_ENTRY } from "../src/index.js";
-import { FAMILY_NAMES, FIRST_NAMES, pickName } from "../src/names.js";
+import type { Culture } from "../src/culture.js";
+import registerSessionTitle, { SESSION_TITLE_ENTRY, sessionOrigin } from "../src/index.js";
+import { CULTURES, pickIdentity } from "../src/names.js";
 
 const cleanup: (() => void)[] = [];
 let agentDir: string;
@@ -82,40 +84,115 @@ async function harness(options: Options = {}) {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
-function parts(name: string | undefined): [string, string] {
-	for (const first of FIRST_NAMES) {
-		if (!name?.startsWith(`${first} `)) continue;
-		const family = name.slice(first.length + 1);
-		if (FAMILY_NAMES.includes(family)) return [first, family];
+function parts(name: string | undefined, people?: string): Culture {
+	for (const culture of CULTURES.filter((each) => people === undefined || each.people === people)) {
+		const given = Object.values(culture.given).flat();
+		for (const first of given) {
+			if (!name?.startsWith(`${first} `)) continue;
+			const family = name.slice(first.length + 1);
+			const families =
+				"fathers" in culture.family
+					? culture.family.fathers.flatMap((father) =>
+							Object.values((culture.family as { suffix: Record<string, string> }).suffix).map(
+								(suffix) => `${father}${suffix}`,
+							),
+						)
+					: culture.family;
+			if (families.includes(family)) return culture;
+		}
 	}
-	throw new Error(`not a listed name: ${name}`);
+	throw new Error(`not a name from one culture: ${name}`);
 }
 
 describe("session names", () => {
-	it("draws several hundred distinct first and family names and avoids every taken name", () => {
-		expect(FIRST_NAMES.length).toBeGreaterThanOrEqual(250);
-		expect(FAMILY_NAMES.length).toBeGreaterThanOrEqual(250);
-		expect(new Set(FIRST_NAMES).size).toBe(FIRST_NAMES.length);
-		expect(new Set(FAMILY_NAMES).size).toBe(FAMILY_NAMES.length);
-		const scripted = [0, 0, 0, 0, 0.5, 0.5];
-		const name = pickName(["ada ashdown", `${FIRST_NAMES[0]} ${FAMILY_NAMES[0]}`], () => scripted.shift() ?? 0.9);
-		expect(name).toBe(
-			`${FIRST_NAMES[Math.floor(0.5 * FIRST_NAMES.length)]} ${FAMILY_NAMES[Math.floor(0.5 * FAMILY_NAMES.length)]}`,
-		);
+	it("draws first and family name from one of many real naming cultures, with distinct, disjoint lists", () => {
+		expect(CULTURES.length).toBeGreaterThanOrEqual(40);
+		expect(new Set(CULTURES.map((culture) => culture.people)).size).toBe(CULTURES.length);
+		for (const culture of CULTURES) {
+			const { she, he, they } = culture.given;
+			expect(she.length, culture.people).toBeGreaterThanOrEqual(70);
+			expect(he.length, culture.people).toBeGreaterThanOrEqual(70);
+			const given = [...she, ...he, ...they];
+			expect(new Set(given).size, culture.people).toBe(given.length);
+			const family = "fathers" in culture.family ? culture.family.fathers : culture.family;
+			expect(family.length, culture.people).toBeGreaterThanOrEqual(70);
+			expect(new Set(family).size, culture.people).toBe(family.length);
+			expect(culture.places.length, culture.people).toBeGreaterThanOrEqual(12);
+			for (const text of [...given, ...family, ...culture.places]) expect(text, culture.people).toBe(text.trim());
+		}
+		for (let draw = 0; draw < 200; draw++) {
+			const identity = pickIdentity({ names: [], firstNames: [] });
+			const culture = parts(identity.name, identity.people);
+			expect(culture.places).toContain(identity.place);
+			expect(
+				culture.given[identity.pronouns].some((given) => identity.name.startsWith(`${given} `)),
+				identity.name,
+			).toBe(true);
+		}
+	});
+
+	it("avoids every taken full name and every first name in the organization, and gives way only on the first name", () => {
+		const first = pickIdentity({ names: [], firstNames: [] }, () => 0);
+		const again = pickIdentity({ names: [first.name], firstNames: [] }, () => 0);
+		expect(again.name).toBe(first.name);
+		const scripted = [0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5];
+		const avoided = pickIdentity({ names: [first.name], firstNames: [] }, () => scripted.shift() ?? 0.5);
+		expect(avoided.name).not.toBe(first.name);
+		const firstName = first.name.split(" ")[0]!;
+		const sameFirst = Array.from({ length: 40 }, () => 0);
+		const relaxed = pickIdentity({ names: [], firstNames: [firstName] }, () => sameFirst.shift() ?? 0);
+		expect(relaxed.name.split(" ")[0]).toBe(firstName);
+		const varied = pickIdentity({ names: [], firstNames: [firstName] });
+		expect(varied.name.split(" ")[0]).not.toBe(firstName);
+	});
+
+	it("treats every recorded name as taken, and the first names of the new person's current organization", () => {
+		mkdirSync(join(agentDir, "state"), { recursive: true });
+		const db = new DatabaseSync(join(agentDir, "state", "apple-pi.db"));
+		try {
+			migrate(db);
+			for (const [id, name, reportsTo, retired] of [
+				["boss", "Aoife Murphy", null, null],
+				["ada", "Kenji Sato", "boss", null],
+				["gone", "Lucía García", "boss", 1],
+				["other", "Ama Mensah", null, null],
+			] as const)
+				db.prepare(
+					`insert into sessions (id, kind, cwd, name, run_state, generation, source, updated_at, reports_to, retired_at)
+					values (?, 'root', '/tmp', ?, 'idle', 1, 'bridge', 0, ?, ?)`,
+				).run(id, name, reportsTo, retired);
+		} finally {
+			db.close();
+		}
+		const taken = namesTaken("new", "ada");
+		expect(taken.names.sort()).toEqual(["Ama Mensah", "Aoife Murphy", "Kenji Sato", "Lucía García"]);
+		expect(taken.firstNames.sort()).toEqual(["Aoife", "Kenji"]);
+		expect(namesTaken("new", undefined).firstNames).toEqual([]);
 	});
 
 	it("names a new unnamed root TUI session as it starts, unlike any live session, without a model request", async () => {
-		const taken = `${FIRST_NAMES[0]} ${FAMILY_NAMES[0]}`;
+		const taken = pickIdentity({ names: [], firstNames: [] }, () => 0).name;
 		liveSessions([taken]);
-		const scripted = [0, 0];
+		const scripted = [0, 0, 0, 0];
 		const run = await harness({
 			beforeStart: () => vi.spyOn(Math, "random").mockImplementation(() => scripted.shift() ?? 0.5),
 		});
 		vi.restoreAllMocks();
 		const name = run.name();
-		parts(name);
+		const [entry] = run.recorded() as { people: string }[];
+		const culture = parts(name, entry?.people);
 		expect(name).not.toBe(taken);
-		expect(run.recorded()).toEqual([{ title: name, stage: "name" }]);
+		expect(run.recorded()).toEqual([
+			{
+				title: name,
+				stage: "name",
+				people: culture.people,
+				place: expect.any(String),
+				pronouns: expect.stringMatching(/^(she|he|they)$/),
+			},
+		]);
+		const origin = () => sessionOrigin({ sessionManager: run.session.sessionManager } as never);
+		expect(origin()).toEqual({ people: culture.people, place: expect.any(String), pronouns: expect.any(String) });
 
 		await run.session.prompt("The CSV parser crashes on quoted commas.");
 		await settle();
@@ -127,10 +204,11 @@ describe("session names", () => {
 	it("gives a headless RPC peer a human name and respects its operator rename", async () => {
 		const run = await harness({ mode: "rpc" });
 		parts(run.name());
-		expect(run.recorded()).toEqual([{ title: run.name(), stage: "name" }]);
+		expect(run.recorded()).toEqual([expect.objectContaining({ title: run.name(), stage: "name" })]);
 		run.session.setSessionName("Named colleague");
 		await run.session.bindExtensions({ mode: "rpc" });
 		expect(run.name()).toBe("Named colleague");
+		expect(sessionOrigin({ sessionManager: run.session.sessionManager } as never)).toBeUndefined();
 	});
 
 	it("keeps the name across a resume and never replaces one set by /name", async () => {

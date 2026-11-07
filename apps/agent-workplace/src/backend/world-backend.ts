@@ -10,6 +10,7 @@ import type {
 	KeptPart,
 	MailItem,
 	MailThreadSummary,
+	Origin,
 	ProfileRead,
 	TerminalResult,
 	Workplace,
@@ -99,6 +100,7 @@ const OPTIONAL_COLUMNS = [
 	"retired_reason",
 	"hired_at",
 	"specialization",
+	"origin",
 ] as const;
 type OptionalColumns = Record<(typeof OPTIONAL_COLUMNS)[number], boolean> & { work: boolean; peers: boolean };
 const optionalColumns = (db: DatabaseSync): OptionalColumns => {
@@ -133,6 +135,7 @@ interface Row extends FactsRow {
 	retired_reason: string | null;
 	hired_at: number | null;
 	specialization: string | null;
+	origin: string | null;
 	firstStartedAt: number | null;
 	awake: number;
 	temporary: number;
@@ -147,6 +150,13 @@ function parse<T>(json: string | null | undefined): T | undefined {
 	} catch {
 		return undefined;
 	}
+}
+
+function originOf(json: string | null): Origin | null {
+	const value = parseShared<Partial<Origin>>(json);
+	return typeof value?.people === "string" && typeof value.place === "string" && typeof value.pronouns === "string"
+		? { people: value.people, place: value.place, pronouns: value.pronouns }
+		: null;
 }
 
 function sessionRow(row: Row): SessionRow {
@@ -164,6 +174,7 @@ function sessionRow(row: Row): SessionRow {
 		awake: row.awake === 1,
 		hiredAt: row.hired_at,
 		specialization: row.specialization,
+		origin: originOf(row.origin),
 		firstStartedAt: row.firstStartedAt ?? undefined,
 		stoppedAt: row.stoppedAt ?? undefined,
 	};

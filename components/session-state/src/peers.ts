@@ -10,6 +10,7 @@ import {
 } from "../../organization/src/directory.js";
 import { COMMUNICATION_TOOLS } from "./communication-tools.js";
 import { statePaths } from "./paths.js";
+import { rootOf } from "./tree.js";
 import { hasWork } from "./work-read.js";
 
 export interface Peer {
@@ -20,6 +21,29 @@ export interface Peer {
 	reportsTo: string | null;
 	role: string | null;
 	focus: string | null;
+}
+
+export function namesTaken(self: string, manager: string | undefined): { names: string[]; firstNames: string[] } {
+	const path = statePaths().db;
+	if (!existsSync(path)) return { names: [], firstNames: [] };
+	const db = new DatabaseSync(path, { readOnly: true });
+	try {
+		const rows = db
+			.prepare("select id, name, retired_at from sessions where kind = 'root' and id is not ? and name is not null")
+			.all(self) as { id: string; name: string; retired_at: number | null }[];
+		const known = manager && db.prepare("select 1 from sessions where id = ?").get(manager);
+		const organization = known ? rootOf(db, manager) : undefined;
+		return {
+			names: rows.map((row) => row.name),
+			firstNames: organization
+				? rows
+						.filter((row) => row.retired_at === null && rootOf(db, row.id) === organization)
+						.map((row) => row.name.split(" ")[0]!)
+				: [],
+		};
+	} finally {
+		db.close();
+	}
 }
 
 export function livePeers(self: string | null): Peer[] {

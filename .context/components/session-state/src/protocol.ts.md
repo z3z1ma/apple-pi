@@ -32,6 +32,8 @@ Verify: components/session-state/tests/commands.test.ts, components/session-stat
 
 ## symbol:Facts
 
+`origin` is the session-title extension's recorded culture, place and pronouns for the name it gave; null for a renamed person, an older bridge, or a person named before origins existed.
+
 Each changed facts field replaces its whole value, including nested values. queue.pending can include extension messages; steers/followUps count the typed input queues.
 Why: merging nested snapshots or interpreting every pending message as user input would retain stale state or misreport what the operator queued.
 Coupled: components/session-state/src/bridge.ts, components/session-state/src/runtime.ts

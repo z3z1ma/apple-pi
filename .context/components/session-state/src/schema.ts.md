@@ -1,5 +1,7 @@
 ## file
 
+Migration56 adds nullable sessions.origin, the JSON origin fact (culture, place, pronouns) a current bridge reports from the session-title entry. Existing people stay null: their names came from mixed lists and have no recorded culture, so none is guessed. Migration55 adds schedules.task, task_snoozes and task_notices for task check-ins and the stuck-work digest. Keep both in historical-schema.ts's rewind list.
+
 Migration54 adds incorporated (default zero for new rows), closing_generation and incarnation interactive metadata. It marks every pre-existing sessions row incorporated, including sleeping roots, reports and pre-migration admissions. It creates no closing intent and never classifies an existing incarnation's old quit as a new close. Keep all physical columns in historical-schema.ts's rewind list. Existing bridges remain admitted; missing interactive metadata does not authorize uncertain quit-based dissolution.
 Coupled: components/session-state/src/organization-lifetime.ts, components/session-state/src/bridge.ts
 Verify: components/session-state/tests/organization-lifetime.test.ts, components/session-state/tests/event-index.test.ts

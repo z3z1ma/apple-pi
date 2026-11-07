@@ -12,6 +12,7 @@ import {
 	sessionSelf,
 	sessionSoulLine,
 } from "../../organization/src/index.js";
+import { sessionOrigin } from "../../session-title/src/index.js";
 import { liveSession } from "../../shared/src/forked-continuation.js";
 import { OPERATOR_PAGE_CHANNEL, type OpenOperatorPage } from "../../shared/src/operator-page-events.js";
 import { type OpenQuestionnaire, QUESTIONNAIRE_CHANNEL } from "../../shared/src/questionnaire-events.js";
@@ -343,6 +344,7 @@ function helloFor(
 			onCall: sessionRole(ctx)?.dispatches ?? null,
 			soul: sessionSoulLine(ctx) ?? null,
 			self: sessionSelf(ctx) ?? null,
+			origin: sessionOrigin(ctx) ?? null,
 			parentSessionFile: sessions.getHeader()?.parentSession ?? null,
 			previousSession,
 			git: null,
@@ -865,7 +867,9 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		mcpServers = event.servers.map((server) => server.name).sort();
 		link?.facts({ config: config(pi, ctx, skills, mcpServers) });
 	});
-	pi.on("session_info_changed", (_event, ctx) => link?.facts({ config: config(pi, ctx, skills, mcpServers) }));
+	pi.on("session_info_changed", (_event, ctx) =>
+		link?.facts({ config: config(pi, ctx, skills, mcpServers), origin: sessionOrigin(ctx) ?? null }),
+	);
 	pi.on("model_select", (_event, ctx) => link?.facts({ model: modelName(ctx), ...contextUsage(ctx) }));
 	pi.on("thinking_level_select", (event) => link?.facts({ thinkingLevel: event.level }));
 

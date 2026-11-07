@@ -62,12 +62,19 @@ export interface CharacterFacts {
 
 export type ProfileRead = { ok: true; self: string | null } | { ok: false; reason: string };
 
+export interface Origin {
+	people: string;
+	place: string;
+	pronouns: string;
+}
+
 export interface Character {
 	id: string;
 	name: string;
 	role: Role;
 	place: PlaceRef;
 	specialization?: string | null;
+	origin?: Origin | null;
 	hiredAt?: number | null;
 	startedAt: number;
 	facts?: CharacterFacts;
@@ -193,6 +200,7 @@ export interface DormantAgent {
 	stoppedAt: number | null;
 	stopReason: string | null;
 	specialization?: string | null;
+	origin?: Origin | null;
 	hiredAt?: number | null;
 	startedAt: number;
 }

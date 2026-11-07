@@ -10337,6 +10337,7 @@ function projectWorld(sessions, remembered) {
 		title: session.title,
 		hiredAt: session.hiredAt ?? null,
 		specialization: session.specialization ?? null,
+		origin: session.origin ?? null,
 		startedAt: session.firstStartedAt ?? 0,
 		stoppedAt: session.stoppedAt ?? null,
 		retiredAt: session.retiredAt,
@@ -10349,6 +10350,7 @@ function projectWorld(sessions, remembered) {
 		place: placeOf(session),
 		hiredAt: session.hiredAt ?? null,
 		specialization: session.specialization ?? null,
+		origin: session.origin ?? null,
 		startedAt: session.firstStartedAt ?? 0
 	}));
 	const shown = /* @__PURE__ */ new Set();
@@ -11096,7 +11098,8 @@ var OPTIONAL_COLUMNS = [
 	"retired_at",
 	"retired_reason",
 	"hired_at",
-	"specialization"
+	"specialization",
+	"origin"
 ];
 var optionalColumns = (db) => {
 	const present = new Set(db.prepare("select name from pragma_table_info('sessions')").all().map((row) => row.name));
@@ -11130,6 +11133,14 @@ function parse$2(json) {
 		return;
 	}
 }
+function originOf(json) {
+	const value = parseShared(json);
+	return typeof value?.people === "string" && typeof value.place === "string" && typeof value.pronouns === "string" ? {
+		people: value.people,
+		place: value.place,
+		pronouns: value.pronouns
+	} : null;
+}
 function sessionRow(row) {
 	const git = parseShared(row.git);
 	return {
@@ -11145,6 +11156,7 @@ function sessionRow(row) {
 		awake: row.awake === 1,
 		hiredAt: row.hired_at,
 		specialization: row.specialization,
+		origin: originOf(row.origin),
 		firstStartedAt: row.firstStartedAt ?? void 0,
 		stoppedAt: row.stoppedAt ?? void 0
 	};

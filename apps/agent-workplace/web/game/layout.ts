@@ -192,6 +192,7 @@ export function sleeperCharacter(agent: DormantAgent): Character {
 		place: { kind: "inn" },
 		hiredAt: agent.hiredAt,
 		specialization: agent.specialization,
+		origin: agent.origin,
 		startedAt: agent.startedAt,
 
 		facts: {
