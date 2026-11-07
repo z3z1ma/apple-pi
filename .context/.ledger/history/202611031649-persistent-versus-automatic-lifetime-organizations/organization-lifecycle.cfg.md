@@ -4,5 +4,5 @@ The ordinary configuration keeps UnsafeCommit false. The retained negative-contr
 
 Why: a normal pass without the control could hide a broken assertion or unreachable departure; the control's violation is intentional design evidence rather than a runtime defect. CHECK_DEADLOCK FALSE limits this configuration to its listed safety invariants: blocked work may wait forever, and neither eventual cleanup nor fairness is checked.
 
-Coupled: .ledger/202611031649-persistent-versus-automatic-lifetime-organizations/organization-lifecycle.tla, .ledger/202611031649-persistent-versus-automatic-lifetime-organizations/lifecycle-design.md
-Verify: .ledger/202611031649-persistent-versus-automatic-lifetime-organizations/lifecycle-pass.txt, .ledger/202611031649-persistent-versus-automatic-lifetime-organizations/lifecycle-control.txt
+Coupled: .ledger/history/202611031649-persistent-versus-automatic-lifetime-organizations/organization-lifecycle.tla, .ledger/history/202611031649-persistent-versus-automatic-lifetime-organizations/lifecycle-design.md
+Verify: .ledger/history/202611031649-persistent-versus-automatic-lifetime-organizations/lifecycle-pass.txt, .ledger/history/202611031649-persistent-versus-automatic-lifetime-organizations/lifecycle-control.txt
