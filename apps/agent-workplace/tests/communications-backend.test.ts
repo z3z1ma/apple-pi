@@ -152,6 +152,37 @@ test("what the operator looks at is read: markRead moves his position forward, n
 	expect(await api.markRead({ thread, seq: 0 })).toMatchObject({ ok: false });
 });
 
+test("Mail inspection stays unread until the visible-page acknowledgment reaches the runtime", async () => {
+	const created = await api.sendMail({
+		attempt: randomUUID(),
+		to: ["lead"],
+		subject: "Read acknowledgment",
+		body: "Please reply.",
+	});
+	if (!("effect" in created) || !created.effect) throw new Error(JSON.stringify(created));
+	const thread = created.effect.thread.id;
+	await publish(thread, "Unread reply");
+	const recent = await api.readThread({ thread, view: "recent", limit: 10 });
+	if (!recent.ok) throw new Error(recent.reason);
+	expect(recent.page).toMatchObject({
+		thread: { kind: "mail", unread: 1 },
+		acknowledgment: "not_requested",
+	});
+	await vi.waitFor(
+		() => expect(world.snapshot().operatorMail).toContainEqual(expect.objectContaining({ id: thread, unread: 1 })),
+		{ timeout: 10000 },
+	);
+	expect(await api.markRead({ thread, seq: recent.page.window_through })).toEqual({ ok: true });
+	await vi.waitFor(
+		() => expect(world.snapshot().operatorMail).toContainEqual(expect.objectContaining({ id: thread, unread: 0 })),
+		{ timeout: 10000 },
+	);
+	expect(await api.readThread({ thread, view: "recent", limit: 10 })).toMatchObject({
+		ok: true,
+		page: { thread: { read_up_to: recent.page.window_through, unread: 0 } },
+	});
+});
+
 test("lost publication receipts recover the recorded effect without republishing changed or repeated intent", async () => {
 	const thread = await channel("Receipt recovery");
 	const send = vi.fn<Commands["send"]>(async (...args) => {

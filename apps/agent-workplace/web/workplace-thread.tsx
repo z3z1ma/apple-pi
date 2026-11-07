@@ -104,7 +104,7 @@ export function ThreadPane({
 	const mounted = useRef(true);
 	const messages = useRef<HTMLDivElement>(null);
 	const actionsMenu = useRef<HTMLDetailsElement>(null);
-	const followLatest = useRef(!!channel);
+	const followLatest = useRef(true);
 	const attemptedSeq = useRef(0);
 	const focused = useWindowFocus();
 	const readOptions = useRef<ConversationReadOptions | undefined>(undefined);
@@ -136,6 +136,7 @@ export function ThreadPane({
 			const result = await api.communications.readThread(options);
 			if (!mounted.current) return;
 			if (!result.ok) {
+				keepFromBottom.current = undefined;
 				setError(result.reason);
 				return;
 			}
@@ -158,6 +159,7 @@ export function ThreadPane({
 			setView(returned.view);
 			setSearch(undefined);
 		} catch (failure) {
+			keepFromBottom.current = undefined;
 			if (mounted.current) setError(String(failure));
 		} finally {
 			if (mounted.current) setPending(false);
@@ -552,6 +554,7 @@ export function ThreadPane({
 					Page size{" "}
 					<input
 						aria-label="Message page size"
+						disabled={pending}
 						type="number"
 						min="1"
 						step="1"
@@ -561,7 +564,7 @@ export function ThreadPane({
 							setLimit(next);
 
 							if (!search && Number.isSafeInteger(next) && next > 0) {
-								followLatest.current = !!channel;
+								followLatest.current = true;
 								void read({ thread: id, view: "recent", limit: next });
 							}
 						}}

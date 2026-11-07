@@ -168,6 +168,18 @@ async function openWorkplace() {
 			};
 			for (const listener of listeners) listener(world);
 		};
+		w.receiveMail = () => {
+			const seq = mailMessages.at(-1).seq + 7;
+			mailMessages.push({
+				...mailMessages[0],
+				id: `mail-m${seq}`,
+				seq,
+				body: `New mail evidence ${seq}`,
+				reference: { thread: mailInfo.id, seq, id: `mail-m${seq}` },
+			});
+			world.operatorMail[0].unread = mailMessages.filter((message) => message.seq > mailInfo.read_up_to).length;
+			publish();
+		};
 		const permissions = () => {
 			thread.permissions = {
 				post: !thread.archived,
@@ -380,6 +392,10 @@ async function openWorkplace() {
 					record("markRead", request);
 					const read = request.thread === mailInfo.id ? mailInfo : thread;
 					read.read_up_to = Math.max(read.read_up_to, request.seq);
+					if (read === mailInfo) {
+						world.operatorMail[0].unread = mailMessages.filter((message) => message.seq > read.read_up_to).length;
+						publish();
+					}
 					return { ok: true };
 				},
 				status: async (request: any) => {
@@ -639,6 +655,145 @@ test("looking at the end of a conversation marks it read; searching or reading e
 		await vi.waitFor(async () => expect(await calls(page, "searchMessages")).toHaveLength(1));
 		await page.waitForTimeout(200);
 		expect(await calls(page, "markRead")).toEqual(marked);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test.each([0, 60])("opening Mail marks its newest visible page read (%i additional messages)", async (additional) => {
+	const { page, errors } = await openWorkplace();
+	try {
+		await page.evaluate((count) => {
+			for (let i = 0; i < count; i++) (window as any).receiveMail();
+		}, additional);
+		await page.getByRole("button", { name: "Mail", exact: true }).click();
+		expect(await page.locator(".wp-mail-unread").textContent()).toBe(String(additional + 1));
+		expect(await calls(page, "markRead")).toEqual([]);
+		await page.getByRole("button", { name: /Review exchange/ }).click();
+		const seq = (additional + 1) * 7;
+		await page
+			.getByText(additional ? `New mail evidence ${seq}` : "Mail evidence remains literal: <b>private</b>.", {
+				exact: true,
+			})
+			.waitFor();
+		await vi.waitFor(async () => expect(await calls(page, "markRead")).toEqual([{ thread: "mail:review", seq }]));
+		expect(await page.locator(".wp-mail-unread").count()).toBe(0);
+		await page.evaluate(() => (window as any).receiveMail());
+		await page.getByRole("button", { name: "Search this conversation", exact: true }).click();
+		await page.getByRole("spinbutton", { name: "Message page size" }).fill("5");
+		await vi.waitFor(async () =>
+			expect((await calls(page, "markRead")).at(-1)).toEqual({ thread: "mail:review", seq: seq + 7 }),
+		);
+		expect(await page.locator(".wp-mail-unread").count()).toBe(0);
+		expect((await calls(page, "readThread")).every((read: any) => read.view === "recent")).toBe(true);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+});
+
+test.each(["success", "refused", "rejected"] as const)(
+	"Mail page-size reset waits for earlier paging before showing and acknowledging new arrivals (%s)",
+	async (outcome) => {
+		const { page, errors } = await openWorkplace();
+		try {
+			await page.evaluate(() => {
+				for (let i = 0; i < 80; i++) (window as any).receiveMail();
+			});
+			await page.getByRole("button", { name: "Mail", exact: true }).click();
+			await page.getByRole("button", { name: /Review exchange/ }).click();
+			await vi.waitFor(async () =>
+				expect(await calls(page, "markRead")).toEqual([{ thread: "mail:review", seq: 567 }]),
+			);
+			await page.getByRole("button", { name: "Search this conversation", exact: true }).click();
+			await page.evaluate((outcome) => {
+				const w = window as any;
+				const api = w.agentWorkplace.communications;
+				const read = api.readThread;
+				api.readThread = async (request: any) => {
+					const result = await read(request);
+					if (request.cursor) {
+						await new Promise<void>((resolve) => {
+							w.releaseEarlier = resolve;
+						});
+						if (outcome === "refused") return { ok: false, reason: "Earlier read failed" };
+						if (outcome === "rejected") throw new Error("Earlier read rejected");
+					}
+					return result;
+				};
+				const mark = api.markRead;
+				w.markPositions = [];
+				api.markRead = (request: any) => {
+					const el = document.querySelector(".wp-thread-messages")!;
+					w.markPositions.push({ seq: request.seq, remaining: el.scrollHeight - el.clientHeight - el.scrollTop });
+					return mark(request);
+				};
+				for (let i = 0; i < 10; i++) w.receiveMail();
+				document.querySelector(".wp-thread-messages")!.scrollTop = 0;
+			}, outcome);
+			await page.waitForFunction(() => !!(window as any).releaseEarlier);
+			const size = page.getByRole("spinbutton", { name: "Message page size" });
+			const enabled = await size.isEnabled();
+			if (enabled) await size.fill("49");
+			await page.waitForTimeout(100);
+			expect(await calls(page, "markRead")).toEqual([{ thread: "mail:review", seq: 567 }]);
+			expect(enabled).toBe(false);
+			await page.evaluate(() => (window as any).releaseEarlier());
+			await vi.waitFor(async () => expect(await size.isEnabled()).toBe(true));
+			if (outcome !== "success")
+				await page
+					.getByRole("alert")
+					.filter({ hasText: /Earlier read (failed|rejected)/ })
+					.waitFor();
+			await size.fill("49");
+			await vi.waitFor(async () =>
+				expect((await calls(page, "markRead")).at(-1)).toEqual({ thread: "mail:review", seq: 637 }),
+			);
+			const positions = await page.evaluate(
+				() => (window as any).markPositions as { seq: number; remaining: number }[],
+			);
+			expect(positions).toHaveLength(1);
+			expect(positions[0]!.remaining).toBeLessThan(24);
+			expect(await page.locator(".wp-mail-unread").count()).toBe(0);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+);
+
+test("a Mail page loaded without focus stays unread until focused; hidden Mail does not read arrivals", async () => {
+	const { page, errors } = await openWorkplace();
+	try {
+		await page.evaluate(() => {
+			const w = window as any;
+			const read = w.agentWorkplace.communications.readThread;
+			w.agentWorkplace.communications.readThread = async (request: any) => {
+				const result = await read(request);
+				await new Promise<void>((resolve) => {
+					w.releaseMailRead = () => {
+						window.dispatchEvent(new Event("blur"));
+						resolve();
+					};
+				});
+				return result;
+			};
+		});
+		await page.getByRole("button", { name: "Mail", exact: true }).click();
+		await page.getByRole("button", { name: /Review exchange/ }).click();
+		await page.waitForFunction(() => !!(window as any).releaseMailRead);
+		await page.evaluate(() => (window as any).releaseMailRead());
+		await page.getByText("Mail evidence remains literal: <b>private</b>.", { exact: true }).waitFor();
+		expect(await calls(page, "markRead")).toEqual([]);
+		expect(await page.locator(".wp-mail-unread").textContent()).toBe("1");
+		await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+		await vi.waitFor(async () => expect(await calls(page, "markRead")).toEqual([{ thread: "mail:review", seq: 7 }]));
+		await page.getByRole("button", { name: "Chat", exact: true }).click();
+		const reads = await calls(page, "readThread");
+		await page.evaluate(() => (window as any).receiveMail());
+		expect(await calls(page, "readThread")).toEqual(reads);
+		expect(await calls(page, "markRead")).toEqual([{ thread: "mail:review", seq: 7 }]);
 		expect(errors).toEqual([]);
 	} finally {
 		await page.close();

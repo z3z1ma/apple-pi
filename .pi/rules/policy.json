@@ -62,6 +62,67 @@
   ],
   "scripts": [
     {
+      "id": "thread-reading-position",
+      "on": "edit",
+      "script": "thread-reading-position.js",
+      "includes": ["apps/agent-workplace/web/workplace-thread.tsx"],
+      "fires": [
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "const followLatest = useRef(!!channel);"
+        },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "const followLatest = useRef<boolean>(!!channel);"
+        },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "const followLatest = useRef<boolean>(\n!!channel\n);"
+        },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "<input aria-label=\"Message page size\" aria-disabled={pending} />"
+        },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "<input aria-label=\"Message page size\" data-disabled={pending} />"
+        },
+        { "path": "apps/agent-workplace/web/workplace-thread.tsx", "content": "followLatest.current = !!channel;" },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "<input aria-label=\"Message page size\" onChange={change} />"
+        },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "<input type=\"number\" aria-label=\"Message page size\" onChange={change} />"
+        },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "<input disabled={pending && unresolved} type=\"number\" aria-label=\"Message page size\" />"
+        }
+      ],
+      "passes": [
+        { "path": "apps/agent-workplace/web/workplace-thread.tsx", "content": "const followLatest = useRef(true);" },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "const followLatest = useRef<boolean>(true);"
+        },
+        { "path": "apps/agent-workplace/web/workplace-thread.tsx", "content": "followLatest.current = true;" },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "const hasNew = !!channel && channel.lastSeq > latestSeq;"
+        },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "<input aria-label=\"Message page size\" disabled={pending} onChange={change} />"
+        },
+        {
+          "path": "apps/agent-workplace/web/workplace-thread.tsx",
+          "content": "<input disabled={pending || unresolved} type=\"number\" aria-label=\"Message page size\" onChange={change} />"
+        }
+      ]
+    },
+    {
       "id": "workplace-wiki-policy",
       "on": "edit",
       "script": "workplace-wiki-policy.js",
