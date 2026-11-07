@@ -51,6 +51,10 @@ var api = {
 		readFile: (request) => electron.ipcRenderer.invoke("workspace:read-file", request),
 		saveFile: (request) => electron.ipcRenderer.invoke("workspace:save-file", request)
 	},
+	knowledge: {
+		graph: (request) => electron.ipcRenderer.invoke("knowledge:graph", request),
+		content: (request) => electron.ipcRenderer.invoke("knowledge:content", request)
+	},
 	git: {
 		overview: (request) => electron.ipcRenderer.invoke("git:overview", request),
 		log: (request) => electron.ipcRenderer.invoke("git:log", request),
