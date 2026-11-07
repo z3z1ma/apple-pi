@@ -15,6 +15,12 @@ Pending completion of the undertaking.
 - Harnesses that run `before_agent_start` without a session (`tests/system-prompt-sections.test.ts`, the pair's offline harness) must stub `getActiveTools`/`setActiveTools` once any handler reads the active tools. The pi-exec integration suite failed this way at `fff4a416`, before the composer existed: a suite failing on main is a lead to check in a detached worktree, not proof of your own regression.
 - Trimming a tool description can break `tests/package-load.mjs`, which asserts phrases in some descriptions, while focused vitest runs stay green. Run the loader after trimming, and rewrite each assertion to the new wording's meaning rather than restore the old text.
 
+## Fixture correction, 2026-11-07
+
+The native codemode migration left the SDK fixture behind: it omitted native tools, and registered definitions still understated the effective declarations after the factories were added. Measure the actual first-turn boundary, and test expected tools as well as active-versus-taught agreement. The authorized 36,877 baseline corrects fixture coverage; it is not product growth or a provider-token measurement.
+
+Independent review found a scratch lifetime race after the author's passing checks. Its incomplete result stayed incomplete. Retaining all SDK sessions exhausted the default heap; the shipped repair instead incorporates only scratch posture organizations through the existing command and keeps per-session disposal. The next cumulative review completed with zero findings and independent measurement, mutation and lifecycle checks. File-specific hazards now live in `.context/tests/helpers/prompt-budget.ts.md`.
+
 The rest is pending completion of the undertaking.
 
 ## Improvements
