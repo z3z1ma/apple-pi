@@ -74,6 +74,17 @@ Why: reading all servers with one `Promise.all` let a single hung server freeze 
 Coupled: components/session-state/src/tmux.ts
 Verify: components/session-state/tests/tmux.test.ts
 
+## symbol:Runtime.syncWindowNames
+
+The existing tmux poll reconciles labels after topology commit. windowNameOwner is the shared selector for dispatch and pending-write revalidation: current root identity, generation, connection, person name and one direct pane PID owner. Additional non-Pi panes are fine; multiple connected Pi sessions exclude new writes. Disconnected, ended, unnamed and mismatched-PID bindings grant no new authority. Supported managed launches pass Pi directly to openWindow; shell-launched children lack this direct ownership proof.
+
+Pending cancellation is checked after complete bridge frames, socket removal and journal-event microtasks. The microtask sees committed final state: config_changed is emitted before writeFacts copies the new name into sessions.name, and person_departed precedes its retired_at update. The pending set is volatile and cleared in finally; it is not a second ownership store or timer. A pre-aborted primitive never spawns a client.
+Why: a stored binding and batch eligibility can outlive session changes. A physical composition guard does not detect a second logical owner joining an existing pane. Cancellation mitigates pending requests, but cannot undo an already-admitted/executing command, even after its client exits. The operator accepted both the disconnect interval (seq14496) and this separately identified shared-window residual with mitigation (seq14533, task work-80f42a8c). One person's label may persist on a newly shared window until a user changes it or ownership becomes unambiguous. This is a label projection, not an immediate revocation protocol.
+
+Snapshot identity and full physical pane composition are still checked atomically by renameWindow. Ordinary eligible name changes and drift converge without speculative topology writes. formatWindowName supplies the full control/backslash label representation while preserving raw person names.
+Coupled: components/session-state/src/tmux.ts
+Verify: components/session-state/tests/coordinator.test.ts, components/session-state/tests/tmux.test.ts
+
 ## symbol:Runtime.stop
 
 `stop` aborts in-flight tmux reads and clears `this.db` before closing it; async work checks `this.db` after every await.

@@ -43,6 +43,10 @@ Each read has one second to answer. Only tmux's own "no server running" or "erro
 
 The pane's tty comes from tmux, not from the bridge, so the runtime fills it in from the topology and records it with source `tmux` and its own event.
 
+The same poll keeps a Pi-owned worker window's label in sync with its person/session name, including later person renames and externally changed labels. The person name is authoritative: a manual window-label change is drift. A new write requires one current connected Pi session directly owning its pane process; other non-Pi panes, such as a sidebar, are allowed. Unrelated windows, unproven shell-wrapper bindings and currently shared Pi windows are excluded from new writes. Pending requests are revalidated when logical ownership or names change and cancelled if no longer eligible. At execution, tmux atomically rechecks the live pane PID, window identity and complete physical pane composition, preserving respawned, moved, dead or composition-changed targets.
+
+Cancellation is best effort: an already-admitted or executing command may finish after bridge disconnect or a second Pi connects in an existing pane, whose physical facts have not changed. One person's label can then persist on the newly shared window because later polls skip ambiguous ownership. This accepted label-projection interval is not immediate logical revocation. Labels follow tmux's visible control-character escaping; a running session's NUL-bearing name uses the U+2400 NUL control picture in its label while the person name remains unchanged. A read or write failure is retried by later polls. Activate a code change in this path through a separately approved runtime restart; reloading Pi alone does not replace daemon code.
+
 ## Commands
 
 Any client can ask a session to do something by sending `{"type": "command", "commandId": ..., "sessionId": ..., "command": {...}}` on the socket; add `"generation"` to bind it to one incarnation, so it can never reach a later one. Commands:

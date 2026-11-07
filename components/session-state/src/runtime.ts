@@ -100,11 +100,13 @@ import { passOnAccess, requireSuccessor } from "./succession.js";
 import { HARNESS, markRead, nameOf, OPERATOR, participateIn, postToThread, type ThreadPost } from "./threads.js";
 import {
 	canonicalSocket,
+	formatWindowName,
 	killPane,
 	listClients,
 	listPanes,
 	openWindow,
 	type PaneRow,
+	renameWindow,
 	setServerOptions,
 	socketFiles,
 } from "./tmux.js";
@@ -288,6 +290,7 @@ export class Runtime {
 	private friction: { sequence?: number; error?: string } = {};
 	private polling = false;
 	private readonly stopping = new AbortController();
+	private readonly pendingWindowNames = new Set<{ controller: AbortController; current: () => boolean }>();
 
 	private readonly failingServers = new Set<string>();
 
@@ -459,12 +462,15 @@ export class Runtime {
 					this.handle(connection, message);
 				} catch (error) {
 					console.error(`message from a bridge failed: ${(error as Error).stack ?? error}`);
+				} finally {
+					this.invalidateWindowNames();
 				}
 			}),
 		);
 		socket.on("error", () => {});
 		socket.on("close", () => {
 			this.connections.delete(connection);
+			this.invalidateWindowNames();
 			if (
 				this.db &&
 				!connection.shutdown &&
@@ -4089,12 +4095,82 @@ export class Runtime {
 				if (this.db !== db) return;
 				if (result.status !== "fulfilled") continue;
 				if (result.value.panes === "absent") this.attentionShown.delete(result.value.socket);
-				else await this.showAttention(result.value.socket, result.value.clients);
+				else {
+					await this.syncWindowNames(result.value.socket, result.value.panes);
+					if (this.db !== db) return;
+					await this.showAttention(result.value.socket, result.value.clients);
+				}
 			}
 		} catch (error) {
 			console.error(`tmux poll failed: ${(error as Error).stack ?? error}`);
 		} finally {
 			this.polling = false;
+		}
+	}
+
+	private windowNameOwner(socket: string, panes: readonly PaneRow[], window: string) {
+		const connected = new Set(
+			[...this.connections]
+				.filter((connection) => !connection.shutdown && !connection.socket.destroyed)
+				.map((connection) => `${connection.sessionId}:${connection.generation}`),
+		);
+		const rows = this.db!.prepare(
+			`select s.id, s.name, i.generation, i.pane_id, i.pid from sessions s
+			join incarnations i on i.session_id = s.id and i.generation = s.generation
+			where s.kind = 'root' and s.retired_at is null and i.ended_at is null and i.tmux_socket = ?`,
+		).all(socket) as { id: string; name: string | null; generation: number; pane_id: string; pid: number }[];
+		const byPane = new Map(panes.map((pane) => [pane.paneId, pane]));
+		const owners = rows.filter((row) => {
+			const pane = byPane.get(row.pane_id);
+			return connected.has(`${row.id}:${row.generation}`) && pane && !pane.dead && pane.windowId === window;
+		});
+		if (owners.length !== 1) return;
+		const { id, generation, name, pid, pane_id } = owners[0]!;
+		const pane = byPane.get(pane_id)!;
+		if (pid !== pane.pid || !name?.trim()) return;
+		return { id, generation, name, pane };
+	}
+
+	private invalidateWindowNames(): void {
+		for (const pending of this.pendingWindowNames) {
+			if (!pending.controller.signal.aborted && (!this.db || !pending.current())) pending.controller.abort();
+		}
+	}
+
+	private async syncWindowNames(socket: string, panes: PaneRow[]): Promise<void> {
+		const db = this.db!;
+		for (const window of new Set(panes.map((pane) => pane.windowId))) {
+			if (this.db !== db || this.stopping.signal.aborted) return;
+			const owner = this.windowNameOwner(socket, panes, window);
+			if (!owner || owner.pane.windowName === formatWindowName(owner.name).label) continue;
+			const pending = {
+				controller: new AbortController(),
+				current: () => {
+					const current = this.windowNameOwner(socket, panes, window);
+					return (
+						current?.id === owner.id &&
+						current.generation === owner.generation &&
+						current.name === owner.name &&
+						current.pane.paneId === owner.pane.paneId &&
+						current.pane.pid === owner.pane.pid &&
+						current.pane.windowId === owner.pane.windowId
+					);
+				},
+			};
+			this.pendingWindowNames.add(pending);
+			try {
+				await renameWindow(
+					socket,
+					owner.pane,
+					panes,
+					owner.name,
+					AbortSignal.any([this.stopping.signal, AbortSignal.timeout(TMUX_POLL_MS), pending.controller.signal]),
+				);
+			} catch (error) {
+				console.error(`tmux window name update failed for ${socket}/${window}: ${(error as Error).message}`);
+			} finally {
+				this.pendingWindowNames.delete(pending);
+			}
 		}
 	}
 
@@ -4232,5 +4308,6 @@ export class Runtime {
 		this.db!.prepare(
 			"insert into events (at, source, session_id, generation, type, data) values (?, ?, ?, ?, ?, ?)",
 		).run(Date.now(), source, sessionId, generation, type, JSON.stringify(data));
+		if (this.pendingWindowNames.size) queueMicrotask(() => this.invalidateWindowNames());
 	}
 }

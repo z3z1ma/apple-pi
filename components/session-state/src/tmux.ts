@@ -175,6 +175,57 @@ export async function killPane(socket: string, pane: string, pid: number, signal
 	}
 }
 
+export function formatWindowName(name: string): { argument: string; label: string } {
+	const argument = Buffer.from(name).toString().replaceAll("\0", "\u2400");
+	const escapes: Record<string, string> = {
+		"\n": "\\n",
+		"\r": "\\r",
+		"\b": "\\b",
+		"\u0007": "\\a",
+		"\v": "\\v",
+		"\t": "\\t",
+		"\f": "\\f",
+		"\\": "\\\\",
+	};
+	const label = argument.replace(
+		/[\u0001-\u001f\u007f\\]/g,
+		(character) => escapes[character] ?? `\\${character.charCodeAt(0).toString(8).padStart(3, "0")}`,
+	);
+	return { argument, label };
+}
+
+export async function renameWindow(
+	socket: string,
+	pane: Pick<PaneRow, "paneId" | "pid" | "windowId">,
+	panes: readonly PaneRow[],
+	name: string,
+	signal: AbortSignal,
+): Promise<void> {
+	signal.throwIfAborted();
+	const windowPanes = new Map(panes.filter((row) => row.windowId === pane.windowId).map((row) => [row.paneId, row]));
+	const signature = [...windowPanes.values()].map((row) => `${row.paneId}:${row.pid}:${row.dead}|`).join("");
+	const argument = formatWindowName(name).argument.replaceAll("#", "#{a:35}").replaceAll("'", "'\\''");
+	try {
+		await run(
+			"tmux",
+			[
+				"-S",
+				socket,
+				"if-shell",
+				"-F",
+				"-t",
+				pane.paneId,
+				`#{&&:#{==:#{pane_dead},0},#{&&:#{==:#{pane_pid},${pane.pid}},#{&&:#{==:#{window_id},${pane.windowId}},#{==:#{P:#{pane_id}:#{pane_pid}:#{pane_dead}|},${signature}}}}}`,
+				`rename-window -t ${pane.paneId} -- '${argument}'`,
+			],
+			{ encoding: "utf8", signal },
+		);
+	} catch (error) {
+		const stderr = String((error as { stderr?: string }).stderr ?? "");
+		if (!noServer(stderr) && !/can't find pane/i.test(stderr)) throw error;
+	}
+}
+
 export async function openWindow(
 	socket: string,
 	pane: string,

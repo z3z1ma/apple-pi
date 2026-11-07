@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
@@ -36,31 +36,43 @@ const task = db.prepare("select t.bundle from work_tasks t join work_focus f on 
 const goal = task ? readFileSync(task.bundle + "/task.md", "utf8") : null;
 db.close();
 appendFileSync(process.env.FAKE_PI_LOG, JSON.stringify({ args, cwd: process.cwd(), goal }) + "\\n");
-// Simulate the title extension assigning a name in the newly started session.
-const name = args.includes("--name") ? args[args.indexOf("--name") + 1] : "Ada Lovelace";
-execFileSync("tmux", ["rename-window", "-t", process.env.TMUX_PANE, name]);
+let name = args.includes("--name") ? args[args.indexOf("--name") + 1] : "Ada Lovelace";
 const startedAt = Date.parse(execFileSync("ps", ["-o", "lstart=", "-p", String(process.pid)], { encoding: "utf8" }).trim());
-const socket = createConnection(process.env.PI_CODING_AGENT_DIR + "/state/apple-pi.sock");
-let buffer = "";
-socket.on("data", (chunk) => {
-	buffer += chunk.toString();
-	for (let end = buffer.indexOf("\\n"); end >= 0; end = buffer.indexOf("\\n")) {
-		const message = JSON.parse(buffer.slice(0, end));
-		buffer = buffer.slice(end + 1);
-		if (message.type === "command") appendFileSync(process.env.FAKE_PI_LOG + ".commands", JSON.stringify({ id, command: message.command }) + "\\n");
-	}
-});
-socket.on("connect", () => {
-	socket.write(JSON.stringify({
-		type: "hello",
-		session: { id, kind: "root", cwd: process.cwd(), name },
-		process: { pid: process.pid, startedAt },
-		run: "idle",
-		facts: {},
-		tmux: { socket: process.env.TMUX.split(",")[0], pane: process.env.TMUX_PANE },
-	}) + "\\n");
-	setInterval(() => socket.write('{"type":"heartbeat"}\\n'), 1000);
-});
+function connect() {
+	const current = createConnection(process.env.PI_CODING_AGENT_DIR + "/state/apple-pi.sock");
+	let buffer = "";
+	current.on("data", (chunk) => {
+		buffer += chunk.toString();
+		for (let end = buffer.indexOf("\\n"); end >= 0; end = buffer.indexOf("\\n")) {
+			const message = JSON.parse(buffer.slice(0, end));
+			buffer = buffer.slice(end + 1);
+			if (message.type === "subscribed") appendFileSync(process.env.FAKE_PI_LOG + ".connections", id + "\\n");
+			if (message.type !== "command") continue;
+			appendFileSync(process.env.FAKE_PI_LOG + ".commands", JSON.stringify({ id, command: message.command }) + "\\n");
+			if (message.command.kind === "rename") {
+				name = message.command.name;
+				current.write(JSON.stringify({ type: "facts", facts: { config: { name, flags: [], activeTools: [], extensions: [], skills: [], mcpServers: [] } } }) + "\\n");
+				current.write(JSON.stringify({ type: "command_progress", commandId: message.commandId, stage: "applied" }) + "\\n");
+			}
+		}
+	});
+	current.on("connect", () => {
+		current.write(JSON.stringify({
+			type: "hello",
+			session: { id, kind: "root", cwd: process.cwd(), name },
+			process: { pid: process.pid, startedAt },
+			run: "idle",
+			facts: {},
+			tmux: { socket: process.env.TMUX.split(",")[0], pane: process.env.TMUX_PANE },
+		}) + "\\n");
+		current.write('{"type":"subscribe","sessionIds":[]}\\n');
+	});
+	const heartbeat = setInterval(() => current.write('{"type":"heartbeat"}\\n'), 1000);
+	current.on("close", () => clearInterval(heartbeat));
+	return current;
+}
+let socket = connect();
+process.on("SIGUSR1", () => { socket.end(); socket = connect(); });
 `,
 );
 chmodSync(join(fakeDir, "pi"), 0o755);
@@ -178,7 +190,17 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 			cwd: workDir,
 			goal: expect.stringContaining("Read brief.md and document the interfaces."),
 		});
-		expect(tmux("list-windows", "-a", "-F", "#{window_name}").split("\n")).toContain("Ada Lovelace");
+		expect(query(state.dbPath, "select name from sessions where id = 'worker-1'")).toEqual([{ name: "Ada Lovelace" }]);
+		const worker = query<{ tmux_socket: string; pane_id: string; pid: number }>(
+			state.dbPath,
+			"select tmux_socket, pane_id, pid from incarnations where session_id = 'worker-1' and ended_at is null",
+		)[0]!;
+		expect(worker.tmux_socket).toBe(realpathSync(tmux("display-message", "-p", "#{socket_path}")));
+		expect(tmux("display-message", "-p", "-t", worker.pane_id, "#{pane_pid}")).toBe(String(worker.pid));
+		await vi.waitFor(
+			() => expect(tmux("list-windows", "-a", "-F", "#{window_name}").split("\n")).toContain("Ada Lovelace"),
+			{ timeout: 4000 },
+		);
 		expect(query(state.dbPath, "select stage from commands where session_id = 'worker-1' and kind = 'start'")).toEqual([
 			{ stage: "applied" },
 		]);
@@ -234,6 +256,131 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 		} catch {}
 	}
 }, 40000);
+
+test("a named worker window repairs drift without changing an unrelated window", async () => {
+	const run = await coordinator([
+		call("hire", { role: "repository-archaeologist", session_id: "window-drift", name: "Grace Hopper" }),
+	]);
+	let pane: string | undefined;
+	try {
+		await run.session.prompt("start a named worker");
+		pane = query<{ pane_id: string }>(
+			state.dbPath,
+			"select pane_id from incarnations where session_id = 'window-drift' and ended_at is null",
+		)[0]!.pane_id;
+		expect(tmux("display-message", "-p", "-t", pane, "#{window_name}")).toBe("Grace Hopper");
+		const homeName = tmux("display-message", "-p", "-t", "home", "#{window_name}");
+		tmux("split-window", "-d", "-t", pane, "sleep 600");
+		tmux("rename-window", "-t", pane, "incident logs");
+		await vi.waitFor(() => expect(tmux("display-message", "-p", "-t", pane!, "#{window_name}")).toBe("Grace Hopper"), {
+			timeout: 4000,
+		});
+		expect(tmux("display-message", "-p", "-t", "home", "#{window_name}")).toBe(homeName);
+		const renamed = "Grace 'Hopper'; $HOME #{pane_id} \\";
+		const label = renamed.replaceAll("\\", "\\\\");
+		expect((await sendCommand(state.socketPath, "window-drift", { kind: "rename", name: renamed })).at(-1)?.stage).toBe(
+			"applied",
+		);
+		await vi.waitFor(() => expect(tmux("display-message", "-p", "-t", pane!, "#{window_name}")).toBe(label), {
+			timeout: 4000,
+		});
+		expect(query(state.dbPath, "select name from sessions where id = 'window-drift'")).toEqual([{ name: renamed }]);
+		const before = incarnation("window-drift");
+		const pid = Number(tmux("display-message", "-p", "-t", pane, "#{pane_pid}"));
+		process.kill(pid, "SIGUSR1");
+		await vi.waitFor(
+			() =>
+				expect(
+					readFileSync(`${piLog}.connections`, "utf8")
+						.split("\n")
+						.filter((id) => id === "window-drift"),
+				).toHaveLength(2),
+			{ timeout: 4000 },
+		);
+		tmux("rename-window", "-t", pane, "reconnected drift");
+		await vi.waitFor(() => expect(tmux("display-message", "-p", "-t", pane!, "#{window_name}")).toBe(label), {
+			timeout: 4000,
+		});
+		expect(incarnation("window-drift")).toEqual(before);
+	} finally {
+		await close(run);
+		if (pane) tmux("kill-pane", "-t", pane);
+	}
+}, 20000);
+
+test.each([
+	["style", "Ada #[fg=red] Lovelace", "Ada #[fg=red] Lovelace"],
+	["style-run", "Ada ##[fg=red] #{pane_id} #S", "Ada ##[fg=red] #{pane_id} #S"],
+	["controls", "Ada\u0007\b\v\f\t\u001b\u007fLovelace", "Ada\\a\\b\\v\\f\\t\\033\\177Lovelace"],
+	["nul", "Ada\0Lovelace", "Ada\u2400Lovelace"],
+])(
+	"window name %s converges without repeating rename hooks",
+	async (caseId, name, label) => {
+		const id = `label-${caseId}`;
+		const run = await coordinator([
+			call("hire", { role: "repository-archaeologist", session_id: id, name: "Initial person" }),
+		]);
+		let pane: string | undefined;
+		try {
+			await run.session.prompt("start a name-boundary worker");
+			pane = query<{ pane_id: string }>(
+				state.dbPath,
+				"select pane_id from incarnations where session_id = ? and ended_at is null",
+				id,
+			)[0]!.pane_id;
+			const marker = join(workDir, `rename-${caseId}`);
+			tmux("set-hook", "-w", "-t", pane, "after-rename-window", `run-shell 'printf x >> ${marker}'`);
+			expect((await sendCommand(state.socketPath, id, { kind: "rename", name })).at(-1)?.stage).toBe("applied");
+			await vi.waitFor(() => expect(tmux("display-message", "-p", "-t", pane!, "#{window_name}")).toBe(label), {
+				timeout: 4000,
+			});
+			await vi.waitFor(() => expect(existsSync(marker)).toBe(true));
+			expect(query(state.dbPath, "select name from sessions where id = ?", id)).toEqual([{ name }]);
+			writeFileSync(marker, "");
+			await new Promise((resolve) => setTimeout(resolve, 2200));
+			expect(readFileSync(marker, "utf8")).toBe("");
+		} finally {
+			await close(run);
+			if (pane) tmux("kill-pane", "-t", pane);
+		}
+	},
+	15000,
+);
+
+test("two Pi sessions sharing a window leave its label alone", async () => {
+	const run = await coordinator([
+		call("hire", { role: "repository-archaeologist", session_id: "shared-one", name: "First person" }),
+		call("hire", { role: "repository-archaeologist", session_id: "shared-two", name: "Second person" }),
+	]);
+	const panes: string[] = [];
+	try {
+		await run.session.prompt("start two workers");
+		for (const id of ["shared-one", "shared-two"]) {
+			panes.push(
+				query<{ pane_id: string }>(
+					state.dbPath,
+					"select pane_id from incarnations where session_id = ? and ended_at is null",
+					id,
+				)[0]!.pane_id,
+			);
+		}
+		tmux("join-pane", "-d", "-s", panes[1]!, "-t", panes[0]!);
+		const window = tmux("display-message", "-p", "-t", panes[0]!, "#{window_id}");
+		await vi.waitFor(
+			() =>
+				expect(query(state.dbPath, "select id from tmux_panes where window_id = ? order by id", window)).toHaveLength(
+					2,
+				),
+			{ timeout: 4000 },
+		);
+		tmux("rename-window", "-t", panes[0]!, "joint notes");
+		await new Promise((resolve) => setTimeout(resolve, 2200));
+		expect(tmux("display-message", "-p", "-t", panes[0]!, "#{window_name}")).toBe("joint notes");
+	} finally {
+		await close(run);
+		for (const pane of panes) tmux("kill-pane", "-t", pane);
+	}
+}, 15000);
 
 test("assigning a sleeping report opens its window with the goal waiting in its task thread", async () => {
 	let workerId = "";

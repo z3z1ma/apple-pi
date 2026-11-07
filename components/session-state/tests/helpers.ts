@@ -66,6 +66,7 @@ export async function fakeBridge(
 		process?: Record<string, unknown>;
 		facts?: Record<string, unknown>;
 		run?: string;
+		tmux?: { socket: string; pane: string };
 	} = {},
 ) {
 	const socket: Socket = createConnection(socketPath);
@@ -77,6 +78,7 @@ export async function fakeBridge(
 		process: { pid, startedAt, ...hello.process },
 		run: hello.run ?? "idle",
 		facts: hello.facts ?? {},
+		tmux: hello.tmux,
 	});
 	return { socket, send };
 }

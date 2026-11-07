@@ -5,6 +5,8 @@ Why: an inherited pane or the operator's socket directory would attach the test 
 
 ## symbol:fakeBridge
 
+Pass explicit `hello.tmux` facts on the initial hello when testing pane ownership. A later hello under the same incarnation preserves its original binding and cannot repair a fixture that first admitted an unbound process. The optional field is omitted for existing unbound callers.
+
 Use `hello.process` overrides for an explicit launch token when a control claims the same launch across hellos. The default remains a raw legacy-shaped socket hello; it does not infer a token from PID/time.
 
 Put organization fields such as `reportsTo` and `manages` in `hello.facts`, and check the stored reporting line when a fixture's tree matters.
