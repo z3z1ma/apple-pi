@@ -23,39 +23,47 @@ beforeAll(async () => {
 });
 afterAll(() => browser?.close());
 
-async function openKnowledgePage(height = 900) {
+async function openKnowledgePage(height = 900, readOnlyRoot?: string) {
 	const base = realpathSync(mkdtempSync(join(tmpdir(), "knowledge-ui-")));
-	const roots = ["atlas", "beacon", "empty"].map((name) => join(base, name));
+	const roots = readOnlyRoot
+		? [realpathSync(readOnlyRoot)]
+		: ["atlas", "beacon", "empty"].map((name) => join(base, name));
 	function put(root: string, path: string, text: string) {
 		mkdirSync(dirname(join(root, path)), { recursive: true });
 		writeFileSync(join(root, path), text);
 	}
-	for (const root of roots) mkdirSync(join(root, ".git"), { recursive: true });
-	for (const root of roots.slice(0, 2)) {
-		put(root, "src/app.ts", 'export const message = "original";\n');
-		put(root, "src/utility.ts", "export const utility = 1;\n");
-		put(root, "tests/app.test.ts", "test");
-		put(root, "tests/utility.test.ts", "test");
-		put(
-			root,
-			".context/src/app.ts.md",
-			"## file\nThe application owns **startup**.\nCoupled: src/utility.ts\nVerify: tests/app.test.ts, missing.test.ts\nSee [[Guide]].\n<img src=x onerror=alert(1)>\n",
-		);
-		put(root, ".context/src/utility.ts.md", "## file\nUtility rationale.\nVerify: tests/utility.test.ts\n");
-		put(
-			root,
-			".wiki/Guide.md",
-			"# Guide\nRead the **guide** for this repository.\n[[Details#Design|Design details]]\n",
-		);
-		put(root, ".wiki/Details.md", "# Design\nDesign rationale.\n[[Guide]]\n");
+	if (!readOnlyRoot) {
+		for (const root of roots) mkdirSync(join(root, ".git"), { recursive: true });
+		for (const root of roots.slice(0, 2)) {
+			put(root, "src/app.ts", 'export const message = "original";\n');
+			put(root, "src/utility.ts", "export const utility = 1;\n");
+			put(root, "tests/app.test.ts", "test");
+			put(root, "tests/utility.test.ts", "test");
+			put(
+				root,
+				".context/src/app.ts.md",
+				"## file\nThe application owns **startup**.\nCoupled: src/utility.ts\nVerify: tests/app.test.ts, missing.test.ts\nSee [[Guide]].\n<img src=x onerror=alert(1)>\n",
+			);
+			put(root, ".context/src/utility.ts.md", "## file\nUtility rationale.\nVerify: tests/utility.test.ts\n");
+			put(
+				root,
+				".wiki/Guide.md",
+				"# Guide\nRead the **guide** for this repository.\n[[Details#Design|Design details]]\n",
+			);
+			put(root, ".wiki/Details.md", "# Design\nDesign rationale.\n[[Guide]]\n");
+		}
+		put(roots[1]!, "src/beacon.ts", "export const beacon = true;\n");
+		put(roots[1]!, ".context/src/beacon.ts.md", "## file\nBeacon rationale.\n");
 	}
-	put(roots[1]!, "src/beacon.ts", "export const beacon = true;\n");
-	put(roots[1]!, ".context/src/beacon.ts.md", "## file\nBeacon rationale.\n");
 	const workspace = openWorkspace(() => {
 		throw new Error("No runtime access expected");
 	});
 	const knowledge = openKnowledge(workspace);
-	const calls = { graph: [] as KnowledgeRequest[], content: [] as (KnowledgeRequest & { id: string })[] };
+	const calls = {
+		graph: [] as KnowledgeRequest[],
+		content: [] as (KnowledgeRequest & { id: string })[],
+		reads: [] as { mode: string; nodes: number; edges: number; milliseconds: number }[],
+	};
 	const page = await browser.newPage({ viewport: { width: 1440, height }, colorScheme: "light" });
 	page.setDefaultTimeout(10000);
 	const errors: string[] = [];
@@ -68,9 +76,18 @@ async function openKnowledgePage(height = 900) {
 		if (!file || !existsSync(file)) return route.fulfill({ status: 404 });
 		return route.fulfill({ body: readFileSync(file), contentType: contentType(file) });
 	});
-	await page.exposeFunction("knowledgeGraph", (request: KnowledgeRequest) => {
+	await page.exposeFunction("knowledgeGraph", async (request: KnowledgeRequest) => {
 		calls.graph.push(request);
-		return knowledge.graph(request);
+		const start = performance.now();
+		const result = await knowledge.graph(request);
+		if (result.ok)
+			calls.reads.push({
+				mode: request.mode,
+				nodes: result.value.nodes.length,
+				edges: result.value.edges.length,
+				milliseconds: performance.now() - start,
+			});
+		return result;
 	});
 	await page.exposeFunction("knowledgeContent", (request: KnowledgeRequest & { id: string }) => {
 		calls.content.push(request);
@@ -207,6 +224,54 @@ async function shot(page: Page, name: string) {
 	await page.screenshot({ path: join(SHOTS, `aw-knowledge-${name}.png`), animations: "disabled" });
 }
 
+test.skipIf(!process.env.AGENT_KNOWLEDGE_REAL_ROOT)(
+	"real repository graph read and built-UI layout measurements",
+	async () => {
+		const fixture = await openKnowledgePage(900, process.env.AGENT_KNOWLEDGE_REAL_ROOT);
+		const { page, calls, errors } = fixture;
+		const measurements: unknown[] = [];
+		try {
+			for (const mode of ["context", "wiki"] as const) {
+				const start = performance.now();
+				if (mode === "context") await enter(page, "Knowledge");
+				else await choose(page.getByRole("combobox", { name: "Knowledge mode" }), mode);
+				await vi.waitFor(async () => {
+					expect(calls.reads.at(-1)?.mode).toBe(mode);
+					expect(await page.locator(".wp-knowledge-hits button").count()).toBe(calls.reads.at(-1)?.nodes);
+				});
+				const firstPaint = performance.now() - start;
+				await page.waitForTimeout(7000);
+				measurements.push({ mode, firstPaint, backend: calls.reads.at(-1) });
+				await shot(page, `real-${mode}-light-1440`);
+				await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
+				await page.waitForTimeout(300);
+				await shot(page, `real-${mode}-dark-1440`);
+				const hub = await page
+					.locator(".wp-knowledge-hits button")
+					.evaluateAll((buttons) =>
+						buttons.sort((a, b) => Number(b.dataset.degree) - Number(a.dataset.degree))[0]!.getAttribute("aria-label"),
+					);
+				const box = (await page.getByRole("button", { name: hub!, exact: true }).boundingBox())!;
+				await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+				await page.waitForTimeout(300);
+				await shot(page, `real-${mode}-hover-dark-1440`);
+				await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+				await page.getByRole("complementary", { name: "Knowledge reader" }).waitFor();
+				await page.mouse.move(5, 5);
+				await page.waitForTimeout(600);
+				await shot(page, `real-${mode}-selected-dark-1440`);
+				await page.getByRole("button", { name: "Close knowledge reader" }).click();
+				await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
+			}
+			expect(errors).toEqual([]);
+			if (SHOTS) writeFileSync(join(SHOTS, "real-measurements.json"), JSON.stringify(measurements, null, 2));
+		} finally {
+			await fixture.close();
+		}
+	},
+	120000,
+);
+
 test("Knowledge is lazy, reads both graph modes and follows links in light and dark", async () => {
 	const fixture = await openKnowledgePage();
 	const { page, calls, errors } = fixture;
@@ -221,10 +286,14 @@ test("Knowledge is lazy, reads both graph modes and follows links in light and d
 		await reader.getByRole("button", { name: "coupled src/utility.ts outgoing" }).click();
 		await vi.waitFor(async () => expect(await reader.textContent()).toContain("Utility rationale"));
 		await shot(page, "context-light-1440");
+		await findNode(page, "src/app.ts");
+		await reader.getByRole("link", { name: "Guide", exact: true }).click();
+		await vi.waitFor(async () => expect(await reader.textContent()).toContain("Read the guide"));
 		await choose(page.getByRole("combobox", { name: "Knowledge mode" }), "wiki");
 		await page.getByRole("button", { name: "Read .wiki/Guide.md", exact: true }).waitFor();
 		await findNode(page, ".wiki/Guide.md");
-		await reader.getByRole("button", { name: "wiki .wiki/Details.md outgoing" }).click();
+		expect(await page.locator(".wp-knowledge-legend").textContent()).not.toMatch(/Coupled|Verify/);
+		await reader.getByRole("link", { name: "Design details", exact: true }).click();
 		await vi.waitFor(async () => expect(await reader.textContent()).toContain("Design rationale"));
 		await page.getByRole("button", { name: "Theme: dark mode", exact: true }).click();
 		await shot(page, "wiki-dark-1440");
@@ -299,38 +368,69 @@ test("graph zoom, pan, drag and neighbour highlights work; every rail app stays 
 		await enter(page, "Knowledge");
 		const node = page.getByRole("button", { name: "Read src/app.ts", exact: true });
 		await node.waitFor();
+		const box = async (name: string) => (await page.getByRole("button", { name, exact: true }).boundingBox())!;
+		const centre = async (name: string) => {
+			const found = await box(name);
+			return { x: found.x + found.width / 2, y: found.y + found.height / 2 };
+		};
+		expect((await box("Read src/app.ts")).width).toBeGreaterThan((await box("Read tests/app.test.ts")).width);
+		const graphBox = (await page.locator(".wp-knowledge-graph canvas").boundingBox())!;
+		await vi.waitFor(async () => {
+			for (const hit of await page.locator(".wp-knowledge-hits button").all()) {
+				const found = (await hit.boundingBox())!;
+				expect(found.x).toBeGreaterThanOrEqual(graphBox.x);
+				expect(found.y).toBeGreaterThanOrEqual(graphBox.y);
+				expect(found.x + found.width).toBeLessThanOrEqual(graphBox.x + graphBox.width);
+				expect(found.y + found.height).toBeLessThanOrEqual(graphBox.y + graphBox.height);
+			}
+		});
 		await node.focus();
 		await page.keyboard.press("Enter");
 		await page.getByRole("complementary", { name: "Knowledge reader" }).waitFor();
-		const transform = page.locator(".wp-knowledge-graph svg > g");
-		const before = await transform.getAttribute("transform");
+		const before = (await box("Read src/app.ts")).width;
 		await page.getByRole("button", { name: "Zoom in", exact: true }).click();
-		expect(await transform.getAttribute("transform")).not.toBe(before);
+		await vi.waitFor(async () => expect((await box("Read src/app.ts")).width).toBeGreaterThan(before));
+		const still = async () => {
+			let previous = await centre("Read src/app.ts");
+			await vi.waitFor(
+				async () => {
+					await page.waitForTimeout(150);
+					const next = await centre("Read src/app.ts");
+					const moved = Math.hypot(next.x - previous.x, next.y - previous.y);
+					previous = next;
+					expect(moved).toBeLessThan(0.5);
+				},
+				{ timeout: 10000 },
+			);
+			return previous;
+		};
 		await page.getByRole("button", { name: "Fit graph", exact: true }).click();
-		const svg = page.locator(".wp-knowledge-graph svg");
-		const bounds = (await svg.boundingBox())!;
-		const start = { x: bounds.x + 30, y: bounds.y + bounds.height / 2 };
-		const panBefore = await transform.getAttribute("transform");
+		const canvas = (await page.locator(".wp-knowledge-graph canvas").boundingBox())!;
+		const panBefore = await still();
+		await page.mouse.move(canvas.x + canvas.width - 20, canvas.y + 20);
+		await page.mouse.down();
+		await page.mouse.move(canvas.x + canvas.width + 60, canvas.y + 70, { steps: 4 });
+		await page.mouse.up();
+		await vi.waitFor(async () => expect((await centre("Read src/app.ts")).x).toBeGreaterThan(panBefore.x + 40));
+		await page.getByRole("button", { name: "Fit graph", exact: true }).click();
+		const start = await still();
 		await page.mouse.move(start.x, start.y);
 		await page.mouse.down();
-		await page.mouse.move(start.x + 80, start.y + 50);
-		await page.mouse.up();
-		expect(await transform.getAttribute("transform")).not.toBe(panBefore);
-		await page.getByRole("button", { name: "Fit graph", exact: true }).click();
-		const circle = node.locator("circle");
-		const box = (await circle.boundingBox())!;
-		await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-		await page.mouse.down();
-		await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 35, { steps: 8 });
+		await page.mouse.move(start.x + 60, start.y + 35, { steps: 8 });
 		await vi.waitFor(async () => {
-			const moved = (await circle.boundingBox())!;
-			expect(Math.abs(moved.x + moved.width / 2 - (box.x + box.width / 2 + 60))).toBeLessThan(2);
-			expect(Math.abs(moved.y + moved.height / 2 - (box.y + box.height / 2 + 35))).toBeLessThan(2);
+			const moved = await centre("Read src/app.ts");
+			expect(Math.abs(moved.x - (start.x + 60))).toBeLessThan(3);
+			expect(Math.abs(moved.y - (start.y + 35))).toBeLessThan(3);
 		});
 		await page.mouse.up();
 		expect(await node.getAttribute("aria-pressed")).toBe("true");
-		await node.hover();
-		expect(await page.locator(".wp-knowledge-edge[opacity='0.12']").count()).toBeGreaterThan(0);
+		const hovered = await centre("Read src/app.ts");
+		await page.mouse.move(hovered.x, hovered.y);
+		await vi.waitFor(async () =>
+			expect(await page.locator(".wp-knowledge-graph canvas").evaluate((element) => element.style.cursor)).toBe(
+				"pointer",
+			),
+		);
 		const rail = page.getByRole("navigation", { name: "Applications" });
 		const labelBounds = await rail.getByRole("button", { name: "Knowledge", exact: true }).evaluate((button) => {
 			const range = document.createRange();

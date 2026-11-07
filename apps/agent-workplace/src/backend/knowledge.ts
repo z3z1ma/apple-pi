@@ -117,7 +117,13 @@ async function extract(workspace: WorkspaceApi, request: KnowledgeRequest): Prom
 				}
 			}
 			if (!nodes.has(target.id)) nodes.set(target.id, target);
-			graph.edges.push({ from: document.id, to: target.id, kind: reference.kind, line: reference.line });
+			graph.edges.push({
+				from: document.id,
+				to: target.id,
+				kind: reference.kind,
+				line: reference.line,
+				...(reference.kind === "wiki" ? { target: reference.target } : {}),
+			});
 		}
 	}
 	graph.nodes = [...nodes.values()].sort((a, b) => a.id.localeCompare(b.id));

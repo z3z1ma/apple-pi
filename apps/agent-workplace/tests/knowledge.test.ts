@@ -67,7 +67,9 @@ describe("repository knowledge", () => {
 		put(root, ".wiki/release.md.md", "# Dotted slug\n[[release.md]]");
 		const result = await api.graph({ root, mode: "context" });
 		if (!result.ok) throw new Error(result.reason);
-		expect(result.value.edges).toEqual([{ from: "main.ts", to: ".wiki/release.md.md", kind: "wiki", line: 2 }]);
+		expect(result.value.edges).toEqual([
+			{ from: "main.ts", to: ".wiki/release.md.md", kind: "wiki", line: 2, target: "release.md" },
+		]);
 		expect(result.value.warnings).toEqual([]);
 	});
 
@@ -107,7 +109,7 @@ describe("repository knowledge", () => {
 			{ from: "src/main.ts", to: "src/other.ts", kind: "coupled", line: 3 },
 			{ from: "src/main.ts", to: "missing.ts", kind: "coupled", line: 3 },
 			{ from: "src/main.ts", to: "tests/main.test.ts", kind: "verify", line: 4 },
-			{ from: "src/main.ts", to: ".wiki/pages/Guide.md", kind: "wiki", line: 5 },
+			{ from: "src/main.ts", to: ".wiki/pages/Guide.md", kind: "wiki", line: 5, target: "Guide" },
 		]);
 		expect(result.value.nodes.find((node) => node.id === "src/other.ts")?.kind).toBe("context");
 		expect(result.value.nodes.find((node) => node.id === "missing.ts")?.kind).toBe("missing");

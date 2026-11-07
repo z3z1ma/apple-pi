@@ -38,6 +38,11 @@ function KnowledgeBody({ graph, active }: { graph: KnowledgeGraph; active: boole
 		: [];
 	const links = graph.edges.filter((edge) => edge.from === selected || edge.to === selected);
 	const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
+	const wikiLinks = Object.fromEntries(
+		links
+			.filter((edge) => edge.kind === "wiki" && edge.from === selected && edge.target !== undefined)
+			.map((edge) => [edge.target!.normalize("NFKC").toLowerCase(), edge.to]),
+	);
 	return (
 		<div className={`wp-knowledge-body${selected ? " has-detail" : ""}`}>
 			<div className="wp-knowledge-map">
@@ -102,8 +107,11 @@ function KnowledgeBody({ graph, active }: { graph: KnowledgeGraph; active: boole
 								<FileReferenceCwd.Provider value={graph.root}>
 									<Markdown
 										text={content.text}
+										wikiLinks={wikiLinks}
 										onLink={(href, file) => {
-											if (!file) void window.agentWorkplace.openLink(href);
+											if (href.startsWith("#knowledge/"))
+												setSelected(decodeURIComponent(href.slice("#knowledge/".length)));
+											else if (!file) void window.agentWorkplace.openLink(href);
 										}}
 									/>
 								</FileReferenceCwd.Provider>

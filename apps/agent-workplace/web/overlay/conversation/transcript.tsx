@@ -62,11 +62,13 @@ export function blockKey(block: Block): string {
 export const Markdown = memo(function Markdown({
 	text,
 	onLink,
+	wikiLinks,
 }: {
 	text: string;
 	onLink?: (href: string, file: boolean) => void;
+	wikiLinks?: Record<string, string>;
 }) {
-	const references = useFileReferenceHtml(markdownHtml(text));
+	const references = useFileReferenceHtml(markdownHtml(text, wikiLinks));
 	const follow = (event: React.MouseEvent) => {
 		if (references.follow(event)) return;
 		if (!onLink || event.button > 1) return;

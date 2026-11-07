@@ -3054,7 +3054,8 @@ async function extract(workspace, request) {
 			from: document.id,
 			to: target.id,
 			kind: reference.kind,
-			line: reference.line
+			line: reference.line,
+			...reference.kind === "wiki" ? { target: reference.target } : {}
 		});
 	}
 	graph.nodes = [...nodes.values()].sort((a, b) => a.id.localeCompare(b.id));

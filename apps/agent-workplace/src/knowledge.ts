@@ -16,6 +16,7 @@ export interface KnowledgeEdge {
 	to: string;
 	kind: KnowledgeEdgeKind;
 	line: number;
+	target?: string;
 }
 
 export interface KnowledgeGraph {
