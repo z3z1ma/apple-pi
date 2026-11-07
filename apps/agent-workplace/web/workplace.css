@@ -233,6 +233,8 @@ body.workplace {
 }
 .wp-rail-apps {
 	flex: 1 1 auto;
+	align-self: stretch;
+	margin-inline: -7px;
 	min-height: 0;
 	display: flex;
 	flex-direction: column;

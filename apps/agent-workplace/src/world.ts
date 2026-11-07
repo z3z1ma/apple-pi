@@ -6,6 +6,7 @@ import type { IntegrationsApi } from "./integrations.js";
 export type { CallInPerson, CallInRequest, CallInResult } from "./call-in.js";
 
 import type { GitApi } from "./git.js";
+import type { KnowledgeApi } from "./knowledge.js";
 import type { OrgMoveRequest, OrgMoveResult, OrgStartProgress, OrgStartRequest } from "./org.js";
 import type { ReviewsApi } from "./reviews.js";
 import type { TerminalApi } from "./terminal.js";
@@ -448,6 +449,7 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	communications: CommunicationsApi;
 	reviews: ReviewsApi;
 	workspace: WorkspaceApi;
+	knowledge: KnowledgeApi;
 	git: GitApi;
 	terminal: TerminalApi;
 	snapshot(): Promise<WorldSnapshot>;

@@ -327,7 +327,11 @@ function sortFindings(findings: WikiFinding[]): WikiFinding[] {
 	);
 }
 
-async function loadWikiGraph(start: string, signal?: AbortSignal): Promise<WikiGraph> {
+export async function loadWikiGraph(
+	start: string,
+	signal?: AbortSignal,
+	includePath?: (path: string) => boolean,
+): Promise<WikiGraph> {
 	const projectRoot = await findWikiProjectRoot(start, signal);
 	signal?.throwIfAborted();
 	const wikiRoot = join(projectRoot, ".wiki");
@@ -354,6 +358,7 @@ async function loadWikiGraph(start: string, signal?: AbortSignal): Promise<WikiG
 		for (const entry of entries) {
 			signal?.throwIfAborted();
 			const absolute = join(directory, entry.name);
+			if (includePath && !includePath(absolute)) continue;
 			const path = portablePath(relative(projectRoot, absolute));
 			const stat = await lstat(absolute);
 			if (stat.isSymbolicLink()) {
@@ -511,7 +516,7 @@ function normalizeTargetPath(target: string): string {
 	return wikiRelative;
 }
 
-function resolveTarget(graph: WikiGraph, rawTarget: string): WikiPage {
+export function resolveWikiTarget(graph: WikiGraph, rawTarget: string): WikiPage {
 	const target = rawTarget.trim();
 	if (!target) throw new Error("wiki_references target must not be empty");
 	const isPath = target.includes("/") || target.includes("\\") || target.toLowerCase().endsWith(".md");
@@ -525,7 +530,11 @@ function resolveTarget(graph: WikiGraph, rawTarget: string): WikiPage {
 		throw new Error(`Wiki page not found: ${path}`);
 	}
 
-	const matches = graph.pages.filter((page) => page.key === slugKey(target));
+	return resolveWikiSlug(graph, target);
+}
+
+export function resolveWikiSlug(graph: WikiGraph, target: string): WikiPage {
+	const matches = graph.pages.filter((page) => page.key === slugKey(target.trim()));
 	if (matches.length === 0) throw new Error(`Wiki slug not found: ${target}`);
 	if (matches.length > 1) {
 		throw new Error(`Wiki slug is ambiguous: ${target} (${matches.map((page) => page.path).join(", ")})`);
@@ -551,7 +560,7 @@ export async function getWikiReferences(
 	}
 	if (depth !== 1 && depth !== 2) throw new Error("wiki_references depth must be 1 or 2");
 	const graph = await loadWikiGraph(start, signal);
-	const target = resolveTarget(graph, targetInput);
+	const target = resolveWikiTarget(graph, targetInput);
 	const distances = new Map<string, number>([[target.path, 0]]);
 	const queue = [target.path];
 	const traversedEdges = new Map<string, WikiEdge>();

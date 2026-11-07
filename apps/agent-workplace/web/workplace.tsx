@@ -41,6 +41,7 @@ import {
 import { WorkplaceGit } from "./workplace-git.js";
 import { Icon } from "./workplace-icon.js";
 import { WorkplaceIssues } from "./workplace-issues.js";
+import { WorkplaceKnowledge } from "./workplace-knowledge.js";
 import { muted } from "./workplace-later.js";
 import { Mail } from "./workplace-mail.js";
 import {
@@ -193,6 +194,7 @@ const VIEW_TITLES: Record<string, string> = {
 	org: "Organizations",
 	code: "Code",
 	git: "Git",
+	knowledge: "Knowledge",
 	reviews: "Reviews",
 	issues: "Issues",
 	world: "World",
@@ -320,13 +322,14 @@ function Workplace() {
 	);
 	const initialView = new URLSearchParams(location.search).get("workplace");
 	const [view, setView] = useState(
-		["org", "mail", "code", "git", "reviews", "issues", "world", "settings"].includes(initialView ?? "")
+		["org", "mail", "code", "git", "knowledge", "reviews", "issues", "world", "settings"].includes(initialView ?? "")
 			? (initialView ?? "chat")
 			: "chat",
 	);
 	const [orgVisited, setOrgVisited] = useState(initialView === "org");
 	const [codeVisited, setCodeVisited] = useState(initialView === "code");
 	const [gitVisited, setGitVisited] = useState(initialView === "git");
+	const [knowledgeVisited, setKnowledgeVisited] = useState(initialView === "knowledge");
 	const [reviewsVisited, setReviewsVisited] = useState(initialView === "reviews");
 	const [reviewRequest, setReviewRequest] = useState<{ id: string; key: string }>();
 	const reviewUpdates = useReviewUpdates(!!world?.connected, workspace?.members);
@@ -537,6 +540,7 @@ function Workplace() {
 						{ id: "org", label: "Org", icon: "org" },
 						{ id: "code", label: "Code", icon: "code" },
 						{ id: "git", label: "Git", icon: "git" },
+						{ id: "knowledge", label: "Knowledge", icon: "knowledge" },
 						{
 							id: "reviews",
 							label: "Reviews",
@@ -550,6 +554,7 @@ function Workplace() {
 						if (id === "org") setOrgVisited(true);
 						if (id === "code") setCodeVisited(true);
 						if (id === "git") setGitVisited(true);
+						if (id === "knowledge") setKnowledgeVisited(true);
 						if (id === "reviews") setReviewsVisited(true);
 						if (id === "issues") setIssuesVisited(true);
 						setView(id);
@@ -674,6 +679,11 @@ function Workplace() {
 									{gitVisited && (
 										<div hidden={view !== "git"}>
 											<WorkplaceGit active={view === "git"} />
+										</div>
+									)}
+									{knowledgeVisited && (
+										<div hidden={view !== "knowledge"}>
+											<WorkplaceKnowledge active={view === "knowledge"} />
 										</div>
 									)}
 									{reviewsVisited && (

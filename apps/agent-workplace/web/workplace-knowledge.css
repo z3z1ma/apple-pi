@@ -1,0 +1,260 @@
+.wp-knowledge-view {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	color: var(--wp-text);
+	background: var(--wp-bg);
+}
+.wp-knowledge-view :where(button, input) {
+	font: inherit;
+	color: inherit;
+}
+.wp-knowledge-view button {
+	cursor: pointer;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	background: var(--wp-panel);
+	padding: 6px 10px;
+}
+.wp-knowledge-view :focus-visible {
+	outline: 2px solid var(--wp-accent);
+	outline-offset: 2px;
+}
+.wp-knowledge-toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+	padding: 14px 20px;
+	border-bottom: 1px solid var(--wp-border);
+	background: var(--wp-panel);
+}
+.wp-knowledge-toolbar h1 {
+	font-size: 18px;
+	margin: 0 0 3px;
+}
+.wp-knowledge-toolbar small {
+	color: var(--wp-muted);
+}
+.wp-knowledge-toolbar form {
+	display: flex;
+	gap: 5px;
+}
+.wp-knowledge-view input {
+	min-width: 0;
+	border: 1px solid var(--wp-border);
+	border-radius: 6px;
+	padding: 7px 10px;
+	background: var(--wp-bg);
+}
+.wp-knowledge-toolbar input {
+	width: 160px;
+}
+.wp-knowledge-body {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	flex: 1;
+	min-height: 0;
+}
+.wp-knowledge-body.has-detail {
+	grid-template-columns: minmax(0, 1fr) minmax(300px, 36%);
+}
+.wp-knowledge-map {
+	position: relative;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+.wp-knowledge-search {
+	position: absolute;
+	top: 14px;
+	left: 18px;
+	width: min(340px, 75%);
+	z-index: 2;
+}
+.wp-knowledge-search input {
+	width: 100%;
+	box-sizing: border-box;
+	box-shadow: 0 2px 8px #0001;
+}
+.wp-knowledge-search ul {
+	margin: 6px 0;
+	padding: 4px;
+	list-style: none;
+	max-height: 50vh;
+	overflow: auto;
+	background: var(--wp-panel);
+	border: 1px solid var(--wp-border);
+	border-radius: 8px;
+}
+.wp-knowledge-search li button {
+	width: 100%;
+	text-align: left;
+	border: 0;
+	overflow-wrap: anywhere;
+}
+.wp-knowledge-links button:hover,
+.wp-knowledge-search li button:hover {
+	background: var(--wp-hover);
+}
+.wp-knowledge-graph {
+	position: relative;
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+}
+.wp-knowledge-graph canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+	touch-action: none;
+	user-select: none;
+	cursor: grab;
+}
+.wp-knowledge-hits {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	padding: 0;
+	min-width: 0;
+	border: 0;
+	pointer-events: none;
+	overflow: hidden;
+}
+.wp-knowledge-hits button {
+	position: absolute;
+	top: 0;
+	left: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: transparent;
+	pointer-events: none;
+}
+.wp-knowledge-hits button:focus-visible {
+	outline: 2px solid var(--wp-accent);
+}
+.wp-knowledge-graph-actions {
+	position: absolute;
+	bottom: 45px;
+	left: 18px;
+	display: flex;
+	gap: 5px;
+	z-index: 1;
+}
+.wp-knowledge-legend {
+	position: absolute;
+	bottom: 14px;
+	left: 18px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	font-size: 11px;
+	color: var(--wp-muted);
+	pointer-events: none;
+}
+.wp-knowledge-view :where(.is-coupled, .is-verify, .is-wiki)::before {
+	content: "";
+	display: inline-block;
+	width: 12px;
+	height: 3px;
+	margin-right: 5px;
+	vertical-align: middle;
+	background: var(--wp-link);
+}
+.wp-knowledge-view .is-verify::before {
+	background: var(--wp-positive);
+}
+.wp-knowledge-view .is-wiki::before {
+	background: var(--wp-accent);
+}
+.wp-knowledge-detail {
+	min-width: 0;
+	overflow: auto;
+	padding: 18px;
+	border-left: 1px solid var(--wp-border);
+	background: var(--wp-panel);
+	overflow-wrap: anywhere;
+}
+.wp-knowledge-detail header {
+	display: flex;
+	align-items: start;
+	gap: 14px;
+	justify-content: space-between;
+}
+.wp-knowledge-detail h2 {
+	font-size: 15px;
+	margin: 0 0 18px;
+}
+.wp-knowledge-detail h3 {
+	font-size: 13px;
+	margin-top: 24px;
+}
+.wp-knowledge-source {
+	margin-bottom: 16px;
+}
+.wp-knowledge-detail .aw-md {
+	font-size: 13px;
+	line-height: 1.65;
+	color: var(--wp-text);
+}
+.wp-knowledge-detail .aw-md pre {
+	overflow: auto;
+}
+.wp-knowledge-links {
+	padding: 0;
+	list-style: none;
+}
+.wp-knowledge-links button {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: start;
+	gap: 4px;
+	text-align: left;
+	margin: 6px 0;
+}
+.wp-knowledge-links small {
+	color: var(--wp-muted);
+}
+.wp-knowledge-empty {
+	padding: 24px;
+	color: var(--wp-muted);
+}
+.wp-knowledge-map > .wp-knowledge-empty {
+	position: absolute;
+	top: 32%;
+	left: 10%;
+}
+.wp-knowledge-loading {
+	position: absolute;
+	top: 90px;
+	right: 20px;
+	z-index: 3;
+	font-size: 12px;
+	background: var(--wp-panel);
+	padding: 6px;
+}
+.wp-knowledge-error,
+.wp-knowledge-warnings {
+	padding: 10px 20px;
+	margin: 0;
+	border-bottom: 1px solid var(--wp-border);
+	font-size: 12px;
+	background: var(--wp-panel);
+}
+.wp-knowledge-warnings[open] {
+	max-height: 22vh;
+	overflow: auto;
+}
+@media (max-width: 900px) {
+	.wp-knowledge-body.has-detail {
+		grid-template-columns: minmax(0, 1fr) minmax(260px, 44%);
+	}
+	.wp-knowledge-toolbar form {
+		display: none;
+	}
+}

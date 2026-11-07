@@ -8,6 +8,7 @@ import { useWorkplaceMenu } from "./workplace-context-menu.js";
 import { Select } from "./workplace-fields.js";
 import { Icon } from "./workplace-icon.js";
 import { QuickOpen } from "./workplace-quick-open.js";
+import { chooseRepository as setRoot, useRepository } from "./workplace-repository.js";
 import { usePaneResize } from "./workplace-resize.js";
 import { WorkplaceTerminal } from "./workplace-terminal.js";
 import "./workplace-code.css";
@@ -141,7 +142,7 @@ export function WorkplaceCode({
 	const tabButtons = useRef(new Map<string, HTMLButtonElement>());
 	const filesPane = useRef<HTMLElement>(null);
 	const [roots, setRoots] = useState<string[]>([]);
-	const [root, setRoot] = useState("");
+	const root = useRepository();
 	const rootRef = useRef(root);
 	rootRef.current = root;
 	const [manualRoot, setManualRoot] = useState("");

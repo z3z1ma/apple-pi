@@ -34,6 +34,9 @@ Only `.wp-dm-summary` grows inside the DM row. The unread indicator owns a fixed
 Why: the former generic direct-child span rule also matched the unread dot and stretched it to an 81-by-7 oval, squeezing the person's name. State/acknowledgment tests passed without checking this appearance; the rendered regression and smoke now exercise it.
 Verify: apps/agent-workplace/tests/world-conversation.test.ts, apps/agent-workplace/scripts/workplace-smoke.mjs
 
+The rail app-list clipping box extends across the rail's 7px inline padding. Buttons keep their existing width and type size; longer labels such as Knowledge can paint into that padding without the list cutting off their first or last letters. Vertical clipping still belongs to the measured More-apps overflow behavior.
+Verify: apps/agent-workplace/tests/world-knowledge.test.ts, apps/agent-workplace/tests/world-git.test.ts
+
 CSS traps that cost debugging rounds in Workplace stylesheets:
 - `display: flex` overrides the `hidden` attribute; add a `[hidden] { display: none }` rule for elements that use both.
 - Place an override after the base rule it overrides (Biome `noDescendingSpecificity`), and use `:where()` to narrow without raising specificity.

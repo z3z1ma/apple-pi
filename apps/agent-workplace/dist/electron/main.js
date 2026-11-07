@@ -1,5 +1,5 @@
-import { appendFileSync, chmodSync, closeSync, createReadStream, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, watch, writeFileSync, writeSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, normalize, parse, posix, relative, resolve, sep } from "node:path";
+import { appendFileSync, chmodSync, closeSync, constants, createReadStream, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, watch, writeFileSync, writeSync } from "node:fs";
+import { basename, dirname, extname, isAbsolute, join, normalize, parse, posix, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, net, protocol, shell } from "electron";
 import { getAgentDir, getPackageDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
@@ -10,8 +10,8 @@ import { createConnection } from "node:net";
 import { isDeepStrictEqual, promisify } from "node:util";
 import { execFile, spawn } from "node:child_process";
 import { spawn as spawn$1 } from "@lydell/node-pty";
+import { copyFile, lstat, mkdir, mkdtemp, open, readFile, readdir, readlink, realpath, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { isUtf8 } from "node:buffer";
-import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { bundledLanguages, createHighlighter } from "shiki";
@@ -2529,6 +2529,577 @@ async function instruct(commands, character, commandId, instruction, onReceipt) 
 	});
 	if (!result.ok && !failed) onReceipt("failed", result.reason);
 	return result;
+}
+//#endregion
+//#region components/wiki/src/graph.ts
+function slugKey(value) {
+	return value.normalize("NFKC").toLowerCase();
+}
+function portablePath(value) {
+	return value.split(sep).join("/");
+}
+async function lstatIfPresent(path) {
+	try {
+		return await lstat(path);
+	} catch (error) {
+		if (error.code === "ENOENT") return void 0;
+		throw error;
+	}
+}
+function sameFile(left, right) {
+	return left.dev === right.dev && left.ino === right.ino;
+}
+async function readNonSymlinkFile(path, expected, signal) {
+	signal?.throwIfAborted();
+	const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+	try {
+		signal?.throwIfAborted();
+		const stat = await handle.stat();
+		if (!stat.isFile() || !sameFile(expected, stat)) throw new Error(".wiki changed while scanning");
+		return await handle.readFile({
+			encoding: "utf8",
+			signal
+		});
+	} finally {
+		await handle.close();
+	}
+}
+async function findWikiProjectRoot(start, signal) {
+	signal?.throwIfAborted();
+	const initial = await realpath(resolve(start));
+	let current = initial;
+	while (true) {
+		signal?.throwIfAborted();
+		if (await lstatIfPresent(join(current, ".git"))) return current;
+		const parent = dirname(current);
+		if (parent === current) return initial;
+		current = parent;
+	}
+}
+var INLINE_CODE_PLACEHOLDER = "￼";
+function maskInlineCode(line, delimiterLength = 0) {
+	const chars = line.split("");
+	const visibleChars = line.split("");
+	let index = 0;
+	while (index < chars.length) {
+		if (chars[index] !== "`") {
+			if (delimiterLength > 0) chars[index] = INLINE_CODE_PLACEHOLDER;
+			index += 1;
+			continue;
+		}
+		let end = index;
+		while (chars[end] === "`") end += 1;
+		const runLength = end - index;
+		const delimiterRun = delimiterLength === 0 || runLength === delimiterLength;
+		if (delimiterLength === 0) delimiterLength = runLength;
+		else if (runLength === delimiterLength) delimiterLength = 0;
+		for (let cursor = index; cursor < end; cursor += 1) {
+			chars[cursor] = INLINE_CODE_PLACEHOLDER;
+			if (delimiterRun) visibleChars[cursor] = " ";
+		}
+		index = end;
+	}
+	return {
+		line: chars.join(""),
+		visibleLine: visibleChars.join(""),
+		delimiterLength
+	};
+}
+function normalizeHeadingText(value) {
+	return value.replace(/[ \t]+/g, " ").trim();
+}
+function fenceMatch(line) {
+	return new RegExp(`^(?: {0,3}>[ \\t]?| {0,3}(?:[-+*]|\\d+[.)])[ \\t]+)* {0,3}(\`{3,}|~{3,})`).exec(line);
+}
+function closesFence(line, marker, length) {
+	const match = fenceMatch(line);
+	return !!match && match[1]?.[0] === marker && match[1].length >= length && /^[ \t]*$/.test(line.slice(match[0].length));
+}
+function isIndentedCode(line) {
+	return /^(?: {4}|\t)/.test(line);
+}
+function parseLinkTarget(rawBody) {
+	const aliasSeparator = rawBody.indexOf("|");
+	const targetAndFragment = (aliasSeparator >= 0 ? rawBody.slice(0, aliasSeparator) : rawBody).trim();
+	const alias = aliasSeparator >= 0 ? rawBody.slice(aliasSeparator + 1).trim() || void 0 : void 0;
+	const fragmentSeparator = targetAndFragment.indexOf("#");
+	if (fragmentSeparator < 0) return {
+		target: targetAndFragment,
+		hasFragment: false,
+		alias
+	};
+	return {
+		target: targetAndFragment.slice(0, fragmentSeparator).trim(),
+		hasFragment: true,
+		fragment: targetAndFragment.slice(fragmentSeparator + 1).trim() || void 0,
+		alias
+	};
+}
+function extractPageLinks(content, path) {
+	const links = [];
+	const lines = content.split(/\r?\n/);
+	let fence;
+	let inlineDelimiterLength = 0;
+	for (const [lineIndex, line] of lines.entries()) {
+		const matchedFence = fenceMatch(line);
+		if (fence) {
+			inlineDelimiterLength = 0;
+			if (closesFence(line, fence.marker, fence.length)) fence = void 0;
+			continue;
+		}
+		if (isIndentedCode(line)) {
+			inlineDelimiterLength = 0;
+			continue;
+		}
+		if (matchedFence?.[1]) {
+			inlineDelimiterLength = 0;
+			fence = {
+				marker: matchedFence[1][0],
+				length: matchedFence[1].length
+			};
+			continue;
+		}
+		const masked = maskInlineCode(line, inlineDelimiterLength);
+		inlineDelimiterLength = masked.delimiterLength;
+		const pattern = /\[\[([^\]]+)\]\]/g;
+		for (let match = pattern.exec(masked.line); match; match = pattern.exec(masked.line)) {
+			const start = match.index > 0 && masked.line[match.index - 1] === "!" ? match.index - 1 : match.index;
+			if (start > 0 && masked.line[start - 1] === "\\") continue;
+			const parsed = parseLinkTarget(match[1] ?? "");
+			links.push({
+				path,
+				line: lineIndex + 1,
+				column: start + 1,
+				raw: line.slice(start, match.index + match[0].length),
+				...parsed
+			});
+		}
+	}
+	return links;
+}
+function extractHeadings(content) {
+	const headings = /* @__PURE__ */ new Set();
+	const lines = content.split(/\r?\n/);
+	let contentStart = 0;
+	if ((lines[0] ?? "").replace(/^\uFEFF/, "").trim() === "---") {
+		const closing = lines.findIndex((line, index) => index > 0 && /^(?:---|\.\.\.)\s*$/.test(line));
+		contentStart = closing >= 0 ? closing + 1 : lines.length;
+	}
+	let fence;
+	let previousVisibleLine;
+	let inlineDelimiterLength = 0;
+	for (const line of lines.slice(contentStart)) {
+		const matchedFence = fenceMatch(line);
+		if (fence) {
+			inlineDelimiterLength = 0;
+			if (closesFence(line, fence.marker, fence.length)) fence = void 0;
+			previousVisibleLine = void 0;
+			continue;
+		}
+		if (isIndentedCode(line)) {
+			inlineDelimiterLength = 0;
+			previousVisibleLine = void 0;
+			continue;
+		}
+		if (matchedFence?.[1]) {
+			inlineDelimiterLength = 0;
+			fence = {
+				marker: matchedFence[1][0],
+				length: matchedFence[1].length
+			};
+			previousVisibleLine = void 0;
+			continue;
+		}
+		const inlineStateBefore = inlineDelimiterLength;
+		const masked = maskInlineCode(line, inlineDelimiterLength);
+		inlineDelimiterLength = masked.delimiterLength;
+		const atx = /^(\s{0,3}#{1,6})(?=[ \t]|$)/.exec(masked.line);
+		if (atx) {
+			const headingStart = atx[1]?.length ?? 0;
+			const closing = /[ \t]+#+[ \t]*$/.exec(masked.line);
+			const headingEnd = closing && closing.index >= headingStart ? closing.index : masked.visibleLine.length;
+			const heading = normalizeHeadingText(masked.visibleLine.slice(headingStart, headingEnd));
+			if (heading) headings.add(slugKey(heading));
+			previousVisibleLine = inlineStateBefore === 0 && inlineDelimiterLength === 0 ? masked.visibleLine : void 0;
+			continue;
+		}
+		if (/^\s{0,3}(?:=+|-+)\s*$/.test(masked.line) && previousVisibleLine?.trim()) headings.add(slugKey(normalizeHeadingText(previousVisibleLine)));
+		previousVisibleLine = inlineStateBefore === 0 && inlineDelimiterLength === 0 ? masked.visibleLine : void 0;
+	}
+	return headings;
+}
+function findingRank(kind) {
+	return {
+		"duplicate-slug": 0,
+		"ambiguous-link": 1,
+		"unresolved-link": 2,
+		"missing-heading": 3,
+		"unsafe-path": 4
+	}[kind];
+}
+function sortFindings(findings) {
+	return findings.sort((left, right) => findingRank(left.kind) - findingRank(right.kind) || (left.slug ?? left.path ?? "").localeCompare(right.slug ?? right.path ?? "") || (left.line ?? 0) - (right.line ?? 0) || (left.column ?? 0) - (right.column ?? 0) || (left.target ?? "").localeCompare(right.target ?? ""));
+}
+async function loadWikiGraph(start, signal, includePath) {
+	const projectRoot = await findWikiProjectRoot(start, signal);
+	signal?.throwIfAborted();
+	const wikiRoot = join(projectRoot, ".wiki");
+	const wikiStat = await lstatIfPresent(wikiRoot);
+	if (!wikiStat) throw new Error(`No project wiki found at ${portablePath(relative(projectRoot, wikiRoot))}`);
+	if (wikiStat.isSymbolicLink() || !wikiStat.isDirectory()) throw new Error(".wiki must be a non-symlink directory inside the project root");
+	const canonicalWikiRoot = await realpath(wikiRoot);
+	signal?.throwIfAborted();
+	if (canonicalWikiRoot !== wikiRoot && !canonicalWikiRoot.startsWith(`${projectRoot}${sep}`)) throw new Error(".wiki resolves outside the project root");
+	const pages = [];
+	const findings = [];
+	async function visit(directory) {
+		signal?.throwIfAborted();
+		const before = await lstat(directory);
+		if (before.isSymbolicLink() || !before.isDirectory()) throw new Error(".wiki changed while scanning");
+		const entries = (await readdir(directory, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name));
+		for (const entry of entries) {
+			signal?.throwIfAborted();
+			const absolute = join(directory, entry.name);
+			if (includePath && !includePath(absolute)) continue;
+			const path = portablePath(relative(projectRoot, absolute));
+			const stat = await lstat(absolute);
+			if (stat.isSymbolicLink()) {
+				findings.push({
+					kind: "unsafe-path",
+					path,
+					message: `${path} is a symlink and was not followed`
+				});
+				continue;
+			}
+			if (stat.isDirectory()) {
+				await visit(absolute);
+				continue;
+			}
+			if (!stat.isFile() || extname(entry.name).toLowerCase() !== ".md") continue;
+			const slug = parse(entry.name).name;
+			const content = await readNonSymlinkFile(absolute, stat, signal);
+			signal?.throwIfAborted();
+			const after = await lstat(absolute);
+			if (!sameFile(stat, after) || after.isSymbolicLink()) throw new Error(".wiki changed while scanning");
+			pages.push({
+				slug,
+				key: slugKey(slug),
+				path,
+				headings: extractHeadings(content),
+				links: extractPageLinks(content, path)
+			});
+		}
+		const after = await lstat(directory);
+		if (!sameFile(before, after) || after.isSymbolicLink() || !after.isDirectory()) throw new Error(".wiki changed while scanning");
+	}
+	await visit(wikiRoot);
+	signal?.throwIfAborted();
+	pages.sort((left, right) => left.path.localeCompare(right.path));
+	const pagesBySlug = /* @__PURE__ */ new Map();
+	for (const page of pages) {
+		const matches = pagesBySlug.get(page.key) ?? [];
+		matches.push(page);
+		pagesBySlug.set(page.key, matches);
+	}
+	for (const [key, matches] of pagesBySlug) {
+		if (matches.length < 2) continue;
+		const paths = matches.map((page) => page.path).sort();
+		findings.push({
+			kind: "duplicate-slug",
+			slug: key,
+			paths,
+			message: `Slug ${JSON.stringify(key)} is shared by ${paths.join(", ")}`
+		});
+	}
+	const edges = [];
+	let linkCount = 0;
+	for (const page of pages) for (const link of page.links) {
+		const slugMatches = pagesBySlug.get(slugKey(link.target)) ?? [];
+		if (slugMatches.length === 0 && extname(link.target) && extname(link.target).toLowerCase() !== ".md") continue;
+		linkCount += 1;
+		const matches = !link.target && link.hasFragment && link.fragment ? [page] : slugMatches;
+		if (matches.length === 0) {
+			findings.push({
+				kind: "unresolved-link",
+				path: link.path,
+				line: link.line,
+				column: link.column,
+				target: link.target,
+				raw: link.raw,
+				message: `${link.path}:${link.line}:${link.column} cannot resolve ${link.raw}`
+			});
+			continue;
+		}
+		if (matches.length > 1) {
+			findings.push({
+				kind: "ambiguous-link",
+				path: link.path,
+				line: link.line,
+				column: link.column,
+				target: link.target,
+				raw: link.raw,
+				paths: matches.map((match) => match.path).sort(),
+				message: `${link.path}:${link.line}:${link.column} resolves ${link.raw} to multiple pages`
+			});
+			continue;
+		}
+		const destination = matches[0];
+		if (link.hasFragment && (!link.fragment || !destination.headings.has(slugKey(link.fragment)))) findings.push({
+			kind: "missing-heading",
+			path: link.path,
+			line: link.line,
+			column: link.column,
+			target: link.target,
+			fragment: link.fragment,
+			raw: link.raw,
+			paths: [destination.path],
+			message: `${link.path}:${link.line}:${link.column} cannot find heading ${JSON.stringify(link.fragment ?? "")} in ${destination.path}`
+		});
+		edges.push({
+			from: page.path,
+			to: destination.path,
+			line: link.line,
+			column: link.column,
+			raw: link.raw,
+			target: link.target,
+			fragment: link.fragment,
+			alias: link.alias
+		});
+	}
+	edges.sort((left, right) => left.from.localeCompare(right.from) || left.line - right.line || left.column - right.column);
+	return {
+		projectRoot,
+		wikiRoot,
+		pages,
+		edges,
+		linkCount,
+		findings: sortFindings(findings)
+	};
+}
+function resolveWikiSlug(graph, target) {
+	const matches = graph.pages.filter((page) => page.key === slugKey(target.trim()));
+	if (matches.length === 0) throw new Error(`Wiki slug not found: ${target}`);
+	if (matches.length > 1) throw new Error(`Wiki slug is ambiguous: ${target} (${matches.map((page) => page.path).join(", ")})`);
+	return matches[0];
+}
+//#endregion
+//#region components/code-context/src/lint.ts
+var HEADING = /^#{1,6}\s/;
+var PATH_FIELD = /^(Coupled|Verify):(.*)$/;
+var WIKI_LINK = /\[\[([^\]|#]*)[^\]]*\]\]/g;
+var FENCE = /^\s*(```|~~~)/;
+function lineReferences(line, number) {
+	const references = [];
+	const field = PATH_FIELD.exec(line);
+	for (const listed of field?.[2]?.split(",") ?? []) {
+		const target = listed.trim();
+		if (target) references.push({
+			kind: field?.[1] === "Coupled" ? "coupled" : "verify",
+			target,
+			line: number
+		});
+	}
+	for (const link of line.matchAll(WIKI_LINK)) references.push({
+		kind: "wiki",
+		target: (link[1] ?? "").trim(),
+		line: number
+	});
+	return references;
+}
+function contextReferences(content) {
+	const references = [];
+	let fenced = false;
+	for (const [index, raw] of content.split(/\r?\n/).entries()) {
+		const line = raw.trimEnd();
+		if (FENCE.test(line)) fenced = !fenced;
+		if (!fenced && !HEADING.test(line)) references.push(...lineReferences(line, index + 1));
+	}
+	return references;
+}
+//#endregion
+//#region apps/agent-workplace/src/knowledge.ts
+function isKnowledgeRequest(value) {
+	if (!value || typeof value !== "object") return false;
+	const request = value;
+	return typeof request.root === "string" && (request.mode === "context" || request.mode === "wiki");
+}
+//#endregion
+//#region apps/agent-workplace/src/backend/knowledge.ts
+async function present(path) {
+	try {
+		return await lstat(path);
+	} catch (error) {
+		if (error.code === "ENOENT") return void 0;
+		throw error;
+	}
+}
+async function sourceExists(root, path) {
+	try {
+		const named = resolve(root, path);
+		within$2(root, named);
+		const canonical = await realpath(named);
+		within$2(root, canonical);
+		return (await lstat(canonical)).isFile();
+	} catch {
+		return false;
+	}
+}
+function nodeFor(id, kind, document) {
+	return {
+		id,
+		path: id,
+		label: id.split("/").at(-1) ?? id,
+		group: dirname(id),
+		kind,
+		document
+	};
+}
+async function extract(workspace, request) {
+	if (!isKnowledgeRequest(request)) throw new Error("Choose a repository and knowledge mode.");
+	const root = directory(request.root);
+	const graph = {
+		root,
+		mode: request.mode,
+		nodes: [],
+		edges: [],
+		warnings: []
+	};
+	const folder = join(root, request.mode === "context" ? ".context" : ".wiki");
+	const stat = await present(folder);
+	if (!stat) return graph;
+	if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error("Knowledge folders must be real directories.");
+	const includePath = (path) => {
+		try {
+			within$2(root, path);
+			return true;
+		} catch {
+			return false;
+		}
+	};
+	let wiki;
+	function readWiki() {
+		wiki ??= loadWikiGraph(root, void 0, includePath).then((loaded) => {
+			if (loaded.projectRoot !== root) throw new Error("Choose the repository root to read its wiki.");
+			graph.warnings.push(...loaded.findings.map((finding) => finding.message));
+			return loaded;
+		});
+		return wiki;
+	}
+	if (request.mode === "wiki") {
+		const loaded = await readWiki();
+		graph.nodes = loaded.pages.map((page) => nodeFor(page.path, "wiki", page.path));
+		graph.edges = loaded.edges.map((edge) => ({
+			...edge,
+			kind: "wiki"
+		}));
+		return graph;
+	}
+	const nodes = /* @__PURE__ */ new Map();
+	const documents = [];
+	async function visit(folder) {
+		for (const entry of await readdir(folder, { withFileTypes: true })) {
+			const absolute = join(folder, entry.name);
+			if (!includePath(absolute)) continue;
+			const path = relative(root, absolute).split(sep).join("/");
+			if (entry.isSymbolicLink()) {
+				graph.warnings.push(`${path} is a symlink and was not followed`);
+				continue;
+			}
+			if (entry.isDirectory()) {
+				await visit(absolute);
+				continue;
+			}
+			if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+			const content = await workspace.readFile({
+				root,
+				path
+			});
+			if (!content.ok) throw new Error(content.reason);
+			const id = path.slice(9, -3);
+			const node = nodeFor(id, "context", path);
+			if (await sourceExists(root, id)) node.source = id;
+			else graph.warnings.push(`${path}: source ${id} is missing or unavailable`);
+			nodes.set(id, node);
+			documents.push({
+				id,
+				text: content.text
+			});
+		}
+	}
+	await visit(folder);
+	for (const document of documents) for (const reference of contextReferences(document.text)) {
+		let target;
+		if (reference.kind === "wiki") try {
+			const page = resolveWikiSlug(await readWiki(), reference.target);
+			target = nodeFor(page.path, "wiki", page.path);
+		} catch (error) {
+			target = nodeFor(`wiki:${reference.target}`, "missing");
+			graph.warnings.push(`${document.id}:${reference.line}: ${String(error)}`);
+		}
+		else try {
+			const absolute = resolve(root, reference.target);
+			within$2(root, absolute);
+			const path = relative(root, absolute).split(sep).join("/");
+			target = nodes.get(path) ?? nodeFor(path, "file");
+			if (!nodes.has(path)) {
+				if (await sourceExists(root, path)) target.source = path;
+				else target.kind = "missing";
+			}
+		} catch (error) {
+			target = nodeFor(`path:${reference.target}`, "missing");
+			graph.warnings.push(`${document.id}:${reference.line}: ${String(error)}`);
+		}
+		if (!nodes.has(target.id)) nodes.set(target.id, target);
+		graph.edges.push({
+			from: document.id,
+			to: target.id,
+			kind: reference.kind,
+			line: reference.line,
+			...reference.kind === "wiki" ? { target: reference.target } : {}
+		});
+	}
+	graph.nodes = [...nodes.values()].sort((a, b) => a.id.localeCompare(b.id));
+	graph.edges = [...new Map(graph.edges.map((edge) => [JSON.stringify(edge), edge])).values()];
+	return graph;
+}
+function openKnowledge(workspace) {
+	return {
+		async graph(request) {
+			try {
+				return {
+					ok: true,
+					value: await extract(workspace, request)
+				};
+			} catch (error) {
+				return failure(error);
+			}
+		},
+		async content(request) {
+			try {
+				const graph = await extract(workspace, request);
+				const node = graph.nodes.find((node) => node.id === request.id);
+				if (!node) throw new Error("This node is no longer in the graph. Refresh to read current knowledge.");
+				let text = "";
+				if (node.document) {
+					const result = await workspace.readFile({
+						root: graph.root,
+						path: node.document
+					});
+					if (!result.ok) throw new Error(result.reason);
+					text = result.text;
+				}
+				return {
+					ok: true,
+					value: {
+						node,
+						text
+					}
+				};
+			} catch (error) {
+				return failure(error);
+			}
+		}
+	};
 }
 //#endregion
 //#region components/session-state/src/organization-lifetime.ts
@@ -5581,7 +6152,7 @@ function spawnRuntime(warn) {
 	child.unref();
 	return child;
 }
-function open(path, signal) {
+function open$1(path, signal) {
 	return new Promise((resolve, reject) => {
 		const socket = createConnection(path);
 		const abort = () => {
@@ -5601,13 +6172,13 @@ function open(path, signal) {
 	});
 }
 async function connectRuntime(signal, socketPath) {
-	if (socketPath !== void 0) return open(socketPath, signal);
+	if (socketPath !== void 0) return open$1(socketPath, signal);
 	let started = false;
 	let failure;
 	for (;;) {
 		signal?.throwIfAborted();
 		try {
-			return await open(statePaths().socket, signal);
+			return await open$1(statePaths().socket, signal);
 		} catch {
 			signal?.throwIfAborted();
 			if (failure) throw new Error(failure);
@@ -13419,7 +13990,20 @@ function wireGit(git) {
 }
 function start() {
 	const world = openWorldBackend(statePaths());
-	wireWorkspace(openWorkspace(() => world.snapshot()));
+	const workspace = openWorkspace(() => world.snapshot());
+	wireWorkspace(workspace);
+	const knowledge = openKnowledge(workspace);
+	ipcMain.handle("knowledge:graph", (_event, request) => isKnowledgeRequest(request) ? knowledge.graph(request) : {
+		ok: false,
+		reason: "A knowledge request is required."
+	});
+	ipcMain.handle("knowledge:content", (_event, request) => isKnowledgeRequest(request) && "id" in request && typeof request.id === "string" ? knowledge.content({
+		...request,
+		id: request.id
+	}) : {
+		ok: false,
+		reason: "A knowledge node is required."
+	});
 	wireGit(openGit());
 	const conversations = openConversations(statePaths().socket);
 	const commands = openCommands(statePaths().socket);
@@ -13785,6 +14369,7 @@ function start() {
 				"app://world/index.html?workplace=org",
 				"app://world/index.html?workplace=code",
 				"app://world/index.html?workplace=git",
+				"app://world/index.html?workplace=knowledge",
 				"app://world/index.html?workplace=reviews",
 				"app://world/index.html?workplace=issues"
 			].includes(url)) event.preventDefault();

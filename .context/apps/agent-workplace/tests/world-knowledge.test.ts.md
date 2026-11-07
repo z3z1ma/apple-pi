@@ -1,0 +1,9 @@
+## file
+
+The built renderer runs in real headless Chrome from the bare landing route. Graph, content, tree and source reads call the production backends over temporary fixture repositories; Git and Reviews are inert typed fixtures. This covers extraction through rendering and navigation, but skips Electron IPC and the operator's live runtime.
+
+Held graph and content replies control two distinct interleavings: an old source selection finishing after a new reader is shown, and an old repository refresh finishing after another repository is selected. Final visible content and node identity distinguish rejection from mere request counts. The shared-root test checks both directions across Code, Git and Knowledge, retains an actual dirty Monaco model, and proves the Reviews filter stays independent.
+
+Viewport-relative bounds and real clicks caught the initial root-class collision. Text range bounds catch the Knowledge rail label being clipped despite its whole button fitting. The graph is a canvas, so geometry checks read each node's invisible `Read <path>` button, which the renderer keeps at the node's on-screen position: size by degree, fit inside the canvas, zoom, pan and a dragged node following the held pointer. Wait for the camera to stop moving after Fit graph before measuring, because the view eases toward the fit. Screenshots cover paint. With `AGENT_KNOWLEDGE_REAL_ROOT` set, an opt-in case renders that real repository read-only and saves overview, hover and selection captures in light and dark; judge the look on that, never on the six-node fixture.
+Coupled: apps/agent-workplace/web/workplace-knowledge.tsx, apps/agent-workplace/web/knowledge-graph.tsx, apps/agent-workplace/web/workplace-repository.ts, apps/agent-workplace/web/workplace.css
+Verify: apps/agent-workplace/tests/world-knowledge.test.ts, apps/agent-workplace/tests/knowledge.test.ts

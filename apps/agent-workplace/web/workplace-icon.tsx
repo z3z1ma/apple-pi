@@ -1,4 +1,6 @@
 const paths = {
+	knowledge:
+		"M7 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z M21 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z M14 19a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z M7 6h10 M6 8l5 9 M18 8l-5 9",
 	terminal: "M3 4h18v16H3V4Z M7 8l4 4-4 4 M13 16h4",
 	plus: "M12 5v14 M5 12h14",
 	trash: "M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7",
