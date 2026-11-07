@@ -35,6 +35,7 @@ async function rootSession(flags: Record<string, string> = {}) {
 		extensions: EXTENSIONS,
 		skills: SKILLS,
 		tui: true,
+		nativeTools: true,
 		flags,
 	});
 	try {
@@ -57,11 +58,19 @@ async function rootSession(flags: Record<string, string> = {}) {
 test("in every posture the toolbox teaches exactly the active tools", async () => {
 	const root = await rootSession();
 	expect(root.gaps).toEqual({ untaught: [], absent: [] });
-	expect(root.active).toEqual(expect.arrayContaining(["hire", "progress"]));
+	expect(root.active).toEqual(expect.arrayContaining(["hire", "progress", "codemode", "tool_search"]));
 	const cases = [
-		{ role: "implementation-engineer", has: ["edit"], lacks: ["hire", "progress", "activity"] },
-		{ role: "coordinator", has: ["hire", "progress", "activity"], lacks: [] },
-		{ role: "scout", has: ["activity", "note"], lacks: ["hire", "edit"] },
+		{
+			role: "implementation-engineer",
+			has: ["edit", "codemode", "tool_search"],
+			lacks: ["hire", "progress", "activity"],
+		},
+		{
+			role: "coordinator",
+			has: ["hire", "progress", "activity", "tool_search"],
+			lacks: ["bash", "codemode", "edit", "write", "search_branches", "monitor"],
+		},
+		{ role: "scout", has: ["activity", "note", "codemode", "tool_search"], lacks: ["hire", "edit", "write"] },
 	];
 	for (const { role, has, lacks } of cases) {
 		const person = await rootSession({ role, "reports-to": root.id });

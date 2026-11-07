@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { getCurrentSystemPrompt } from "@earendil-works/pi-ai";
+import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import { afterAll, expect, test, vi } from "vitest";
 import { createBtwConversation } from "../components/btw/src/session.js";
 import { buildInternCliArgs } from "../components/interns/src/runner.js";
@@ -31,6 +31,7 @@ test("the full package root prompt and active schemas stay within their token bu
 		extensions: manifest.pi.extensions.map((path: string) => join(ROOT, path)),
 		skills: manifest.pi.skills.map((path: string) => join(ROOT, path)),
 		tui: true,
+		nativeTools: true,
 	});
 	try {
 		await vi.waitFor(
@@ -42,12 +43,25 @@ test("the full package root prompt and active schemas stay within their token bu
 		);
 		await run.prompt();
 		const measured = promptSize(run.session);
-		expect(measured.tools).toEqual(expect.arrayContaining(["hire", "directory", "ask_user_question"]));
+		expect(measured.tools).toEqual(
+			expect.arrayContaining(["hire", "directory", "ask_user_question", "codemode", "tool_search"]),
+		);
+		expect(toolboxGaps(run.session)).toEqual({ untaught: [], absent: [] });
+		const declared = getCurrentTools(run.session.messages);
+		expect(declared.find((tool) => tool.name === "read")?.description).toContain("Codemode:");
+		expect(declared.find((tool) => tool.name === "codemode")?.description).toContain("temporary_peer");
+		expect(measured.schemaChars).toBe(
+			JSON.stringify(
+				declared
+					.map(({ name, description, parameters }) => ({ name, description, parameters }))
+					.sort((left, right) => left.name.localeCompare(right.name)),
+			).length,
+		);
 		const prompt = getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"));
 		expect(prompt).toContain("**The ledger**");
 		expect(prompt).toContain("<pair-protocol>");
 		expect(run.session.resourceLoader.getSkills().skills.length).toBeGreaterThan(0);
-		budget("root prompt estimated tokens", measured.tokens, 34384, measured);
+		budget("root prompt estimated tokens", measured.tokens, 36877, measured);
 	} finally {
 		await run.close();
 	}
@@ -73,7 +87,8 @@ for (const kind of ["explore", "research"] as const) {
 			await run.prompt();
 			const measured = promptSize(run.session);
 			expect(measured.tools).toEqual(expect.arrayContaining(["read", "bash", "context_lint"]));
-			expect(measured.tools).not.toContain("edit");
+			for (const tool of ["edit", "codemode", "tool_search"])
+				expect(run.session.getToolDefinition(tool), `${kind} lacks ${tool}`).toBeUndefined();
 			expect(toolboxGaps(run.session)).toEqual({ untaught: [], absent: [] });
 			const prompt = getCurrentSystemPrompt(run.session.messages.filter((message) => message.role === "system"));
 			expect(prompt).toContain("**The ledger**");
@@ -86,15 +101,24 @@ for (const kind of ["explore", "research"] as const) {
 }
 
 test("BTW's production loader stays within its prompt and schema token budget", async () => {
-	const parent = await promptSession({ cwd, agentDir: state.agentDir, extensions: [], tools: [] });
+	const parent = await promptSession({
+		cwd,
+		agentDir: state.agentDir,
+		extensions: [],
+		tools: ["codemode", "tool_search"],
+		nativeTools: true,
+	});
 	try {
 		const context = await parent.prompt();
+		expect(parent.session.getActiveToolNames()).toEqual(expect.arrayContaining(["codemode", "tool_search"]));
 		const conversation = await createBtwConversation(context);
 		try {
 			expect(await conversation.submit("Measure this fixture.")).toBe(true);
 			await vi.waitFor(() => expect(conversation.status).toBe("completed"));
 			const measured = promptSize(conversation.session);
 			expect(measured.tools).toEqual(["find", "grep", "ls", "read"]);
+			for (const tool of ["codemode", "tool_search"])
+				expect(conversation.session.getToolDefinition(tool), `BTW lacks ${tool}`).toBeUndefined();
 			expect(toolboxGaps(conversation.session)).toEqual({ untaught: [], absent: [] });
 			budget("BTW prompt estimated tokens", measured.tokens, 830, measured);
 		} finally {

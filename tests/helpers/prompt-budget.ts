@@ -1,8 +1,10 @@
-import { getCurrentSystemMessage, getCurrentSystemPrompt, type Model } from "@earendil-works/pi-ai";
+import { getCurrentSystemMessage, getCurrentSystemPrompt, getCurrentTools, type Model } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream, fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
 import {
 	type AgentSession,
 	createAgentSession,
+	createCodemodeExtension,
+	createToolSearchExtension,
 	DefaultResourceLoader,
 	type ExtensionContext,
 	SessionManager,
@@ -20,6 +22,7 @@ export async function promptSession(options: {
 	append?: string;
 	skills?: string[];
 	tui?: boolean;
+	nativeTools?: boolean;
 	flags?: Record<string, boolean | string>;
 }) {
 	const model = {
@@ -43,7 +46,10 @@ export async function promptSession(options: {
 	};
 	let context!: ExtensionContext;
 	const errors: string[] = [];
-	const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false } }, { projectTrusted: true });
+	const settingsManager = SettingsManager.inMemory(
+		{ compaction: { enabled: false }, ...(options.nativeTools ? { defaultTools: ["+tool_search"] } : {}) },
+		{ projectTrusted: true },
+	);
 	const loader = new DefaultResourceLoader({
 		cwd: options.cwd,
 		agentDir: options.agentDir,
@@ -57,6 +63,7 @@ export async function promptSession(options: {
 		noPromptTemplates: true,
 		appendSystemPrompt: options.append ? [options.append] : [],
 		extensionFactories: [
+			...(options.nativeTools ? [createCodemodeExtension(), createToolSearchExtension()] : []),
 			(pi) => {
 				pi.on("before_agent_start", (_event, ctx) => {
 					context = ctx;
@@ -133,13 +140,15 @@ export function toolboxGaps(session: AgentSession) {
 }
 
 export function promptSize(session: AgentSession) {
-	const names = session.getActiveToolNames().sort();
-	const schemas = names.map((name) => {
-		const tool = session.getToolDefinition(name);
-		if (!tool) throw new Error(`Missing active schema: ${name}`);
-		return { name: tool.name, description: tool.description, parameters: tool.parameters };
-	});
+	const schemas = getCurrentTools(session.messages)
+		.map(({ name, description, parameters }) => ({ name, description, parameters }))
+		.sort((left, right) => left.name.localeCompare(right.name));
 	const promptChars = getCurrentSystemPrompt(session.messages.filter((message) => message.role === "system")).length;
 	const schemaChars = JSON.stringify(schemas).length;
-	return { tokens: Math.ceil((promptChars + schemaChars) / 4), promptChars, schemaChars, tools: names };
+	return {
+		tokens: Math.ceil((promptChars + schemaChars) / 4),
+		promptChars,
+		schemaChars,
+		tools: schemas.map((tool) => tool.name),
+	};
 }
