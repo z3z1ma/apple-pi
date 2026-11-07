@@ -133,6 +133,10 @@ A direct conversation is the person's actual Pi session. Its transcript, streame
 
 The DM header's [person menu](#person-actions) also exposes Send home, Call in and eligible permanent departure without leaving the conversation.
 
+Consecutive agent responses share a header only while each response is less than five minutes after the previous one and on the same local calendar day. A gap of five minutes or more starts a new header, as does the first unread response in a DM. World **Talk to** uses the same time/day grouping for the same session. Your messages still have individual headers; matched tool results stay inside their calls and do not extend the response grouping window.
+
+A single streamed response stays whole, even if later text arrives after a long pause. Its initial time is the first received text; when it finishes, the saved entry's timestamp replaces that time and grouping is recalculated without moving the paragraph you are reading. Separate responses within a group retain their own text blocks under the first response's header and time.
+
 When a person opens a browser page (`explain_change`, `sign_off_code`, `sign_off_document`, `sign_off_task`), its DM shows a small page card with **Open here**, even with tool calls off. **Open here** shows the live page in place of the transcript, with **Back to conversation** and **Open in browser**, while the rest of Workplace stays as it is. The page opens in Workplace's light or dark appearance and follows the light/dark toggle while open, without reloading, so quiz answers, tutor chat and annotations stay. A page that has closed (a sign-off that was submitted, or an explanation whose session ended) says so instead. While Workplace has focus, these tools do not also open the system browser.
 
 **Tool calls off** shows only written assistant/user text. Thoughts, calls/results, mail, notifications and historical diagnostics remain in the underlying history and are available with details on. Current operation failures still appear where you can act on them. The compact activity line shows tool detail only while a tool actually runs; a retained old command is not current activity.
@@ -141,7 +145,7 @@ When a person opens a browser page (`explain_change`, `sign_off_code`, `sign_off
 
 A running person's bold name and small round dot indicate an unread session update. This is a run-level update flag, not a count of individual messages. The Chat rail counts unread conversations: DMs with an unread update and channels with unread posts.
 
-An embedded DM acknowledges a result only after its current newest page loads successfully, the window is focused/visible, and you are at the latest reading position. Incoming replies keep an older reading position still. A New boundary and Jump to latest control help you return. A failed read leaves the update unread; leaving Chat stops the hidden reader from acknowledging later results.
+An embedded DM acknowledges a result only after its current newest page loads successfully, the window is focused/visible, and you are at the latest reading position. Incoming replies keep an older reading position still. A New boundary and Jump to latest control help you return. A failed read leaves the update unread; leaving Chat stops the hidden reader from acknowledging later results. An inline browser page also leaves replies unread behind it. **Back to conversation** restores your reading position and acknowledges only when the usual latest, focus and history-read conditions hold.
 
 ### Profiles are observation, not conversation reads
 

@@ -17,7 +17,7 @@ export function useLiveReplies(
 	api: ConversationApi | undefined,
 	characterId: string,
 	history: TranscriptEntry[],
-	onEnd: () => void,
+	onEnd: (replacement?: { from: string; to: string }) => void,
 ): TranscriptEntry[] {
 	const [streams, setStreams] = useState<Stream[]>([]);
 	const ended = useRef(onEnd);
@@ -46,7 +46,7 @@ export function useLiveReplies(
 					const was = now.find((s) => s.streamId === event.streamId);
 					return [...finished, { streamId: event.streamId, at: was?.at ?? Date.now(), text: was?.text ?? "", entry }];
 				});
-				ended.current();
+				ended.current(entry ? { from: liveId(event.streamId), to: entry.id } : undefined);
 			}
 		});
 		void watch(reader, characterId).catch(() => {});

@@ -871,7 +871,7 @@ test("the open conversation streams the reply as it is written, then settles on 
 		await delta(2);
 		const writing = log(page).locator(".aw-conv-writing");
 		await vi.waitFor(async () => expect((await writing.textContent())?.trim()).toBe("All 42 pass"));
-		await expect(log(page).locator(".aw-conv-assistant").count()).resolves.toBe(2);
+		await expect(log(page).locator(".aw-conv-assistant").count()).resolves.toBe(3);
 		await shot(page, "streaming", "13");
 		for (let i = 3; i < words.length; i++) await delta(i);
 		await vi.waitFor(async () =>
@@ -887,7 +887,7 @@ test("the open conversation streams the reply as it is written, then settles on 
 		const stored: TranscriptEntry = {
 			kind: "assistant",
 			id: "a3",
-			at: at(56),
+			at: Date.now(),
 			parts: [{ kind: "text", text: words.join("") }],
 			error: null,
 			aborted: false,
@@ -921,6 +921,610 @@ test("the open conversation streams the reply as it is written, then settles on 
 		await page.close();
 	}
 }, 40000);
+
+const trackHistoryReads = (page: Page) =>
+	page.evaluate(() => {
+		const w = window as any;
+		const read = w.agentWorkplace.conversation;
+		w.historyPending = 0;
+		w.historyFinished = 0;
+		w.agentWorkplace.conversation = async (...args: unknown[]) => {
+			w.historyPending++;
+			try {
+				return await read(...args);
+			} finally {
+				w.historyPending--;
+				w.historyFinished++;
+			}
+		};
+	});
+
+const finishHistoryReads = async (page: Page) => {
+	await page.waitForFunction(() => (window as any).historyFinished > 0 && (window as any).historyPending === 0);
+	await page.evaluate(
+		() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+	);
+};
+
+const groupedReply = (id: string, when: number, text: string): TranscriptEntry => ({
+	kind: "assistant",
+	id,
+	at: when,
+	parts: [{ kind: "text", text }],
+	error: null,
+	aborted: false,
+});
+
+const GROUPING_CASES = [
+	{
+		name: "adjacent responses within five minutes",
+		start: new Date(2026, 10, 7, 10).getTime(),
+		minutes: [0, 4, 8],
+		headers: [0],
+	},
+	{
+		name: "responses exactly five minutes apart",
+		start: new Date(2026, 10, 7, 10).getTime(),
+		minutes: [0, 5],
+		headers: [0, 1],
+	},
+	{
+		name: "responses more than five minutes apart",
+		start: new Date(2026, 10, 7, 10).getTime(),
+		minutes: [0, 6],
+		headers: [0, 1],
+	},
+	{
+		name: "responses on different days",
+		start: new Date(2026, 10, 7, 23, 59).getTime(),
+		minutes: [0, 2],
+		headers: [0, 1],
+	},
+];
+
+async function openSessionReader(page: Page, surface: "World" | "DM") {
+	if (surface === "World") await talkTo(page, "pi-tests");
+	else {
+		await page.getByRole("link", { name: "Workplace", exact: true }).click();
+		await page.getByRole("button", { name: /^pi-tests/ }).click();
+	}
+}
+
+test.each(["World", "DM"] as const)(
+	"%s agent headers follow adjacent response time and day boundaries",
+	async (surface) => {
+		for (const scenario of GROUPING_CASES) {
+			const replies = scenario.minutes.map((minute, index) =>
+				groupedReply(`group-${index}`, scenario.start + minute * 60_000, `${scenario.name}: response ${index}.`),
+			);
+			const first = replies[0] as Extract<TranscriptEntry, { kind: "assistant" }>;
+			first.parts.push({ kind: "tool", call: { id: "group-tool", name: "bash", arg: "fixture check", input: "{}" } });
+			const entries: TranscriptEntry[] = [
+				{
+					kind: "user",
+					id: "group-user-1",
+					at: scenario.start - 120_000,
+					text: "First operator instruction.",
+					images: 0,
+				},
+				{
+					kind: "user",
+					id: "group-user-2",
+					at: scenario.start - 60_000,
+					text: "Second operator instruction.",
+					images: 0,
+				},
+				first,
+				{
+					kind: "tool-result",
+					id: "group-result",
+					at: replies[1].at - 1,
+					callId: "group-tool",
+					tool: "bash",
+					text: "Fixture check finished.",
+					isError: false,
+					cut: false,
+				},
+				...replies.slice(1),
+			];
+			const { page, errors } = await openWorld(world(), { "pi-tests": entries });
+			try {
+				await openSessionReader(page, surface);
+				await log(page)
+					.getByText(`${scenario.name}: response ${replies.length - 1}.`, { exact: true })
+					.waitFor();
+				const agents = log(page).locator(".aw-conv-assistant");
+				expect(await agents.count(), scenario.name).toBe(scenario.headers.length);
+				expect(await log(page).locator(".aw-conv-user > header").count()).toBe(2);
+				const expectedTimes = await page.evaluate(
+					(times) =>
+						times.map((time) =>
+							new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(time),
+						),
+					scenario.headers.map((index) => replies[index].at),
+				);
+				expect(await agents.locator("header time").allTextContents()).toEqual(expectedTimes);
+				if (surface === "DM")
+					expect(await agents.locator(".wp-transcript-avatar").count()).toBe(scenario.headers.length);
+				expect(await log(page).locator(".aw-conv-day").count()).toBe(
+					scenario.name === "responses on different days" ? 2 : 1,
+				);
+				if (surface === "World") {
+					await log(page)
+						.getByRole("button", { name: /^bash fixture check/ })
+						.click();
+					await log(page).getByText("Fixture check finished.", { exact: true }).waitFor();
+				}
+				expect(errors).toEqual([]);
+			} finally {
+				await page.close();
+			}
+		}
+	},
+	60000,
+);
+
+test("a DM's first unread assistant response starts a fresh header inside the time window", async () => {
+	const start = new Date(2026, 10, 7, 10).getTime();
+	const snapshot = world(
+		CAST.map((person) =>
+			person.id === "pi-tests"
+				? {
+						...person,
+						facts: facts({
+							run: "idle",
+							status: "idle",
+							unseen: true,
+							seenAt: start + 30_000,
+							needsYouSince: start + 120_000,
+						}),
+					}
+				: person,
+		),
+	);
+	const { page, errors } = await openWorld(snapshot, {
+		"pi-tests": [
+			groupedReply("read-before", start, "Already read response."),
+			groupedReply("unread-first", start + 60_000, "First unread response."),
+			groupedReply("unread-second", start + 120_000, "Second unread response."),
+		],
+	});
+	try {
+		await openSessionReader(page, "DM");
+		await log(page).getByText("Second unread response.", { exact: true }).waitFor();
+		expect(await log(page).locator(".aw-conv-assistant").count()).toBe(2);
+		const unread = log(page)
+			.locator(".aw-conv-block")
+			.filter({ has: page.locator("[data-unread-start]") });
+		expect(await unread.count()).toBe(1);
+		expect(await unread.textContent()).toContain("First unread response.");
+		expect(await unread.textContent()).toContain("Second unread response.");
+		expect(await unread.textContent()).not.toContain("Already read response.");
+		expect(await unread.locator(".wp-transcript-avatar").count()).toBe(1);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+test("DM grouping separates later response streams without splitting delayed deltas within one response", async () => {
+	const start = new Date(2026, 10, 7, 10).getTime();
+	const { page, errors } = await openWorld(world(), {
+		"pi-tests": [groupedReply("stream-previous", start, "Earlier response.")],
+	});
+	try {
+		await openSessionReader(page, "DM");
+		await log(page).getByText("Earlier response.", { exact: true }).waitFor();
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => (window as any).watched.at(-1))).toEqual(["pi-tests"]),
+		);
+		await page.clock.setFixedTime(new Date(start + 6 * 60_000));
+		await page.evaluate(() =>
+			(window as any).reply({
+				kind: "delta",
+				characterId: "pi-tests",
+				streamId: "timed-stream-1",
+				seq: 1,
+				delta: "Streaming first",
+			}),
+		);
+		await log(page).getByText("Streaming first", { exact: true }).waitFor();
+		expect(await log(page).locator(".aw-conv-assistant").count()).toBe(2);
+		const header = await log(page).locator(".aw-conv-assistant").last().locator("header time").textContent();
+		await page.clock.setFixedTime(new Date(start + 90 * 60_000));
+		await page.evaluate(() =>
+			(window as any).reply({
+				kind: "delta",
+				characterId: "pi-tests",
+				streamId: "timed-stream-1",
+				seq: 2,
+				delta: " and much later.",
+			}),
+		);
+		await log(page).getByText("Streaming first and much later.", { exact: true }).waitFor();
+		expect(await log(page).locator(".aw-conv-assistant").count()).toBe(2);
+		expect(await log(page).locator(".aw-conv-assistant").last().locator("header time").textContent()).toBe(header);
+		const stored = groupedReply("timed-stored-1", start + 91 * 60_000, "Streaming first and much later.");
+		await page.evaluate((entry) => {
+			(window as any).append("pi-tests", entry);
+			(window as any).reply({ kind: "end", characterId: "pi-tests", streamId: "timed-stream-1", entry });
+		}, stored);
+		await log(page).locator('[data-entry="timed-stored-1"]').waitFor();
+		await vi.waitFor(async () => expect(await log(page).locator(".aw-conv-writing").count()).toBe(0));
+		expect(await log(page).locator(".aw-conv-assistant").count()).toBe(2);
+		expect(await log(page).getByText("Streaming first and much later.", { exact: true }).count()).toBe(1);
+		await page.clock.setFixedTime(new Date(start + 97 * 60_000));
+		await page.evaluate(() =>
+			(window as any).reply({
+				kind: "delta",
+				characterId: "pi-tests",
+				streamId: "timed-stream-2",
+				seq: 1,
+				delta: "A separate later response.",
+			}),
+		);
+		await log(page).getByText("A separate later response.", { exact: true }).waitFor();
+		expect(await log(page).locator(".aw-conv-assistant").count()).toBe(3);
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+test.each(["DM", "World"] as const)(
+	"%s preserves the paragraph being read when saved time splits a response group",
+	async (surface) => {
+		const start = new Date(2026, 10, 7, 10).getTime();
+		const { page, errors } = await openWorld(world(), {
+			"pi-tests": [groupedReply("anchor-previous", start, "Previous response.")],
+		});
+		try {
+			await openSessionReader(page, surface);
+			await log(page).getByText("Previous response.", { exact: true }).waitFor();
+			await page.clock.setFixedTime(new Date(start + 60_000));
+			const text = Array.from(
+				{ length: 60 },
+				(_, index) => `Reading paragraph ${index}: words in the streamed response.`,
+			).join("\n\n");
+			await page.evaluate(
+				(delta) =>
+					(window as any).reply({ kind: "delta", characterId: "pi-tests", streamId: "anchor-stream", seq: 1, delta }),
+				text,
+			);
+			const target = log(page).getByText("Reading paragraph 20: words in the streamed response.", { exact: true });
+			await target.waitFor();
+			expect(await log(page).locator(".aw-conv-assistant").count()).toBe(1);
+			await target.evaluate((element) => {
+				element.scrollIntoView({ block: "center" });
+				element.closest(".aw-conv-log")!.dispatchEvent(new Event("scroll"));
+			});
+			await vi.waitFor(async () =>
+				expect(
+					await log(page).evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop),
+				).toBeGreaterThan(48),
+			);
+			const before = await target.boundingBox();
+			const stored = groupedReply("anchor-saved", start + 10 * 60_000, text);
+			await page.evaluate((entry) => {
+				(window as any).append("pi-tests", entry);
+				(window as any).reply({ kind: "end", characterId: "pi-tests", streamId: "anchor-stream", entry });
+			}, stored);
+			await log(page).locator('[data-entry="anchor-saved"]').waitFor();
+			await vi.waitFor(async () => expect(await log(page).locator(".aw-conv-assistant").count()).toBe(2));
+			const after = await target.boundingBox();
+			expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
+			expect(await target.count()).toBe(1);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+	30000,
+);
+
+test("saved-time merging preserves an away DM reader's position and does not acknowledge", async () => {
+	const start = new Date(2026, 10, 7, 10).getTime();
+	const { page, errors } = await openWorld(world(), {
+		"pi-tests": [groupedReply("merge-previous", start, "Previous response.")],
+	});
+	page.setDefaultTimeout(5000);
+	try {
+		await openSessionReader(page, "DM");
+		await log(page).getByText("Previous response.", { exact: true }).waitFor();
+		await page.clock.setFixedTime(new Date(start + 10 * 60_000));
+		const text = Array.from(
+			{ length: 45 },
+			(_, index) => `Merge paragraph ${index}: words in the streamed response.`,
+		).join("\n\n");
+		await page.evaluate(
+			(delta) =>
+				(window as any).reply({ kind: "delta", characterId: "pi-tests", streamId: "merge-stream", seq: 1, delta }),
+			text,
+		);
+		const target = log(page).getByText("Merge paragraph 40: words in the streamed response.", { exact: true });
+		await target.waitFor();
+		await log(page).evaluate((element) => {
+			element.scrollTop = element.scrollHeight - element.clientHeight - 60;
+		});
+		await page.getByRole("button", { name: /Jump to latest/ }).waitFor();
+		const before = await target.boundingBox();
+		const beforeSeen = await seen(page);
+		await trackHistoryReads(page);
+		const stored = groupedReply("merge-saved", start + 60_000, text);
+		await page.evaluate(async (entry) => {
+			const w = window as any;
+			w.append("pi-tests", entry);
+			w.reply({ kind: "end", characterId: "pi-tests", streamId: "merge-stream", entry });
+			const current = await w.agentWorkplace.snapshot();
+			w.push({
+				...current,
+				characters: current.characters.map((person: any) =>
+					person.id === "pi-tests"
+						? {
+								...person,
+								facts: {
+									...person.facts,
+									run: "idle",
+									status: "idle",
+									tool: null,
+									unseen: true,
+									needsYouSince: Date.now(),
+									settledAt: Date.now(),
+								},
+							}
+						: person,
+				),
+			});
+		}, stored);
+		await log(page).locator('[data-entry="merge-saved"]').waitFor();
+		await page.getByRole("main").getByText("Finished", { exact: true }).filter({ visible: true }).waitFor();
+		await finishHistoryReads(page);
+		await vi.waitFor(async () => expect(await log(page).locator(".aw-conv-assistant").count()).toBe(1));
+		const after = await target.boundingBox();
+		expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
+		expect(await page.getByRole("button", { name: /Jump to latest/ }).count()).toBe(1);
+		expect(await seen(page)).toEqual(beforeSeen);
+		await page.getByRole("button", { name: /Jump to latest/ }).click();
+		await vi.waitFor(async () => expect(await seen(page)).toEqual(["pi-tests"]));
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+test.each(["World", "DM"] as const)(
+	"first streamed response replacement keeps the paragraph still when saved tools follow it in %s",
+	async (surface) => {
+		const start = new Date(2026, 10, 7, 10).getTime();
+		const { page, errors } = await openWorld(world(), { "pi-tests": [] });
+		page.setDefaultTimeout(5000);
+		try {
+			await openSessionReader(page, surface);
+			await log(page).getByText("Nothing has been said yet.", { exact: true }).waitFor();
+			if (surface === "World")
+				await book(page).evaluate(async (element) => {
+					await Promise.all(
+						element
+							.getAnimations({ subtree: true })
+							.filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+							.map((animation) => animation.finished),
+					);
+				});
+			await page.clock.setFixedTime(new Date(start));
+			const text = Array.from({ length: 60 }, (_, index) => `First paragraph ${index}: streamed words.`).join("\n\n");
+			await page.evaluate(
+				(delta) =>
+					(window as any).reply({ kind: "delta", characterId: "pi-tests", streamId: "first-stream", seq: 1, delta }),
+				text,
+			);
+			const target = log(page).getByText("First paragraph 20: streamed words.", { exact: true });
+			await target.waitFor();
+			await target.evaluate((element) => {
+				element.scrollIntoView({ block: "center" });
+				element.closest(".aw-conv-log")!.dispatchEvent(new Event("scroll"));
+			});
+			await trackHistoryReads(page);
+			const before = await target.boundingBox();
+			const entry = groupedReply("first-saved", start + 10 * 60_000, text) as Extract<
+				TranscriptEntry,
+				{ kind: "assistant" }
+			>;
+			entry.parts.push({ kind: "tool", call: { id: "following-tool", name: "bash", arg: "echo done", input: "{}" } });
+			await page.evaluate((entry) => {
+				(window as any).append("pi-tests", entry);
+				(window as any).reply({ kind: "end", characterId: "pi-tests", streamId: "first-stream", entry });
+			}, entry);
+			await log(page).locator('[data-entry="first-saved"]').waitFor();
+			await finishHistoryReads(page);
+			const after = await target.boundingBox();
+			expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
+			expect(await target.count()).toBe(1);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+	30000,
+);
+
+test.each([1, 10])(
+	"returning from an inline page preserves the away paragraph after a saved-time gap of %i minutes",
+	async (minutes) => {
+		const start = new Date(2026, 10, 7, 10).getTime();
+		const previous = groupedReply("inline-previous", start, "Previous response.") as Extract<
+			TranscriptEntry,
+			{ kind: "assistant" }
+		>;
+		previous.parts.push({ kind: "tool", call: { id: "inline-call", name: "explain_change", arg: null, input: "{}" } });
+		const { page, errors } = await openWorld(world(), { "pi-tests": [previous] });
+		page.setDefaultTimeout(5000);
+		await page.route(`${ORIGIN}/fixture-explanation*`, (route) =>
+			route.fulfill({ body: "<h1>Explanation fixture</h1>", contentType: "text/html" }),
+		);
+		await page.addInitScript((origin) => {
+			(window as any).agentWorkplace.browserPage = async () => ({
+				tool: "explain_change",
+				url: `${origin}/fixture-explanation`,
+			});
+		}, ORIGIN);
+		try {
+			await openSessionReader(page, "DM");
+			await log(page).getByText("Previous response.", { exact: true }).waitFor();
+			await page.clock.setFixedTime(new Date(start + 60_000));
+			const text = Array.from({ length: 60 }, (_, index) => `Inline paragraph ${index}: streamed words.`).join("\n\n");
+			await page.evaluate(
+				(delta) =>
+					(window as any).reply({ kind: "delta", characterId: "pi-tests", streamId: "inline-stream", seq: 1, delta }),
+				text,
+			);
+			const target = log(page).getByText("Inline paragraph 20: streamed words.", { exact: true });
+			await target.waitFor();
+			await target.evaluate((element) => {
+				element.scrollIntoView({ block: "center" });
+				element.closest(".aw-conv-log")!.dispatchEvent(new Event("scroll"));
+			});
+			await page.getByRole("button", { name: /Jump to latest/ }).waitFor();
+			const before = await target.boundingBox();
+			await page
+				.getByRole("button", { name: "Open here", exact: true })
+				.evaluate((button) => (button as HTMLButtonElement).click());
+			await page.getByRole("button", { name: "Back to conversation", exact: true }).waitFor();
+			expect(await log(page).isVisible()).toBe(false);
+			await trackHistoryReads(page);
+			const saved = groupedReply("inline-saved", start + minutes * 60_000, text);
+			await page.evaluate((entry) => {
+				(window as any).append("pi-tests", entry);
+				(window as any).reply({ kind: "end", characterId: "pi-tests", streamId: "inline-stream", entry });
+			}, saved);
+			await page.locator('.aw-conv-log [data-entry="inline-saved"]').waitFor({ state: "attached" });
+			await finishHistoryReads(page);
+			await page.getByRole("button", { name: "Back to conversation", exact: true }).click();
+			await target.waitFor();
+			const after = await target.boundingBox();
+			expect(Math.abs(after!.y - before!.y)).toBeLessThan(2);
+			expect(await log(page).locator(".aw-conv-assistant").count()).toBe(minutes === 1 ? 1 : 2);
+			expect(await page.getByRole("button", { name: /jump to latest/i }).count()).toBe(1);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+	30000,
+);
+
+test.each([true, false])(
+	"a hidden composer send resumes latest when the pending older read finishes hidden: %s",
+	async (finishHidden) => {
+		const start = new Date(2026, 10, 7, 10).getTime();
+		const entries = Array.from({ length: 80 }, (_, index) =>
+			groupedReply(`send-old-${index}`, start + index * 60_000, `Send paragraph ${index}.`),
+		);
+		(entries[30] as Extract<TranscriptEntry, { kind: "assistant" }>).parts.push({
+			kind: "tool",
+			call: { id: "send-page", name: "explain_change", arg: null, input: "{}" },
+		});
+		const { page, errors } = await openWorld(world(), { "pi-tests": entries });
+		page.setDefaultTimeout(5000);
+		await page.route(`${ORIGIN}/fixture-send*`, (route) =>
+			route.fulfill({ body: "<h1>Send fixture</h1>", contentType: "text/html" }),
+		);
+		await page.addInitScript((origin) => {
+			const w = window as any;
+			w.agentWorkplace.browserPage = async () => ({ tool: "explain_change", url: `${origin}/fixture-send` });
+			const read = w.agentWorkplace.conversation;
+			w.agentWorkplace.conversation = async (...args: unknown[]) => {
+				const response = await read(...args);
+				if (args[1])
+					await new Promise<void>((resolve) => {
+						w.releaseOlder = resolve;
+					});
+				return response;
+			};
+		}, ORIGIN);
+		try {
+			await openSessionReader(page, "DM");
+			await log(page).getByText("Send paragraph 79.", { exact: true }).waitFor();
+			await log(page).evaluate((element) => {
+				element.scrollTop = 0;
+			});
+			await page.waitForFunction(() => typeof (window as any).releaseOlder === "function");
+			await page.getByRole("button", { name: "Open here", exact: true }).click();
+			await page.getByRole("button", { name: "Back to conversation", exact: true }).waitFor();
+			const composer = page.getByRole("textbox", { name: "Instruct pi-tests", exact: true });
+			await composer.fill("Continue the task.");
+			await composer.press("Enter");
+			await vi.waitFor(async () =>
+				expect(await commands(page)).toEqual([["pi-tests", { kind: "steer", text: "Continue the task." }]]),
+			);
+			if (finishHidden) {
+				await page.evaluate(() => (window as any).releaseOlder());
+				await page.locator('.aw-conv-log [data-entry="send-old-0"]').waitFor({ state: "attached" });
+			}
+			await page.getByRole("button", { name: "Back to conversation", exact: true }).click();
+			const distance = () =>
+				log(page).evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop);
+			await vi.waitFor(async () => expect(await distance()).toBeLessThan(2));
+			if (!finishHidden) {
+				await page.evaluate(() => (window as any).releaseOlder());
+				await log(page).locator('[data-entry="send-old-0"]').waitFor();
+			}
+			await page.evaluate(() =>
+				(window as any).reply({
+					kind: "delta",
+					characterId: "pi-tests",
+					streamId: "after-send",
+					seq: 1,
+					delta: "Following after the hidden send.",
+				}),
+			);
+			await log(page).getByText("Following after the hidden send.", { exact: true }).waitFor();
+			await vi.waitFor(async () => expect(await distance()).toBeLessThan(2));
+			expect(await page.getByRole("button", { name: /jump to latest/i }).count()).toBe(0);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+	30000,
+);
+
+test("backward live timestamps start a new header without crossing the retained unread boundary", async () => {
+	const start = new Date(2026, 10, 7, 10).getTime();
+	const snapshot = world(
+		CAST.map((person) =>
+			person.id === "pi-tests"
+				? { ...person, facts: facts({ unseen: true, seenAt: start + 10 * 60_000, needsYouSince: start + 20 * 60_000 }) }
+				: person,
+		),
+	);
+	const { page, errors } = await openWorld(snapshot, {
+		"pi-tests": [groupedReply("clock-saved", start + 20 * 60_000, "Saved after the cutoff.")],
+	});
+	try {
+		await openSessionReader(page, "DM");
+		await log(page).getByText("Saved after the cutoff.", { exact: true }).waitFor();
+		await page.clock.setFixedTime(new Date(start));
+		await page.evaluate(() =>
+			(window as any).reply({
+				kind: "delta",
+				characterId: "pi-tests",
+				streamId: "clock-stream",
+				seq: 1,
+				delta: "Live text after clock correction.",
+			}),
+		);
+		await log(page).getByText("Live text after clock correction.", { exact: true }).waitFor();
+		expect(await log(page).locator(".aw-conv-assistant").count()).toBe(2);
+		const marked = log(page)
+			.locator(".aw-conv-block")
+			.filter({ has: page.locator("[data-unread-start]") });
+		expect(await marked.textContent()).toContain("Saved after the cutoff.");
+		expect(await marked.textContent()).not.toContain("Live text after clock correction.");
+		expect(errors).toEqual([]);
+	} finally {
+		await page.close();
+	}
+}, 30000);
 
 const QUESTIONNAIRE = {
 	id: "call-ask-1",
@@ -1376,7 +1980,7 @@ test("workplace text-only DMs omit session details while preserving messages and
 	}
 }, 30000);
 
-test("a browser-page tool in a DM offers to open its page inline, in place of the transcript, and back", async () => {
+test("a DM opens browser pages inline, keeps hidden replies unread, and acknowledges on return", async () => {
 	const signOffs: TranscriptEntry[] = [
 		{
 			kind: "assistant",
@@ -1435,7 +2039,45 @@ test("a browser-page tool in a DM offers to open its page inline, in place of th
 		await shot(page, "inline-page");
 		expect(await log(page).isVisible()).toBe(false);
 		expect(await page.getByRole("textbox").first().isVisible()).toBe(true);
+		await trackHistoryReads(page);
+		await page.evaluate(async () => {
+			const w = window as any;
+			const at = Date.now();
+			w.append("pi-tests", {
+				kind: "assistant",
+				id: "hidden-inline-reply",
+				at,
+				parts: [{ kind: "text", text: "Reply behind the inline page." }],
+				error: null,
+				aborted: false,
+			});
+			const current = await w.agentWorkplace.snapshot();
+			w.push({
+				...current,
+				characters: current.characters.map((person: any) =>
+					person.id === "pi-tests"
+						? {
+								...person,
+								facts: {
+									...person.facts,
+									run: "idle",
+									status: "idle",
+									tool: null,
+									unseen: true,
+									needsYouSince: at,
+									settledAt: at,
+								},
+							}
+						: person,
+				),
+			});
+		});
+		await page.locator('.aw-conv-log [data-entry="hidden-inline-reply"]').waitFor({ state: "attached" });
+		await finishHistoryReads(page);
+		expect(await seen(page)).toEqual([]);
 		await inline.getByRole("button", { name: "Back to conversation" }).click();
+		await log(page).getByText("Reply behind the inline page.", { exact: true }).waitFor();
+		await vi.waitFor(async () => expect(await seen(page)).toEqual(["pi-tests"]));
 		await inline.waitFor({ state: "detached" });
 		await log(page).getByText("Please review the change.").waitFor();
 		await log(page)

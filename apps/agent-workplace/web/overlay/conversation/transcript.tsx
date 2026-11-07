@@ -8,6 +8,8 @@ import { markdownHtml } from "./markdown.js";
 type ToolResult = Extract<TranscriptEntry, { kind: "tool-result" }>;
 type Assistant = Extract<TranscriptEntry, { kind: "assistant" }>;
 
+const GROUP_MS = 5 * 60_000;
+
 export type Block =
 	| { kind: "user"; entry: Extract<TranscriptEntry, { kind: "user" }> }
 	| { kind: "agent"; entries: Assistant[] }
@@ -15,7 +17,13 @@ export type Block =
 	| { kind: "note"; entry: Extract<TranscriptEntry, { kind: "note" }> }
 	| { kind: "result"; entry: ToolResult };
 
-export function blocksOf(entries: TranscriptEntry[]): { blocks: Block[]; results: Map<string, ToolResult> } {
+export function blocksOf(
+	entries: TranscriptEntry[],
+	unreadSince?: number,
+): { blocks: Block[]; results: Map<string, ToolResult> } {
+	const firstUnread = entries.find(
+		(entry) => entry.kind === "assistant" && unreadSince !== undefined && entry.at > unreadSince,
+	)?.id;
 	const results = new Map<string, ToolResult>();
 	const calls = new Set<string>();
 	for (const entry of entries) {
@@ -26,7 +34,16 @@ export function blocksOf(entries: TranscriptEntry[]): { blocks: Block[]; results
 	for (const entry of entries) {
 		const last = blocks.at(-1);
 		if (entry.kind === "assistant") {
-			if (last?.kind === "agent") last.entries.push(entry);
+			const previous = last?.kind === "agent" ? last.entries.at(-1) : undefined;
+			if (
+				last?.kind === "agent" &&
+				previous &&
+				new Date(previous.at).toDateString() === new Date(entry.at).toDateString() &&
+				entry.at >= previous.at &&
+				entry.at - previous.at < GROUP_MS &&
+				entry.id !== firstUnread
+			)
+				last.entries.push(entry);
 			else blocks.push({ kind: "agent", entries: [entry] });
 		} else if (entry.kind === "tool-result") {
 			if (!calls.has(entry.callId)) blocks.push({ kind: "result", entry });
@@ -321,6 +338,7 @@ function AgentBlock({
 				<div
 					key={entry.id}
 					className={`aw-conv-reply${isLive(entry.id) ? " aw-conv-writing" : ""}`}
+					data-response={entry.id}
 					data-entry={entry === entries[0] ? undefined : entry.id}
 				>
 					{items.get(entry.id)!.map((item) => {

@@ -21,8 +21,10 @@ Verify: apps/agent-workplace/tests/world-desk.test.ts
 
 ## symbol:blocksOf
 
-A tool result is drawn inside its call's folded line, found by `callId` across every loaded page; a result whose call is on a page not loaded yet stands alone as a folded "result" line until that page arrives.
-Why: pages split turns anywhere, and the newest page is often a run of results whose calls are older.
+Agent headers follow adjacent assistant-entry timestamps, using the same strictly-below-five-minute and local-day rule as communication threads, with a nonnegative gap required because live receipt clocks can move backward. The first assistant after the embedded reader's retained `unreadSince` starts a new group. Both Chat DMs and World use this function; user entries and projected mail/note/unmatched-result boundaries retain their existing behavior. Each stream remains one entry, so delayed deltas within it cannot create extra headers. Saved-entry replacement can change its timestamp and regroup it.
+A tool result is drawn inside its call's folded line, found by `callId` across every loaded page; a result whose call is on a page not loaded yet stands alone as a folded "result" line until that page arrives. Matched tool results do not reset the assistant-response clock.
+Why: pages split responses anywhere, and results may arrive long after their assistant call. Grouping belongs to response-entry time, not tool completion or whole-run identity.
+Coupled: apps/agent-workplace/web/workplace-thread.tsx, apps/agent-workplace/web/overlay/conversation/conversation-panel.tsx
 Verify: apps/agent-workplace/tests/world-conversation.test.ts
 
 ## symbol:blockVisible

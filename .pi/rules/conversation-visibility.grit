@@ -1,0 +1,5 @@
+language js
+
+`useSeenConversation($api, $id, $needs, $ready)` where {
+  $ready <: r"^[()\s]*position\s*\.\s*ready[()\s]*$"
+}

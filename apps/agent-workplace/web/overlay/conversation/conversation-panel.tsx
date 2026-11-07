@@ -223,11 +223,15 @@ function Panel({
 
 	const pulse = `${facts?.run}:${facts?.settledAt}:${facts?.tool?.since}:${facts?.needsYouSince}`;
 	const history = useHistory(api, opened.id, pulse, !showTools);
-	const streaming = useLiveReplies(api, opened.id, history.entries, history.refresh);
+	const replacements = useRef(new Map<string, string>());
+	const streaming = useLiveReplies(api, opened.id, history.entries, (replacement) => {
+		if (replacement) replacements.current.set(replacement.from, replacement.to);
+		history.refresh();
+	});
 	const position = useReadPosition(history, pulse, facts, embedded);
-	const seenNote = useSeenConversation(api, opened.id, facts?.needsYouSince ?? null, position.ready);
-	const [sentCount, setSentCount] = useState(0);
 	const { page, pageNote, openPage, closePage } = useInlinePage(character.id);
+	const seenNote = useSeenConversation(api, opened.id, facts?.needsYouSince ?? null, position.ready && !page);
+	const [sentCount, setSentCount] = useState(0);
 
 	const panelRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
@@ -405,8 +409,10 @@ function Panel({
 						<WorkingDirectory.Provider value={facts?.cwd}>
 							<OpenBrowserPage.Provider value={embedded ? (callId, label) => void openPage(callId, label) : undefined}>
 								<Transcript
+									visible={!page}
 									history={history}
 									live={streaming}
+									replacements={replacements.current}
 									name={character.name}
 									sent={sentCount}
 									onLink={openLink}
@@ -484,9 +490,22 @@ function openLinkIn(event: React.MouseEvent, open: (href: string, file: boolean)
 	if (href) open(href, link.hasAttribute("data-file"));
 }
 
+function responseAnchor(log: HTMLElement) {
+	const viewport = log.getBoundingClientRect();
+	const response = [...log.querySelectorAll<HTMLElement>("[data-response]")].find((element) => {
+		const rect = element.getBoundingClientRect();
+		return rect.bottom > viewport.top && rect.top < viewport.bottom;
+	});
+	return response
+		? { id: response.dataset.response!, offset: response.getBoundingClientRect().top - viewport.top }
+		: undefined;
+}
+
 function Transcript({
+	visible,
 	history,
 	live,
+	replacements,
 	name,
 	sent,
 	onLink,
@@ -496,12 +515,14 @@ function Transcript({
 }: {
 	unreadSince?: number;
 	onAtLatest?: (latest: boolean) => void;
+	visible: boolean;
 	history: ReturnType<typeof useHistory>;
 	showTools: boolean;
 
 	onLink: (href: string, file: boolean) => void;
 
 	live: TranscriptEntry[];
+	replacements: ReadonlyMap<string, string>;
 	name: string;
 
 	sent: number;
@@ -514,37 +535,67 @@ function Transcript({
 		() => (live.length ? [...history.entries, ...live] : history.entries),
 		[history.entries, live],
 	);
-	const { blocks: allBlocks, results } = useMemo(() => blocksOf(entries), [entries]);
+	const { blocks: allBlocks, results } = useMemo(() => blocksOf(entries, unreadSince), [entries, unreadSince]);
 	const blocks = useMemo(() => allBlocks.filter((block) => blockVisible(block, showTools)), [allBlocks, showTools]);
 	const firstKey = blocks.length ? blockKey(blocks[0]) : undefined;
+	const structure = JSON.stringify(blocks.map(blockKey));
 	const unreadIndex =
 		unreadSince === undefined
 			? -1
 			: blocks.findIndex((block) => block.kind === "agent" && block.entries.some((entry) => entry.at > unreadSince));
 	const lastEntry = useRef<TranscriptEntry | undefined>(undefined);
-	const layout = useRef<{ height: number; first?: string; sent: number; stuck: boolean; placed: boolean }>({
+	const layout = useRef<{
+		height: number;
+		first?: string;
+		sent: number;
+		stuck: boolean;
+		placed: boolean;
+		hidden: boolean;
+		structure?: string;
+		anchor?: ReturnType<typeof responseAnchor>;
+		restoredTop?: number;
+	}>({
 		height: 0,
 		sent,
 		stuck: true,
 		placed: false,
+		hidden: false,
 	});
 
 	useLayoutEffect(() => {
 		const el = log.current;
 		if (!el) return;
 		const was = layout.current;
+		if (!visible) {
+			was.hidden = true;
+			return;
+		}
+		const regrouped = was.structure !== undefined && was.structure !== structure;
+		const keepAway = (regrouped || was.hidden) && !was.stuck && was.sent === sent;
+		const anchor = keepAway ? was.anchor : undefined;
+		const id = anchor ? (replacements.get(anchor.id) ?? anchor.id) : undefined;
+		const response = id ? el.querySelector<HTMLElement>(`[data-response="${CSS.escape(id)}"]`) : undefined;
+		const place = (top: number) => {
+			el.scrollTop = top;
+			if (keepAway) was.restoredTop = el.scrollTop;
+		};
 		if (!was.placed && history.ready) {
 			const unread = el.querySelector<HTMLElement>("[data-unread-start]");
-			el.scrollTop =
+			place(
 				unread && (unreadIndex > 0 || !history.before)
 					? unread.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
-					: el.scrollHeight;
+					: el.scrollHeight,
+			);
 			was.placed = true;
-		} else if (was.first !== undefined && firstKey !== was.first) {
-			el.scrollTop += el.scrollHeight - was.height;
-		} else if (was.sent !== sent || (was.stuck && el.scrollHeight !== was.height)) {
-			el.scrollTop = el.scrollHeight;
+		} else if (was.sent !== sent) {
+			place(el.scrollHeight);
 			was.stuck = true;
+		} else if (response && anchor) {
+			place(el.scrollTop + response.getBoundingClientRect().top - el.getBoundingClientRect().top - anchor.offset);
+		} else if (was.first !== undefined && firstKey !== was.first) {
+			place(el.scrollTop + el.scrollHeight - was.height);
+		} else if (was.stuck && el.scrollHeight !== was.height) {
+			place(el.scrollHeight);
 		}
 		if (
 			onAtLatest &&
@@ -556,7 +607,7 @@ function Transcript({
 		)
 			setNewBelow(true);
 		lastEntry.current = entries.at(-1);
-		was.stuck = el.scrollHeight - el.clientHeight - el.scrollTop < STICK_MARGIN;
+		if (was.stuck) was.stuck = el.scrollHeight - el.clientHeight - el.scrollTop < STICK_MARGIN;
 		if (onAtLatest && history.ready) {
 			onAtLatest(was.stuck);
 			setAway(!was.stuck);
@@ -565,11 +616,15 @@ function Transcript({
 		was.height = el.scrollHeight;
 		was.first = firstKey;
 		was.sent = sent;
+		was.structure = structure;
+		was.anchor = responseAnchor(el);
+		was.hidden = false;
 	});
 
 	useEffect(() => {
 		const el = log.current;
-		if (el && history.ready && history.before && el.scrollHeight <= el.clientHeight + LOAD_MARGIN) history.loadOlder();
+		if (visible && el && history.ready && history.before && el.scrollHeight <= el.clientHeight + LOAD_MARGIN)
+			history.loadOlder();
 	});
 
 	useEffect(() => {
@@ -578,13 +633,18 @@ function Transcript({
 
 	const onScroll = () => {
 		const el = log.current;
-		if (!el) return;
-		layout.current.stuck = el.scrollHeight - el.clientHeight - el.scrollTop < STICK_MARGIN;
-		if (onAtLatest) {
-			onAtLatest(layout.current.stuck);
-			setAway(!layout.current.stuck);
-			if (layout.current.stuck) setNewBelow(false);
+		if (!el || !visible) return;
+		const was = layout.current;
+		if (was.restoredTop !== el.scrollTop) {
+			was.stuck = el.scrollHeight - el.clientHeight - el.scrollTop < STICK_MARGIN;
+			if (onAtLatest) {
+				onAtLatest(was.stuck);
+				setAway(!was.stuck);
+				if (was.stuck) setNewBelow(false);
+			}
 		}
+		was.restoredTop = undefined;
+		was.anchor = responseAnchor(el);
 		if (el.scrollTop < LOAD_MARGIN) history.loadOlder();
 	};
 
