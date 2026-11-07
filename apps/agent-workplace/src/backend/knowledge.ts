@@ -100,6 +100,7 @@ async function extract(workspace: WorkspaceApi, request: KnowledgeRequest): Prom
 		}
 	}
 	graph.nodes = [...nodes.values()].sort((a, b) => a.id.localeCompare(b.id));
+	graph.edges = [...new Map(graph.edges.map((edge) => [JSON.stringify(edge), edge])).values()];
 	return graph;
 }
 

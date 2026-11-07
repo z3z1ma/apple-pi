@@ -1,6 +1,6 @@
 # Workplace
 
-Workplace is Agent Workplace's interface for people, conversations, team setup, local code and Jira issues. It uses the same real people, sessions, tasks, threads and runtime as the World view; it is not a separate messaging service or organization store.
+Workplace is Agent Workplace's interface for people, conversations, team setup, local code, repository knowledge and Jira issues. It uses the same real people, sessions, tasks, threads and runtime as the World view; it is not a separate messaging service or organization store.
 
 ## Open Workplace
 
@@ -18,7 +18,7 @@ The menu also shows whether the current organization is incorporated. An organiz
 
 **Leave <organization>…** at the bottom of the same menu lets every lasting person in the current organization go, through the ordinary Let go dialog with no handoffs selected: it is permanent, needs a reason and explicit consent, and is refused for anyone with unfinished work until that work is finished or reassigned.
 
-Chat, Mail, Org, Reviews and the Desk show only the current workspace: its people, their DMs, the channels and mail they take part in, and the reviews they requested or own. A conversation that includes people from two organizations appears in both. Code, Git and Issues do not change with the workspace. There is one desk: it works in the workspace whose organization holds its coordinator, and every other workspace's Desk says where it is run from, with **Go there** and **Run the desk from here**.
+Chat, Mail, Org, Reviews and the Desk show only the current workspace: its people, their DMs, the channels and mail they take part in, and the reviews they requested or own. A conversation that includes people from two organizations appears in both. Code, Git, Knowledge and Issues do not change with the workspace. Code, Git and Knowledge share one current repository on this device: changing any of their repository pickers changes all three. Opening a file reference in Code also changes this shared choice. Each view keeps its own picker and retained view state; Reviews keeps its separate **All repositories** filter. There is one desk: it works in the workspace whose organization holds its coordinator, and every other workspace's Desk says where it is run from, with **Go there** and **Run the desk from here**.
 
 People started for one job, such as review or program peers, carry a **temp** badge wherever they appear; in a review, an existing person reviewing in a fork of their own conversation carries **worker**.
 
@@ -220,6 +220,19 @@ Choose **Git** for one repository or worktree at a time: pick a known repository
 - The toolbar fetches, pulls and pushes (a branch without an upstream is pushed to `origin`, or the first remote, and tracks it), creates a branch, and stashes or pops. During a merge, rebase, cherry-pick or revert a banner offers **Continue** and **Abort**.
 
 Network commands use SSH in batch mode, so a key that needs a passphrase prompt fails with Git's message instead of waiting. Failures show Git's own output.
+
+## Knowledge explores repository context and wiki links
+
+Choose **Knowledge** and a repository, or enter an absolute directory. Switch between **.context** and **.wiki** in its toolbar:
+
+- **.context** shows a node for each context file's source path. **Coupled**, **Verify** and `[[wiki]]` links have distinct edge colours. A linked source with its own context selects that context; other targets remain selectable file nodes. Hollow nodes mark missing or unavailable targets.
+- **.wiki** shows pages and resolved `[[slug]]` or `[[slug#Heading|label]]` links. It uses the same case-insensitive slug, heading and ambiguity rules as the [wiki tools](wiki.md). Warnings report unresolved or unsafe links rather than choosing an ambiguous page.
+
+Node colour groups folders; folders add no tree edges. Drag empty graph space to pan, scroll or use **Zoom in** and **Zoom out**, and drag nodes to rearrange them. **Fit graph** brings the layout back into view. Hover a node to highlight its neighbours. Use **Find a node** to search full paths and select a result; graph nodes also support Enter or Space when focused.
+
+Selecting a node opens the Markdown reader with incoming and outgoing **Links** that select their targets. For context nodes and available source-file targets, **Open source in Code** uses the existing file-reference route and retains Code's other buffers. The reader uses the same escaped Markdown renderer as conversations; raw HTML and remote images do not execute or load. A target without context has a clear no-document message.
+
+Knowledge mounts on its first visit and retains its mode, graph, camera and reader across app switches. The force simulation pauses while hidden. Repository and mode changes read the new graph; **Refresh** rereads the current one after files change. There is no filesystem watcher or backend cache. Graph and content APIs are query-only, validate repository containment, and follow no context or wiki symlinks. Missing `.context` or `.wiki` directories show empty states. Reloading the app discards the in-memory graph; the shared repository choice remains on the device.
 
 ## Reviews shows the captured code-review queue
 

@@ -16,13 +16,13 @@ import { Select } from "./workplace-fields.js";
 import { type DiffView, GitDiff } from "./workplace-git-diff.js";
 import { laneLayout } from "./workplace-git-graph.js";
 import { Icon } from "./workplace-icon.js";
+import { chooseRepository as setRoot, useRepository } from "./workplace-repository.js";
 import { usePaneResize } from "./workplace-resize.js";
 import "./workplace-git.css";
 
 const PAGE = 300;
 const ROW = 30;
 const LANE = 14;
-const STORED_ROOT = "workplace-git-root";
 const workspaceApi = () => window.agentWorkplace.workspace;
 const gitApi = () => window.agentWorkplace.git;
 
@@ -526,7 +526,7 @@ function CommitGraph({
 export function WorkplaceGit({ active }: { active: boolean }) {
 	const openMenu = useWorkplaceMenu();
 	const [roots, setRoots] = useState<string[]>([]);
-	const [root, setRoot] = useState(() => localStorage.getItem(STORED_ROOT) ?? "");
+	const root = useRepository();
 	const [manualRoot, setManualRoot] = useState("");
 	const [worktrees, setWorktrees] = useState<WorkspaceWorktree[]>([]);
 	const [overview, setOverview] = useState<GitOverview>();
@@ -600,7 +600,6 @@ export function WorkplaceGit({ active }: { active: boolean }) {
 
 	useEffect(() => {
 		if (!root) return;
-		localStorage.setItem(STORED_ROOT, root);
 		setOverview(undefined);
 		setCommits([]);
 		setDetail(undefined);

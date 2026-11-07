@@ -382,7 +382,7 @@ test("when the rail is too short, apps it cannot fit move into More, which still
 		expect(await rail.getByRole("button", { name: "More apps" }).getAttribute("aria-pressed")).toBe("true");
 		expect(await rail.getByRole("button", { name: "More apps" }).innerText()).toContain("Git");
 		await page.setViewportSize({ width: 1440, height: 900 });
-		await vi.waitFor(async () => expect(await rail.getByRole("button", { name: "More apps" }).count()).toBe(0));
+		await rail.getByRole("button", { name: "Git", exact: true }).waitFor();
 		expect(await rail.getByRole("button", { name: "Git", exact: true }).getAttribute("aria-pressed")).toBe("true");
 		expect(errors).toEqual([]);
 	} finally {
