@@ -53,17 +53,26 @@ beforeEach(async () => {
 	});
 	await startRuntime(state.socketPath);
 	parent = standInProcess();
-	owner = await fakeBridge(state.socketPath, "owner", parent.pid, parent.startedAt, { session: { cwd: repository } });
-	awake = await fakeBridge(state.socketPath, workers[0]!.id, parent.pid, parent.startedAt, {
-		session: { cwd: repository, file: workers[0]!.file },
-		facts: { reportsTo: "owner", role: "implementation-engineer", model: "fixture/worker-0" },
-	});
 	const db = new DatabaseSync(state.dbPath);
-	for (const worker of workers.slice(1))
-		db.prepare(
-			"insert into sessions (id, kind, cwd, name, session_file, reports_to, run_state, generation, source, updated_at) values (?, 'root', ?, ?, ?, 'owner', 'idle', 0, 'fixture', 1)",
-		).run(worker.id, repository, `Worker ${workers.indexOf(worker)}`, worker.file);
-	db.close();
+	try {
+		owner = await fakeBridge(state.socketPath, "owner", parent.pid, parent.startedAt, { session: { cwd: repository } });
+		await vi.waitFor(() => expect(db.prepare("select 1 from sessions where id = 'owner'").get()).toBeDefined());
+		awake = await fakeBridge(state.socketPath, workers[0]!.id, parent.pid, parent.startedAt, {
+			session: { cwd: repository, file: workers[0]!.file },
+			facts: { reportsTo: "owner", role: "implementation-engineer", model: "fixture/worker-0" },
+		});
+		await vi.waitFor(() =>
+			expect(db.prepare("select reports_to from sessions where id = ?").get(workers[0]!.id)).toEqual({
+				reports_to: "owner",
+			}),
+		);
+		for (const worker of workers.slice(1))
+			db.prepare(
+				"insert into sessions (id, kind, cwd, name, session_file, reports_to, run_state, generation, source, updated_at) values (?, 'root', ?, ?, ?, 'owner', 'idle', 0, 'fixture', 1)",
+			).run(worker.id, repository, `Worker ${workers.indexOf(worker)}`, worker.file);
+	} finally {
+		db.close();
+	}
 	writeFileSync(join(state.agentDir, "peer-control.json"), JSON.stringify({ review: { authority: true } }));
 });
 afterEach(async () => {

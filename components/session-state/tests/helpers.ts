@@ -61,7 +61,12 @@ export async function fakeBridge(
 	sessionId: string,
 	pid: number,
 	startedAt: number,
-	hello: { session?: Record<string, unknown>; facts?: Record<string, unknown>; run?: string } = {},
+	hello: {
+		session?: Record<string, unknown>;
+		process?: Record<string, unknown>;
+		facts?: Record<string, unknown>;
+		run?: string;
+	} = {},
 ) {
 	const socket: Socket = createConnection(socketPath);
 	await new Promise((resolve) => socket.once("connect", resolve));
@@ -69,7 +74,7 @@ export async function fakeBridge(
 	send({
 		type: "hello",
 		session: { id: sessionId, kind: "root", cwd: "/tmp", ...hello.session },
-		process: { pid, startedAt },
+		process: { pid, startedAt, ...hello.process },
 		run: hello.run ?? "idle",
 		facts: hello.facts ?? {},
 	});

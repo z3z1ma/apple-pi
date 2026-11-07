@@ -181,6 +181,7 @@ const TOPOLOGY = [
 
 interface Connection extends ReplySubscriber {
 	quiescence?: boolean;
+	inputRelease?: string;
 	sessionId?: string;
 	generation?: number;
 	lastSeen: number;
@@ -483,6 +484,7 @@ export class Runtime {
 			this.hello(connection, message);
 			return;
 		}
+		if (connection.shutdown) return;
 		if (message.type === "command") {
 			this.command(connection, message);
 			return;
@@ -544,7 +546,14 @@ export class Runtime {
 			}
 		} else if (message.type === "shutdown") {
 			connection.shutdown = true;
-			this.endIncarnation(sessionId, generation, "exited", "bridge", message.reason, message);
+			this.endIncarnation(
+				sessionId,
+				generation,
+				"exited",
+				"bridge",
+				message.reason,
+				message.closeCommand && this.dispatched.get(message.closeCommand) !== connection ? undefined : message,
+			);
 			this.setRunState(sessionId, generation, "idle");
 		}
 	}
@@ -680,10 +689,7 @@ export class Runtime {
 			db.prepare(
 				"update review_attempts set fork_offset = coalesce(fork_offset, ?) where person = ? and fork_file is not null",
 			).run(session.forkOffset!, session.id);
-		connection.sessionId = session.id;
-		connection.generation = generation;
-		connection.quiescence = session.quiescence === true;
-		this.resetInputAgreements(connection, hello);
+		this.bindBridge(connection, hello, generation);
 		this.setRunState(session.id, generation, hello.run);
 
 		const { reportsTo, ...facts } = hello.facts;
@@ -729,6 +735,23 @@ export class Runtime {
 		}
 	}
 
+	private bindBridge(connection: Connection, hello: Hello, generation: number): void {
+		for (const prior of this.connections) {
+			if (prior !== connection && prior.sessionId === hello.session.id && !prior.shutdown) {
+				prior.shutdown = true;
+				this.dropCommandsOf(prior);
+			}
+		}
+		connection.shutdown = true;
+		this.dropCommandsOf(connection);
+		connection.shutdown = false;
+		connection.inputRelease = undefined;
+		connection.sessionId = hello.session.id;
+		connection.generation = generation;
+		connection.quiescence = hello.session.quiescence === "launch";
+		this.resetInputAgreements(connection, hello);
+	}
+
 	private admitOrganization(hello: Hello, generation: number): void {
 		const db = this.db!;
 		const { session } = hello;
@@ -738,13 +761,12 @@ export class Runtime {
 			generation,
 		);
 		db.prepare("update sessions set closing_generation = null where id = ?").run(session.id);
-		if (session.incorporate !== true) return;
+		if (session.incorporate !== true || !hello.process.launch) return;
 		const applied = db
-			.prepare(`select coalesce(json_extract(e.data, '$.process.startedAt'), i.process_started_at) as process_started_at
-			from events e left join incarnations i on i.session_id = e.session_id and i.generation = e.generation
-			where e.type = 'organization_startup_incorporated' and coalesce(json_extract(e.data, '$.process.pid'), i.pid) = ?`)
-			.all(hello.process.pid) as { process_started_at: number }[];
-		if (!applied.some((row) => sameStart(row.process_started_at, hello.process.startedAt)))
+			.prepare(`select 1 from events where type = 'organization_startup_incorporated'
+			and json_extract(data, '$.process.launch') = ?`)
+			.get(hello.process.launch);
+		if (!applied)
 			this.atomically(() => {
 				incorporateOrganization(db, session.id, session.id);
 				this.event("runtime", session.id, generation, "organization_startup_incorporated", {
@@ -757,7 +779,7 @@ export class Runtime {
 	private commandRefusal(person: string, command: Command): string | undefined {
 		if (command.kind !== "close" && departureOf(this.db!, person))
 			return "This person has permanently departed and cannot accept new commands.";
-		if (startsTurn(command.kind) && this.inputAgreements.has(person))
+		if (startsTurn(command.kind) && this.inputReserved(person))
 			return "Input is sealed for automatic departure; reopen or incorporate before retrying";
 		if (command.kind === "close" && command.dissolve !== true && closeNeedsConsent(this.db!, person))
 			return DISSOLUTION_CONSENT;
@@ -3054,7 +3076,12 @@ export class Runtime {
 	}
 
 	private dispatch(target: Connection, commandId: string, command: Command, replay = false): void {
-		if (startsTurn(command.kind) && target.sessionId && this.inputAgreements.has(target.sessionId)) {
+		if (command.kind === "release_input") target.inputRelease = commandId;
+		if (startsTurn(command.kind) && target.sessionId && this.inputReserved(target.sessionId)) {
+			if (command.kind === "mail") {
+				this.releaseInput(target.sessionId);
+				return;
+			}
 			this.setCommandStage(
 				commandId,
 				"failed",
@@ -3159,6 +3186,16 @@ export class Runtime {
 			else if (stage === "failed") this.releaseInput(row.session_id);
 		}
 		this.setCommandStage(commandId, stage, reason, result);
+		if (row.kind === "release_input" && stage === "applied" && bridge.inputRelease === commandId) {
+			bridge.inputRelease = undefined;
+			const pending = this.db!.prepare(`select command_id, command from commands
+				where session_id = ? and kind = 'mail' and stage in ('accepted', 'delivered')
+				and (bound_generation is null or bound_generation = ?) order by created_at`).all(
+				bridge.sessionId!,
+				bridge.generation!,
+			) as { command_id: string; command: string }[];
+			for (const mail of pending) this.dispatch(bridge, mail.command_id, JSON.parse(mail.command), true);
+		}
 		if (row.kind === "quiesce" && stage === "applied") queueMicrotask(() => void this.dissolveOrganizations());
 	}
 
@@ -3218,7 +3255,7 @@ export class Runtime {
 		if (stage === "applied" || stage === "failed") {
 			this.receiptWaiters.delete(commandId);
 			this.commandClients.delete(commandId);
-			this.dispatched.delete(commandId);
+			if (row.kind !== "close" || stage === "failed") this.dispatched.delete(commandId);
 			if (row.program_id) void this.cleanPrograms();
 		}
 	}
@@ -3720,6 +3757,14 @@ export class Runtime {
 		if (provenance?.closeCommand) {
 			const explicit = closes.find((row) => row.command_id === provenance.closeCommand);
 			if (!explicit || JSON.parse(explicit.command).dissolve !== true) return;
+			const authority = db
+				.prepare(`select 1 from events accepted
+				where accepted.session_id = ? and accepted.type = 'command_accepted'
+				and json_extract(accepted.data, '$.commandId') = ?
+				and not exists (select 1 from events moved where moved.session_id = accepted.session_id
+					and moved.type = 'transferred' and moved.seq > accepted.seq)`)
+				.get(person, explicit.command_id);
+			if (!authority) return;
 		} else if (closes.length || interactive.interactive !== 1 || provenance?.deliberate !== true) return;
 		if (temporaryCallers(db).has(person)) return;
 		this.atomically(() => {
@@ -3752,6 +3797,15 @@ export class Runtime {
 		return Boolean(
 			identity &&
 				running.every((row) => row.pid === identity.pid && sameStart(row.process_started_at, identity.startedAt)),
+		);
+	}
+
+	private inputReserved(person: string): boolean {
+		return (
+			this.inputAgreements.has(person) ||
+			[...this.connections].some(
+				(bridge) => !bridge.shutdown && bridge.sessionId === person && bridge.inputRelease !== undefined,
+			)
 		);
 	}
 

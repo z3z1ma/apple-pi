@@ -1,5 +1,8 @@
 ## file
 
+Fixture admission waits for the owner row before connecting its awake worker, then for that worker's recorded reports_to before enqueue. fakeBridge awaits socket connection, not runtime hello processing. A broader round-two run failed at enqueue with outside-organization while the fixture had neither barrier; the correction establishes the intended precondition without weakening authority assertions. It does not establish a baseline failure rate. The fixture DB closes even when the admission wait fails.
+Coupled: components/session-state/tests/helpers.ts
+
 Real isolated runtime, Git capture and program-peer lifecycle; fixture peers use Pi's real SessionManager.forkFrom rather than append to an original worker. One fake bridge represents an awake worker; seeded retained sessions represent workers at home. The public review_code/manage_review path uses a real scripted SDK session. No paid model, shared runtime, UI badge or installed CLI process is exercised.
 
 Foreign worker names and IDs are refused through the enqueue receipt. A worker moved while the review is queued cannot launch: assert the public failure and the absence of an actual fixture launch using that worker's transcript, while permitting a retained failed attempt record; reviewScope separately rechecks authority after attempt persistence, preserving operator authority. Runtime tests use actual public log projections to require new attempt text and exclude inherited worker text. Missing/incorrect offsets yield no entries, while output beyond the bounded tail still retains attempt-local results. The direct scope case seeds a launch-eligible persisted attempt only after actual peer cleanup; it tests that guard, not another process launch.

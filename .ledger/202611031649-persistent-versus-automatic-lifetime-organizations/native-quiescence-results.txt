@@ -1,0 +1,16 @@
+Recorded from tlc_check, TLC 1.7.4, two workers, Objects=3.
+
+Intended model (UnsafeLocal=FALSE, UnsafeTree=FALSE): PASS.
+305 generated, 92 distinct, zero queued, depth 9. Every action took a step.
+
+Object-local accounting control (UnsafeLocal=TRUE): NoUnsafeDeparture VIOLATION.
+86 generated, 55 distinct, 28 queued, depth 5.
+Init -> Input (object 1 preparing) -> Replace (current object 2) -> Agree -> Commit.
+Final work=<<preparing,none,none>>, frozen=TRUE, proof=TRUE, departed=TRUE, unsafe=TRUE.
+
+Tree bypass control (UnsafeTree=TRUE): NoUnsafeDeparture VIOLATION.
+130 generated, 66 distinct, 30 queued, depth 6.
+Init -> Agree -> Tree -> Commit.
+Final work=<<tree,none,none>>, frozen=TRUE, proof=TRUE, departed=TRUE, unsafe=TRUE.
+
+Finite safety for this native-owner refinement only. Connection/ticket/crash ordering remains in organization-quiescence.tla. Composition, implementation, liveness, physical shutdown and production activation are not proved by these verdicts.

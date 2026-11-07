@@ -5,6 +5,8 @@ Why: an inherited pane or the operator's socket directory would attach the test 
 
 ## symbol:fakeBridge
 
+Use `hello.process` overrides for an explicit launch token when a control claims the same launch across hellos. The default remains a raw legacy-shaped socket hello; it does not infer a token from PID/time.
+
 Put organization fields such as `reportsTo` and `manages` in `hello.facts`, and check the stored reporting line when a fixture's tree matters.
 Why: the fake accepts unchecked fields in `hello.session`. Putting `reportsTo` there silently created a second organization and duplicated a shared directory's backlog, rather than exercising the intended team.
 

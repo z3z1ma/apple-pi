@@ -7,6 +7,7 @@ import { openLifecycle } from "../../../apps/agent-workplace/src/backend/lifecyc
 import { openOrg } from "../../../apps/agent-workplace/src/backend/org.js";
 import type { WorldSnapshot } from "../../../apps/agent-workplace/src/world.js";
 import { fauxSession } from "../../../tests/helpers/faux-session.js";
+import { trackLiveSessions } from "../../shared/src/forked-continuation.js";
 import bridge from "../src/bridge.js";
 import { sendCommand } from "../src/client.js";
 import { organizationLifetime } from "../src/organization-lifetime.js";
@@ -55,11 +56,12 @@ async function fixture() {
 			run?: string;
 			holdClose?: boolean;
 			holdQuiesce?: boolean;
+			holdRelease?: boolean;
 			quiescence?: boolean;
 			onCall?: boolean;
 		} = {},
 	) {
-		const process = standInProcess();
+		const process = { ...standInProcess(), launch: `launch-${id}-${Math.random()}` };
 		const file = join(state.agentDir, `${id}.jsonl`);
 		writeFileSync(file, `${JSON.stringify({ type: "session", id, cwd: state.agentDir })}\n`);
 		const link = await fakeBridge(paths.socket, id, process.pid, process.startedAt, {
@@ -67,8 +69,9 @@ async function fixture() {
 				file,
 				interactive: options.interactive,
 				incorporate: options.incorporate,
-				quiescence: options.quiescence !== false,
+				quiescence: options.quiescence !== false ? "launch" : undefined,
 			},
+			process: { launch: process.launch },
 			facts: { reportsTo: options.manager ?? null, onCall: options.onCall ?? false },
 			run: options.run,
 		});
@@ -78,7 +81,8 @@ async function fixture() {
 				const message = JSON.parse(line);
 				if (
 					message.type === "command" &&
-					(message.command.kind === "release_input" || (message.command.kind === "quiesce" && !options.holdQuiesce))
+					((message.command.kind === "release_input" && !options.holdRelease) ||
+						(message.command.kind === "quiesce" && !options.holdQuiesce))
 				)
 					link.send({ type: "command_progress", commandId: message.commandId, stage: "applied" });
 				if (message.type === "command" && message.command.kind === "close") {
@@ -522,6 +526,7 @@ test("review: resuming a flagged launch cannot incorporate its later merge targe
 	);
 	const resumed = await fakeBridge(f.paths.socket, "flagged", flagged.process.pid, flagged.process.startedAt + 1, {
 		session: { file: flagged.file, incorporate: true },
+		process: { launch: flagged.process.launch },
 	});
 	cleanups.push(() => resumed.socket.destroy());
 	await vi.waitFor(() =>
@@ -545,7 +550,7 @@ test("opening a new person in a flagged launch does not reapply startup incorpor
 		"replacement",
 		original.process.pid,
 		original.process.startedAt + 1,
-		{ session: { incorporate: true } },
+		{ session: { incorporate: true }, process: { launch: original.process.launch } },
 	);
 	cleanups.push(() => replacement.socket.destroy());
 	await vi.waitFor(() => expect(f.db.prepare("select 1 from sessions where id = 'replacement'").get()).toBeDefined());
@@ -696,6 +701,408 @@ test("review: disconnected live idle observation does not authorize departure", 
 	await new Promise((resolve) => setTimeout(resolve, 1400));
 	expect(f.departed("child")).toBeUndefined();
 }, 15000);
+
+test.each(["delivered", "applied"] as const)(
+	"round2: %s close consent cannot authorize a reformed root",
+	async (stage) => {
+		const f = await fixture();
+		const root = await f.person("a", { interactive: true, holdClose: true });
+		await f.person("b");
+		const receipt = await sendCommand(
+			"a",
+			{ kind: "close", dissolve: true },
+			{ socketPath: f.paths.socket, until: "accepted" },
+		);
+		root.send({ type: "command_progress", commandId: receipt.commandId, stage });
+		await vi.waitFor(() =>
+			expect(f.db.prepare("select stage from commands where command_id = ?").get(receipt.commandId)).toEqual({ stage }),
+		);
+		for (const [person, manager] of [
+			["a", "b"],
+			["a", null],
+			["b", "a"],
+		] as const) {
+			expect(
+				(
+					await sendCommand(
+						"operator",
+						{ kind: "organization_move", person, manager, branch: [person] },
+						{ socketPath: f.paths.socket },
+					)
+				).stage,
+			).toBe("applied");
+		}
+		root.send({ type: "shutdown", reason: "quit", closeCommand: receipt.commandId });
+		await new Promise((resolve) => setTimeout(resolve, 1400));
+		expect(organizationLifetime(f.db, "a").closing).toBe(false);
+		expect(f.departed("b")).toBeUndefined();
+	},
+);
+
+test.each([false, true])(
+	"round2: superseded connection cannot close its live generation (command=%s)",
+	async (command) => {
+		const f = await fixture();
+		const old = await f.person("root", { interactive: true, holdClose: true });
+		await f.person("child", { manager: "root" });
+		let closeId: string | undefined;
+		if (command) {
+			const receipt = await sendCommand(
+				"root",
+				{ kind: "close", dissolve: true },
+				{ socketPath: f.paths.socket, until: "accepted" },
+			);
+			closeId = receipt.commandId;
+			old.send({ type: "command_progress", commandId: closeId, stage: "applied" });
+			await vi.waitFor(() =>
+				expect(f.db.prepare("select stage from commands where command_id = ?").get(closeId!)).toEqual({
+					stage: "applied",
+				}),
+			);
+		}
+		const fresh = await fakeBridge(f.paths.socket, "root", old.process.pid, old.process.startedAt, {
+			session: { interactive: true },
+			facts: { cost: 41 },
+		});
+		cleanups.push(() => fresh.socket.destroy());
+		await vi.waitFor(() =>
+			expect(f.db.prepare("select cost from sessions where id = 'root'").get()).toEqual({ cost: 41 }),
+		);
+		old.send({ type: "shutdown", reason: "quit", deliberate: true, ...(closeId ? { closeCommand: closeId } : {}) });
+		await new Promise((resolve) => setTimeout(resolve, 1400));
+		expect(organizationLifetime(f.db, "root").closing).toBe(false);
+		expect(f.departed("child")).toBeUndefined();
+		expect(f.db.prepare("select ended_at from incarnations where session_id = 'root'").get()).toEqual({
+			ended_at: null,
+		});
+		if (closeId) {
+			fresh.send({ type: "shutdown", reason: "quit", deliberate: true, closeCommand: closeId });
+			await vi.waitFor(() =>
+				expect(f.db.prepare("select ended_at from incarnations where session_id = 'root'").get()).toEqual({
+					ended_at: expect.any(Number),
+				}),
+			);
+			expect(organizationLifetime(f.db, "root").closing).toBe(false);
+		}
+	},
+);
+
+test.each(["thread_post", "communication"] as const)(
+	"round2: %s mail during reservation remains deliverable",
+	async (kind) => {
+		const f = await fixture();
+		const root = await f.person("root", { interactive: true });
+		const child = await f.person("child", { manager: "root", holdQuiesce: true });
+		const delivered: string[] = [];
+		child.socket.on(
+			"data",
+			lineReader((line) => {
+				const message = JSON.parse(line);
+				if (message.type === "command" && message.command.kind === "mail") {
+					delivered.push(message.command.body);
+					child.send({ type: "command_progress", commandId: message.commandId, stage: "applied" });
+				}
+			}),
+		);
+		root.quit();
+		await vi.waitFor(
+			() =>
+				expect(
+					f.db.prepare("select 1 from commands where session_id = 'child' and kind = 'quiesce'").get(),
+				).toBeDefined(),
+			{ timeout: 5000 },
+		);
+		const post = {
+			thread: `reserved-${kind}`,
+			threadKind: "mail" as const,
+			subject: "Held mail",
+			body: "Deliver after release",
+			to: ["child"],
+		};
+		const publication = await sendCommand(
+			"operator",
+			kind === "thread_post"
+				? { kind, ...post }
+				: { kind, version: 1, input: { tool: "send_mail", arguments: post }, operation: { action: "post", ...post } },
+			{ socketPath: f.paths.socket },
+		);
+		expect(publication.stage).toBe("applied");
+		expect(
+			f.db.prepare("select stage from commands where session_id = 'child' and kind = 'mail'").all(),
+		).not.toContainEqual({ stage: "failed" });
+		expect(
+			(await sendCommand("root", { kind: "incorporate", by: "operator" }, { socketPath: f.paths.socket })).stage,
+		).toBe("applied");
+		await vi.waitFor(() => expect(delivered).toEqual(["Deliver after release"]), { timeout: 5000 });
+		expect(f.departed("child")).toBeUndefined();
+		expect(f.db.prepare("select stage from commands where session_id = 'child' and kind = 'mail'").all()).toEqual([
+			{ stage: "applied" },
+		]);
+	},
+);
+
+test.each(["reconnect", "restart"] as const)(
+	"round2: retained mail waits for release acknowledgement across %s",
+	async (mode) => {
+		const f = await fixture();
+		const root = await f.person("root", { interactive: true });
+		const child = await f.person("child", { manager: "root", holdQuiesce: true, holdRelease: true });
+		root.quit();
+		await vi.waitFor(
+			() =>
+				expect(
+					f.db.prepare("select 1 from commands where session_id = 'child' and kind = 'quiesce'").get(),
+				).toBeDefined(),
+			{ timeout: 5000 },
+		);
+		expect(
+			(
+				await sendCommand(
+					"operator",
+					{
+						kind: "thread_post",
+						thread: `held-${mode}`,
+						threadKind: "mail",
+						subject: "Held",
+						body: "Replay once",
+						to: ["child"],
+					},
+					{ socketPath: f.paths.socket },
+				)
+			).stage,
+		).toBe("applied");
+		const release = f.db
+			.prepare("select command_id from commands where session_id = 'child' and kind = 'release_input'")
+			.get() as { command_id: string };
+		const ticket = (
+			JSON.parse(
+				(
+					f.db.prepare("select command from commands where command_id = ?").get(release.command_id) as {
+						command: string;
+					}
+				).command,
+			) as { ticket: string }
+		).ticket;
+		expect(
+			(await sendCommand("root", { kind: "incorporate", by: "operator" }, { socketPath: f.paths.socket })).stage,
+		).toBe("applied");
+		expect(f.db.prepare("select stage from commands where session_id = 'child' and kind = 'mail'").all()).toEqual([
+			{ stage: "accepted" },
+		]);
+		expect(
+			(
+				await sendCommand(
+					"child",
+					{ kind: "talk", text: "Wait for release" },
+					{ socketPath: f.paths.socket, until: "accepted" },
+				)
+			).stage,
+		).toBe("failed");
+		child.socket.destroy();
+		if (mode === "restart") {
+			f.stop();
+			const next = new Runtime(f.paths);
+			expect(await next.start()).toBe(true);
+			cleanups.push(() => next.stop());
+		}
+		const replacement = await fakeBridge(f.paths.socket, "child", child.process.pid, child.process.startedAt, {
+			session: { file: child.file, quiescence: "launch", inputSeal: ticket },
+			process: { launch: child.process.launch },
+			facts: { cost: 61 },
+		});
+		cleanups.push(() => replacement.socket.destroy());
+		const received: string[] = [];
+		let freshRelease: string | undefined;
+		replacement.socket.on(
+			"data",
+			lineReader((line) => {
+				const message = JSON.parse(line);
+				if (message.type !== "command") return;
+				if (message.command.kind === "release_input") freshRelease = message.commandId;
+				if (message.command.kind === "mail") {
+					received.push(message.command.body);
+					replacement.send({ type: "command_progress", commandId: message.commandId, stage: "applied" });
+				}
+			}),
+		);
+		await vi.waitFor(() => expect(freshRelease).toBeDefined());
+		expect(received).toEqual([]);
+		expect(f.db.prepare("select stage from commands where session_id = 'child' and kind = 'mail'").all()).toEqual([
+			{ stage: "accepted" },
+		]);
+		replacement.send({ type: "command_progress", commandId: freshRelease!, stage: "applied" });
+		await vi.waitFor(() => expect(received).toEqual(["Replay once"]));
+		await vi.waitFor(() =>
+			expect(f.db.prepare("select stage from commands where session_id = 'child' and kind = 'mail'").all()).toEqual([
+				{ stage: "applied" },
+			]),
+		);
+	},
+);
+
+test("round2: a legacy gate boolean cannot certify quiescence", async () => {
+	const f = await fixture();
+	const root = await f.person("root", { interactive: true });
+	const child = await f.person("child", { manager: "root", quiescence: false });
+	const legacy = await fakeBridge(f.paths.socket, "child", child.process.pid, child.process.startedAt, {
+		session: { file: child.file, quiescence: true },
+		facts: { cost: 63 },
+	});
+	cleanups.push(() => legacy.socket.destroy());
+	await vi.waitFor(() =>
+		expect(f.db.prepare("select cost from sessions where id = 'child'").get()).toEqual({ cost: 63 }),
+	);
+	root.quit();
+	await new Promise((resolve) => setTimeout(resolve, 1400));
+	expect(f.departed("child")).toBeUndefined();
+	expect(f.db.prepare("select 1 from commands where session_id = 'child' and kind = 'quiesce'").get()).toBeUndefined();
+});
+
+test("round2: a missing launch token keeps recorded lifetime instead of inferring startup intent", async () => {
+	const f = await fixture();
+	const root = await f.person("root", { incorporate: true });
+	await f.person("target");
+	expect(
+		(
+			await sendCommand(
+				"operator",
+				{ kind: "organization_move", person: "root", manager: "target", branch: ["root"] },
+				{ socketPath: f.paths.socket },
+			)
+		).stage,
+	).toBe("applied");
+	const legacy = await fakeBridge(f.paths.socket, "root", root.process.pid, root.process.startedAt + 5000, {
+		session: { file: root.file, incorporate: true },
+		facts: { cost: 67 },
+	});
+	cleanups.push(() => legacy.socket.destroy());
+	await vi.waitFor(() =>
+		expect(f.db.prepare("select cost from sessions where id = 'root'").get()).toEqual({ cost: 67 }),
+	);
+	expect(organizationLifetime(f.db, "target").incorporated).toBe(false);
+});
+
+test("round2: first bridge installation during reload grants no launch authority", async () => {
+	const f = await fixture();
+	const latch = Symbol.for("apple-pi.launch-input-seal");
+	const launch = Symbol.for("apple-pi.bridge-launch");
+	const host = process as NodeJS.Process & Record<symbol, unknown>;
+	const previousLatch = host[latch];
+	const previousLaunch = host[launch];
+	delete host[latch];
+	delete host[launch];
+	trackLiveSessions();
+	let install!: () => void;
+	const worker = await fauxSession(
+		[
+			(pi) => {
+				const original = pi.getFlag.bind(pi);
+				pi.getFlag = (name) => (name === "incorporate" ? true : original(name));
+				install = () => bridge(pi);
+			},
+		],
+		[],
+		[],
+	);
+	try {
+		install();
+		await worker.session.extensionRunner.emit({ type: "session_start", reason: "reload" });
+		const id = worker.session.sessionManager.getSessionId();
+		await vi.waitFor(() =>
+			expect(f.db.prepare("select incorporated from sessions where id = ?").get(id)).toBeDefined(),
+		);
+		expect(organizationLifetime(f.db, id).incorporated).toBe(false);
+		expect(worker.requests).toHaveLength(0);
+	} finally {
+		await close(worker);
+		host[latch] = previousLatch;
+		host[launch] = previousLaunch;
+	}
+});
+
+test("round2: hot-loaded bridge in a legacy launch cannot mint fresh startup intent", async () => {
+	const f = await fixture();
+	const latch = Symbol.for("apple-pi.launch-input-seal");
+	const launch = Symbol.for("apple-pi.bridge-launch");
+	const host = process as NodeJS.Process & Record<symbol, unknown>;
+	const previousLatch = host[latch];
+	const previousLaunch = host[launch];
+	host[latch] = {};
+	delete host[launch];
+	const worker = await fauxSession(
+		[
+			(pi) => {
+				const original = pi.getFlag.bind(pi);
+				pi.getFlag = (name) => (name === "incorporate" ? true : original(name));
+				bridge(pi);
+			},
+		],
+		[],
+		[],
+	);
+	try {
+		const id = worker.session.sessionManager.getSessionId();
+		await vi.waitFor(() =>
+			expect(f.db.prepare("select incorporated from sessions where id = ?").get(id)).toBeDefined(),
+		);
+		expect(organizationLifetime(f.db, id).incorporated).toBe(false);
+		expect(
+			f.db.prepare("select 1 from events where session_id = ? and type = 'organization_startup_incorporated'").get(id),
+		).toBeUndefined();
+		expect(worker.requests).toHaveLength(0);
+	} finally {
+		await close(worker);
+		host[latch] = previousLatch;
+		host[launch] = previousLaunch;
+	}
+});
+
+test("round2: native reload after wall-clock correction does not reapply its launch flag", async () => {
+	const f = await fixture();
+	await f.person("clock-target");
+	const worker = await fauxSession(
+		[
+			(pi) => {
+				const original = pi.getFlag.bind(pi);
+				pi.getFlag = (name) => (name === "incorporate" ? true : original(name));
+				bridge(pi);
+			},
+		],
+		[],
+		[],
+	);
+	try {
+		const id = worker.session.sessionManager.getSessionId();
+		await vi.waitFor(() =>
+			expect(f.db.prepare("select incorporated from sessions where id = ?").get(id)).toEqual({ incorporated: 1 }),
+		);
+		expect(
+			(
+				await sendCommand(
+					"operator",
+					{ kind: "organization_move", person: id, manager: "clock-target", branch: [id] },
+					{ socketPath: f.paths.socket },
+				)
+			).stage,
+		).toBe("applied");
+		const now = Date.now();
+		const clock = vi.spyOn(Date, "now").mockImplementation(() => now + 5000);
+		try {
+			worker.session.sessionManager.appendSessionInfo("clock-reloaded");
+			await worker.session.extensionRunner.emit({ type: "session_shutdown", reason: "reload" });
+			await worker.session.extensionRunner.emit({ type: "session_start", reason: "reload" });
+			await vi.waitFor(() =>
+				expect(f.db.prepare("select name from sessions where id = ?").get(id)).toEqual({ name: "clock-reloaded" }),
+			);
+			expect(organizationLifetime(f.db, "clock-target").incorporated).toBe(false);
+		} finally {
+			clock.mockRestore();
+		}
+		expect(worker.requests).toHaveLength(0);
+	} finally {
+		await close(worker);
+	}
+});
 
 test("Workplace lifetime adapter reads current blockers and sends only the fixed operator mutation", async () => {
 	const f = await fixture();

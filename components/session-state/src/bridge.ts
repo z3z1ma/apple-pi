@@ -288,6 +288,18 @@ function config(pi: ExtensionAPI, ctx: ExtensionContext, skills: string[], mcpSe
 	};
 }
 
+const LAUNCH = Symbol.for("apple-pi.bridge-launch");
+
+function bridgeLaunch(startup = false): { id?: string; startedAt: number } {
+	const host = process as NodeJS.Process & Record<symbol, { id?: string; startedAt: number } | undefined>;
+	if (!host[LAUNCH])
+		host[LAUNCH] = {
+			id: startup ? randomUUID() : undefined,
+			startedAt: Math.round(Date.now() - process.uptime() * 1000),
+		};
+	return host[LAUNCH]!;
+}
+
 function helloFor(
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
@@ -312,7 +324,7 @@ function helloFor(
 				? { program: { id: process.env[PROGRAM_ID_ENV]!, parent: process.env[PROGRAM_PARENT_ENV]! } }
 				: {}),
 		},
-		process: { pid: process.pid, startedAt: Math.round(Date.now() - process.uptime() * 1000) },
+		process: { pid: process.pid, startedAt: bridgeLaunch().startedAt },
 		tmux: tmuxPane(),
 		run: ctx.isIdle() ? "idle" : "thinking",
 		facts: {
@@ -798,8 +810,10 @@ export default function sessionStateBridge(pi: ExtensionAPI): void {
 		);
 		const native = liveSession(ctx);
 		input = native ? sessionInput(native) : undefined;
+		const launch = bridgeLaunch(event.reason === "startup");
 		const hello = helloFor(pi, ctx, skills, mcpServers, previous);
-		hello.session.quiescence = input !== undefined;
+		hello.session.quiescence = launch.id ? input?.scope : undefined;
+		hello.process.launch = input?.scope === "launch" ? launch.id : undefined;
 		hello.session.inputSeal = input?.ticket;
 		link = new StateLink(
 			{ ...hello, execution: observations.snapshot() },

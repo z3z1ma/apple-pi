@@ -287,11 +287,11 @@ export interface Hello {
 		program?: { id: string; parent: string };
 		forkOffset?: number;
 		interactive?: boolean;
-		quiescence?: boolean;
+		quiescence?: "launch";
 		inputSeal?: string;
 		incorporate?: boolean;
 	};
-	process: { pid: number; startedAt: number };
+	process: { pid: number; startedAt: number; launch?: string };
 
 	tmux?: { socket: string; pane: string };
 	run: RunState;
