@@ -19,6 +19,8 @@ mkdirSync(join(cwd, ".wiki"), { recursive: true });
 vi.stubEnv("PAIR_NO_REVIEW", "1");
 vi.stubEnv("PI_NOTIFY_DISABLED", "1");
 vi.stubEnv("RTK_ENABLED", "0");
+vi.stubEnv("PI_PROGRAM_ID", "");
+vi.stubEnv("PI_PROGRAM_PARENT", "");
 
 beforeAll(() => startRuntime(state.socketPath));
 afterAll(async () => {
@@ -43,6 +45,10 @@ async function rootSession(flags: Record<string, string> = {}) {
 		await vi.waitFor(() => expect(query(state.dbPath, "select id from sessions where id = ?", id)).toHaveLength(1), {
 			timeout: 10000,
 		});
+		if (!flags["reports-to"]) {
+			await run.session.prompt("/incorporate");
+			expect(query(state.dbPath, "select incorporated from sessions where id = ?", id)).toEqual([{ incorporated: 1 }]);
+		}
 		await run.prompt();
 		return {
 			id,

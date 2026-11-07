@@ -15,6 +15,8 @@ mkdirSync(join(cwd, ".wiki"), { recursive: true });
 vi.stubEnv("PAIR_NO_REVIEW", "1");
 vi.stubEnv("PI_NOTIFY_DISABLED", "1");
 vi.stubEnv("RTK_ENABLED", "0");
+vi.stubEnv("PI_PROGRAM_ID", "");
+vi.stubEnv("PI_PROGRAM_PARENT", "");
 
 const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 

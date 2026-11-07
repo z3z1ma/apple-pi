@@ -12,7 +12,11 @@ Why: the former root fixture silently omitted both native tools, so active-versu
 
 The root ceiling was corrected from 34,384 to the measured 36,877 on 2026-11-07, authorized by Mengxue in task work-7b4d9055 message 14182. The previous fixture measured 34,382 while omitting native tools. Adding their registered definitions measured 35,104; measuring their effective declarations measured 36,877 (33,166 prompt characters plus 114,339 declaration characters). This corrects a coverage error, rather than allowing product growth; subsequent reductions still ratchet down from the corrected baseline. Product wording is unchanged. The metric remains characters divided by four for prompt text and tool names, descriptions and parameter schemas, rather than provider tokenization or complete wire-payload size.
 
+The exact root estimate includes absolute packaged-skill paths. Matching the checkout path length reproduced the baseline in independent disposable runs; a longer path can exceed the ceiling without a content change. Compare equivalent path inputs when interpreting the ratchet.
+
+The scratch suites clear PI_PROGRAM_ID and PI_PROGRAM_PARENT before starting their runtime, so running them from a review/program worker does not make fixture hellos claim the worker's real program identity. The posture suite incorporates each scratch organization through its real command before closing its root. This preserves the reporting parent for role sessions without triggering automatic dissolution, which intermittently sealed the shared test process when an unincorporated parent closed first. These checks exercise posture, not departure policy. Keep per-session shutdown/disposal: an attempted repair retaining all SDK sessions through the suite exhausted Node's default heap in its focused check.
+
 Pair reviews and notifications are disabled without removing their extension registrations. Shutdown precedes disposal so a surviving bridge cannot restart a daemon after scratch cleanup.
 
-Coupled: tests/prompt-budgets.test.ts, tests/helpers/build-budgets.ts
+Coupled: tests/prompt-budgets.test.ts, tests/helpers/build-budgets.ts, components/system-prompt/tests/system-prompt.test.ts
 Verify: tests/prompt-budgets.test.ts
