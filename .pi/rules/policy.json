@@ -2,6 +2,13 @@
   "comments": "forbid",
   "rules": [
     {
+      "grit": "response-time-window.grit",
+      "message": "Conjoin a nonnegative timestamp ordering check with the response-gap upper bound; live receipt clocks can move backward.",
+      "includes": ["apps/agent-workplace/web/overlay/conversation/transcript.tsx"],
+      "fires": "if (entry.at - previous.at < GROUP_MS) entries.push(entry);",
+      "passes": "if (previous && sameDay && entry.at >= previous.at && entry.at - previous.at < GROUP_MS && entry.id !== firstUnread) entries.push(entry);"
+    },
+    {
       "grit": "hot-bounded-io.grit",
       "message": "Hot paths use bounded file reads and asynchronous child processes; keep whole-file reads and synchronous subprocesses outside .hot.ts modules.",
       "includes": ["**/*.hot.ts"],

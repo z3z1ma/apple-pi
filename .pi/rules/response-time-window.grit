@@ -1,0 +1,9 @@
+language js
+
+`if ($conditions) $body` where {
+  $conditions <: contains `$later - $earlier < $window`,
+  or {
+    not $conditions <: contains `$later >= $earlier`,
+    $conditions <: contains `$_ || $_`
+  }
+}
