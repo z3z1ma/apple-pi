@@ -168,6 +168,8 @@ function PersonActionDialog({
 	const [permanent, setPermanent] = useState(false);
 	const [handoff, setHandoff] = useState(true);
 	const [busyWarning, setBusyWarning] = useState(operation.person.busy);
+	const [dissolving, setDissolving] = useState(false);
+	const [dissolveConsent, setDissolveConsent] = useState(false);
 	const [receipt, setReceipt] = useState<CommandReceipt>();
 	const [callResult, setCallResult] = useState<CallResult>();
 	const [uncertain, setUncertain] = useState<string>();
@@ -185,8 +187,9 @@ function PersonActionDialog({
 			: action === "call"
 				? `Call in ${person.name}`
 				: `Let ${person.name} go`;
-	const submit = async (automatic = false) => {
+	const submit = async (automatic = false, choice?: "incorporate" | "dissolve") => {
 		if (lock.current || blocked || finished || (uncertain && action !== "call")) return;
+		if (choice === "dissolve" && !dissolveConsent) return;
 		if (action === "retire" && (!reason.trim() || !permanent)) return;
 		lock.current = true;
 		setPending(true);
@@ -196,13 +199,21 @@ function PersonActionDialog({
 				setCallResult(
 					await window.agentWorkplace.callIn({ id: operation.id, person: person.id, expected: operation.expected }),
 				);
+			} else if (action === "home" && choice === "incorporate") {
+				const incorporated = await window.agentWorkplace.incorporateOrganization(person.id);
+				const result = incorporated.ok
+					? await window.agentWorkplace.endSession(person.id, busy)
+					: { ok: false as const, reason: incorporated.reason };
+				setReceipt(result);
+				if (result.ok) setDissolving(false);
 			} else {
 				const result =
 					action === "home"
-						? await window.agentWorkplace.endSession(person.id, automatic ? false : busy)
+						? await window.agentWorkplace.endSession(person.id, automatic ? false : busy, choice === "dissolve")
 						: await window.agentWorkplace.retire(person.id, reason.trim(), handoff);
 				setReceipt(result);
 				if (!result.ok && result.confirm) setBusyWarning(true);
+				if (!result.ok && result.dissolve) setDissolving(true);
 			}
 		} catch (error) {
 			setUncertain(
@@ -255,8 +266,26 @@ function PersonActionDialog({
 			}}
 		>
 			<h2 id={titleId}>{title}</h2>
-			{action === "home" && (
+			{action === "home" && !dissolving && (
 				<p>Close only {person.name}'s session. Their work and history remain available for a later call-in.</p>
+			)}
+			{action === "home" && dissolving && !finished && (
+				<section className="wp-person-warning" aria-label="Organization not incorporated">
+					<p>
+						{person.name} heads an organization that is not incorporated. Sending them home dissolves it: once each
+						person in it is idle with no held work, they are let go permanently, without handoffs, and their sessions
+						are removed. Incorporate it to keep everyone and send {person.name} home as usual.
+					</p>
+					<label className="wp-person-permanent">
+						<input
+							type="checkbox"
+							checked={dissolveConsent}
+							disabled={pending || !!uncertain}
+							onChange={(event) => setDissolveConsent(event.target.checked)}
+						/>
+						Permanently let this organization go
+					</label>
+				</section>
 			)}
 			{action === "home" && busy && (
 				<p className="wp-person-warning">
@@ -325,6 +354,7 @@ function PersonActionDialog({
 				</>
 			)}
 			{receipt &&
+				(receipt.ok || !receipt.dissolve) &&
 				(receipt.ok ? (
 					<div role="status">
 						<p>
@@ -363,7 +393,26 @@ function PersonActionDialog({
 				>
 					{attempted ? "Close" : "Cancel"}
 				</button>
-				{!finished && !callResult?.ok && !(uncertain && action !== "call") && (
+				{action === "home" && dissolving && !finished && !uncertain && (
+					<>
+						<button
+							type="button"
+							disabled={pending || blocked || !dissolveConsent}
+							onClick={() => void submit(false, "dissolve")}
+						>
+							Send home and dissolve
+						</button>
+						<button
+							type="button"
+							className="wp-person-confirm"
+							disabled={pending || blocked}
+							onClick={() => void submit(false, "incorporate")}
+						>
+							Incorporate and send home
+						</button>
+					</>
+				)}
+				{!(action === "home" && dissolving) && !finished && !callResult?.ok && !(uncertain && action !== "call") && (
 					<button
 						type="button"
 						className="wp-person-confirm"

@@ -185,7 +185,8 @@ async function openLifecycle(appearance: "light" | "dark" = "light", width = 144
 					writes: false,
 				},
 			],
-			endSession: (person: string, confirmed?: boolean) => held("home", { person, confirmed }),
+			endSession: (person: string, confirmed?: boolean, dissolve?: boolean) =>
+				held("home", dissolve ? { person, confirmed, dissolve } : { person, confirmed }),
 			retire: (person: string, reason: string, handoff?: boolean) => held("retire", { person, reason, handoff }),
 			retirePeople: (request: unknown) => held("retirePeople", request),
 			onRetirePeople: (listener: (progress: any) => void) => {
@@ -878,6 +879,56 @@ test("A single sleeping person starts immediately; refusal stays explicit and re
 		await page.close();
 	}
 });
+
+test.each(["incorporate", "dissolve"] as const)(
+	"Send home on an unincorporated head asks to incorporate or dissolve, and %s needs its own choice",
+	async (choice) => {
+		const { page, errors } = await openLifecycle();
+		try {
+			await page.getByRole("button", { name: /^Ada/ }).first().click();
+			await page.getByRole("button", { name: "Person actions: Ada", exact: true }).click();
+			await page.getByRole("menuitem", { name: "Send home", exact: true }).click();
+			const dialog = page.getByRole("dialog", { name: "Send Ada home", exact: true });
+			await dialog.getByRole("button", { name: "Send home", exact: true }).click();
+			await release(page, { ok: false, dissolve: true, reason: "Ada's organization is not incorporated." });
+			const warning = dialog.getByRole("region", { name: "Organization not incorporated", exact: true });
+			await warning.waitFor();
+			expect(await dialog.getByText(/remain available for a later call-in/).count()).toBe(0);
+			const dissolve = dialog.getByRole("button", { name: "Send home and dissolve", exact: true });
+			expect(await dissolve.isDisabled()).toBe(true);
+			await shot(page, `send-home-unincorporated-${choice}`);
+			if (choice === "dissolve") {
+				await warning.getByRole("checkbox", { name: "Permanently let this organization go", exact: true }).check();
+				await dissolve.click();
+				await vi.waitFor(async () =>
+					expect((await calls(page)).home).toEqual([
+						{ person: "ada", confirmed: true },
+						{ person: "ada", confirmed: true, dissolve: true },
+					]),
+				);
+				expect(await page.evaluate(() => (window as any).incorporations)).toEqual([]);
+			} else {
+				await dialog.getByRole("button", { name: "Incorporate and send home", exact: true }).click();
+				await vi.waitFor(async () =>
+					expect((await calls(page)).home).toEqual([
+						{ person: "ada", confirmed: true },
+						{ person: "ada", confirmed: true },
+					]),
+				);
+				expect(await page.evaluate(() => (window as any).incorporations)).toEqual(["ada"]);
+			}
+			await release(page, { ok: true, stage: "applied", commandId: "home-ada" });
+			await dialog
+				.getByRole("status")
+				.getByText(/Applied/)
+				.waitFor();
+			expect((await calls(page)).retire).toEqual([]);
+			expect(errors).toEqual([]);
+		} finally {
+			await page.close();
+		}
+	},
+);
 
 test("Idle Send home starts unconfirmed, then a runtime busy refusal requires explicit confirmation", async () => {
 	const { page, errors } = await openLifecycle();

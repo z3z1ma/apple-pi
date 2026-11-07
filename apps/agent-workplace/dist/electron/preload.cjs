@@ -93,7 +93,7 @@ var api = {
 	},
 	wake: (characterId) => electron.ipcRenderer.invoke("world:wake", characterId),
 	callIn: (request) => electron.ipcRenderer.invoke("world:call-in", request),
-	endSession: (characterId, confirmed) => electron.ipcRenderer.invoke("world:end-session", characterId, confirmed),
+	endSession: (characterId, confirmed, dissolve) => electron.ipcRenderer.invoke("world:end-session", characterId, confirmed, dissolve),
 	sendMail: (characterId, body) => electron.ipcRenderer.invoke("world:send-mail", characterId, body),
 	readThread: (thread) => electron.ipcRenderer.invoke("world:read-thread", thread),
 	replyThread: (thread, body) => electron.ipcRenderer.invoke("world:reply-thread", thread, body),
