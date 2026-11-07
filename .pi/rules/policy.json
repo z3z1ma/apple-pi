@@ -9,6 +9,13 @@
       "passes": "if (previous && sameDay && entry.at >= previous.at && entry.at - previous.at < GROUP_MS && entry.id !== firstUnread) entries.push(entry);"
     },
     {
+      "grit": "tmux-literal-name.grit",
+      "message": "Use tmux character expansion for name hashes to preserve style-shaped text and balanced format delimiters.",
+      "includes": ["components/session-state/src/tmux.ts"],
+      "fires": "const argument = name.replaceAll(\"#\", \"##\");",
+      "passes": "const argument = name.replaceAll(\"#\", \"#{a:35}\");"
+    },
+    {
       "grit": "hot-bounded-io.grit",
       "message": "Hot paths use bounded file reads and asynchronous child processes; keep whole-file reads and synchronous subprocesses outside .hot.ts modules.",
       "includes": ["**/*.hot.ts"],

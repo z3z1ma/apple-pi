@@ -1,0 +1,6 @@
+language js
+
+or {
+  `$value.replaceAll("#", "##")`,
+  `$value.replaceAll("#", "#{l:#}")`
+}
