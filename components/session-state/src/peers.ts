@@ -113,7 +113,7 @@ export const directoryParameters = Type.Object(
 	{ additionalProperties: false },
 );
 export const directoryDescription =
-	"Discover your organization's people through compact responses. With no arguments, shows counts by direct manager, role and status. Filter compact people by team (direct manager), subtree, role, status or name substring; IDs remain usable for mail and assignment. Give limit and optional offset to page people, with totals and nextOffset; a filter without limit returns its matching compact rows. Give person for a concise current profile and held task references. Add history:{limit,offset?} with person for an explicit page of finished assignments/outcomes. Names selecting one person must be unique; use IDs for duplicates. Souls and full histories are absent from default responses. This is responsibility from assignments, not broad participation. Write to people with send_mail.";
+	"Find your organization's people. With no arguments: counts by manager, role and status. Filter by team (direct manager), subtree, role, status or name substring; page with limit/offset. Give person for a profile with held tasks, and history:{limit,offset?} for their finished assignments. A name must match one person; use IDs for duplicates. Write to people with send_mail.";
 
 function entry(member: Member, names: Map<string, string>) {
 	return {

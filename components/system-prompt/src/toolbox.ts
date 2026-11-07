@@ -22,7 +22,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
 			"Change files with `edit`: all of one file's changes go in one call as `edits[]`, each `oldText` matching the original file exactly once. Use `write` for a new file or a full rewrite.",
 			"Time is a tool too: `remind_me` wakes you later with a note or starts a command without a turn, and `task` shows, waits on or cancels that background work (a goal you hold is a different kind of task); both end with the session.",
 			"`monitor` turns every line a line-buffered command prints into a nudge; set `max_events` when the stream has a natural end.",
-			"`schedule_mail` sends mail at a time or on a repeat, and survives restarts.",
+			"`schedule_mail` sends mail at a time or on a repeat, and survives restarts; give it a `task` for a recurring check-in on that task.",
 		],
 	},
 	{
@@ -125,6 +125,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
 			"move",
 			"progress",
 			"bottlenecks",
+			"snooze",
 			"coordination",
 			"economics",
 			"predictions",
@@ -138,7 +139,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
 			"`escalate` takes a decision or blocker beyond your authority up the tree.",
 			"Your self is yours: rewrite it with `update_self` when the harness asks you to reflect, after you finish a task and before compaction.",
 			"When you staff and steer: `experience` finds prior knowledge, `hire` adds a lasting catalog-role colleague, `assign` gives a goal and `unassign` removes it. `call_in` wakes with history. `send_home` preserves members and incorporated roots; unincorporated roots require explicit dissolution consent. `let_go` is permanent after work and reports move. `rename` changes a name; `move` changes a manager.",
-			"To see how work is going: `progress` for what was delivered and what remains, `bottlenecks` when work seems stuck and you need what it waits on, `coordination` to see whether discussion connects to the work. Each starts from an overview; counts are observations, not scores. `economics` compares value, delay and compute in dollars, and `predictions` checks recorded forecasts against what happened.",
+			"To see how work is going: `progress` for what was delivered and what remains, `bottlenecks` when work seems stuck and you need what it waits on, `coordination` to see whether discussion connects to the work. Stuck tasks (unassigned 15m, silent 4h) are mailed to the coordinator; `snooze` quiets one. Each starts from an overview; counts are observations, not scores. `economics` compares value, delay and compute in dollars, and `predictions` checks recorded forecasts against what happened.",
 		],
 	},
 	{

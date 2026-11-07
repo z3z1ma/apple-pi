@@ -94,6 +94,7 @@ import { reviewScope } from "./review-attempt.js";
 import { ReviewJobs, type ReviewNotify } from "./review-jobs.js";
 import { cancelSchedule, createSchedule, dueSchedules, markFired } from "./schedules.js";
 import { migrate } from "./schema.js";
+import { describeTask, markNoticed, openTaskState, snoozeTask, stuckDigest, stuckWork } from "./stuck-work.js";
 import { HARNESS, markRead, nameOf, OPERATOR, participateIn, postToThread, type ThreadPost } from "./threads.js";
 import {
 	canonicalSocket,
@@ -120,6 +121,11 @@ import {
 type WorkRecord = Extract<Command, { kind: "task_opened" | "task_moved" | "link_record" | "link_resolve" }>;
 
 const TMUX_POLL_MS = 1000;
+const STUCK_SWEEP_MS = 60_000;
+
+function wakesFor(thread: string, participant: string, listener: string | undefined): boolean {
+	return participant === listener || thread.startsWith("schedule:") || thread.startsWith("stuck:");
+}
 const PEER_KILL_GRACE_MS = 30_000;
 
 function descendantsOf(root: number): number[] {
@@ -271,6 +277,7 @@ export class Runtime {
 	private activity?: ActivityPoller;
 	private transcripts?: TranscriptIndexer;
 	private activityTimer?: NodeJS.Timeout;
+	private stuckTimer?: NodeJS.Timeout;
 	private externalCommands: Promise<void> = Promise.resolve();
 	private lock?: DatabaseSync;
 	private server?: Server;
@@ -386,6 +393,8 @@ export class Runtime {
 		void this.external.poll();
 		this.activityTimer = setInterval(() => void this.activity?.poll(), ACTIVITY_POLL_MS);
 		void this.activity.poll();
+		this.stuckTimer = setInterval(() => this.sweepStuckWork(), STUCK_SWEEP_MS);
+		this.sweepStuckWork();
 		this.checkLiveness();
 		this.checkFriction();
 		void this.pollTmux();
@@ -401,6 +410,7 @@ export class Runtime {
 		clearInterval(this.externalTimer);
 		this.activity?.stop();
 		clearInterval(this.activityTimer);
+		clearInterval(this.stuckTimer);
 		clearInterval(this.timer);
 		clearInterval(this.tmuxTimer);
 		clearTimeout(this.programTimer);
@@ -910,6 +920,7 @@ export class Runtime {
 		if (
 			command.kind === "schedule" ||
 			command.kind === "unschedule" ||
+			command.kind === "snooze" ||
 			command.kind === "channel_charter" ||
 			command.kind === "react" ||
 			command.kind === "activity_triage" ||
@@ -1403,6 +1414,7 @@ export class Runtime {
 				kind:
 					| "schedule"
 					| "unschedule"
+					| "snooze"
 					| "channel_charter"
 					| "react"
 					| "activity_triage"
@@ -1429,6 +1441,7 @@ export class Runtime {
 				if (command.on) void this.reactionNotice(command.message, command.emoji);
 			} else if (command.kind === "schedule") createSchedule(this.db!, commandId, sender, command, now);
 			else if (command.kind === "unschedule") cancelSchedule(this.db!, command.id, sender, OPERATOR, now);
+			else if (command.kind === "snooze") snoozeTask(this.db!, command.task, command.until, sender, now);
 			else
 				this.atomically(() => {
 					setCharter(this.db!, sender, OPERATOR, command.thread, command);
@@ -1488,6 +1501,43 @@ export class Runtime {
 		else this.setCommandStage(commandId, "failed", "not running");
 	}
 
+	private sweepStuckWork(): void {
+		const db = this.db;
+		if (!db || db.isTransaction) return;
+		const now = Date.now();
+		let groups: ReturnType<typeof stuckWork>;
+		try {
+			groups = stuckWork(db, now);
+		} catch (error) {
+			console.error(`stuck-work sweep failed: ${(error as Error).message}`);
+			return;
+		}
+		for (const group of groups) {
+			let pending: ReturnType<Runtime["preparePost"]> | undefined;
+			try {
+				this.atomically(() => {
+					pending = this.preparePost(
+						`stuck:${randomUUID()}`,
+						HARNESS,
+						{
+							thread: `stuck:${group.organization}:${group.recipient}`,
+							threadKind: "mail",
+							subject: "Stuck work",
+							to: [group.recipient],
+							body: stuckDigest(group.tasks, now),
+						},
+						now,
+					);
+					markNoticed(db, group.tasks, now);
+				});
+			} catch (error) {
+				console.error(`stuck-work notice to ${group.recipient} failed: ${(error as Error).message}`);
+				continue;
+			}
+			for (const { target, id, mail } of pending?.deliveries ?? []) this.dispatch(target, id, mail);
+		}
+	}
+
 	private fireSchedules(): void {
 		const db = this.db;
 		if (!db) return;
@@ -1497,9 +1547,12 @@ export class Runtime {
 			try {
 				this.atomically(() => {
 					const id = `schedule:${schedule.id}:${schedule.next_at}`;
-					const live = db
-						.prepare("select 1 from sessions where id = ? and kind = 'root' and retired_at is null")
-						.get(schedule.target);
+					const task = schedule.task ? openTaskState(db, schedule.task) : undefined;
+					const live =
+						(!schedule.task || task) &&
+						db
+							.prepare("select 1 from sessions where id = ? and kind = 'root' and retired_at is null")
+							.get(schedule.target);
 					if (live && !db.prepare("select 1 from thread_messages where id = ?").get(id))
 						pending = this.preparePost(
 							id,
@@ -1507,9 +1560,11 @@ export class Runtime {
 							{
 								thread: `schedule:${schedule.id}`,
 								threadKind: "mail",
-								subject: `Scheduled by ${nameOf(db, schedule.owner)}`,
+								subject: task ? `Check-in: ${task.title}` : `Scheduled by ${nameOf(db, schedule.owner)}`,
 								to: [schedule.target],
-								body: schedule.body,
+								body: task
+									? `${schedule.body}\n\n${describeTask(task, now)}\n\nRead its task thread, then check in with its holder there.`
+									: schedule.body,
 							},
 							now,
 						);
@@ -1664,7 +1719,13 @@ export class Runtime {
 				...(changed?.person === participant && changed.goal ? { taskGoal: true } : {}),
 			};
 			const id = `${commandId}:${participant}`;
-			const target = this.queueDelivery(id, participant, mail, undefined, participant === listener);
+			const target = this.queueDelivery(
+				id,
+				participant,
+				mail,
+				undefined,
+				wakesFor(posted.thread, participant, listener),
+			);
 			if (target) deliveries.push({ target, id, mail });
 			else
 				asleep.push(
@@ -1926,7 +1987,7 @@ export class Runtime {
 		const onDuty = new Map<string, boolean>();
 		for (const row of rows) {
 			const thread = (JSON.parse(row.command) as { thread?: string }).thread;
-			const listens = thread ? charterOf(db, thread)?.listener === row.session_id : false;
+			const listens = thread ? wakesFor(thread, row.session_id, charterOf(db, thread)?.listener ?? undefined) : false;
 			onDuty.set(row.session_id, (onDuty.get(row.session_id) ?? false) || listens);
 		}
 		for (const [person, duty] of onDuty) this.wakeOnCall(person, duty);

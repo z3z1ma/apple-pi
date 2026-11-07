@@ -41,6 +41,12 @@ Shared notice, complete outgoing mail and raised marker commit together, followe
 Coupled: components/session-state/src/friction.ts, components/session-state/src/threads.ts
 Verify: components/session-state/tests/friction-delivery.test.ts
 
+## symbol:Runtime.sweepStuckWork
+
+Runs at startup and every minute on its own timer, not the one-second liveness timer: it reads task files, and nothing about it needs second precision. Each recipient's digest post, its outbox and the task notice markers commit in one transaction before dispatch; a failed publication leaves the markers unwritten so the next sweep retries. Digest and schedule threads (`stuck:` and `schedule:`) wake their recipient even when not on call, through the same on-duty path channel listeners use, at delivery and when startup reconstructs waiting mail.
+Coupled: components/session-state/src/stuck-work.ts
+Verify: components/session-state/tests/stuck-work.test.ts, components/session-state/tests/on-call.test.ts
+
 ## symbol:Runtime.reactionNotice
 
 The operator's DM reaction is told to the agent as a `notice` command after the reaction commits: the reacted text comes from the transcript entry (scanned like a page read), falling back to the indexed preview. Only a running session is told; a person at home is not woken and gets nothing later, since the reaction itself stays on the record. The notice never starts a turn.

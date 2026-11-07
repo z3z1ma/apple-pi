@@ -14,7 +14,7 @@ import { ENTITY_KINDS, type Entity, type Link, relations } from "./links.js";
 import type { Command } from "./protocol.js";
 import { compareScenarios, predictions, type Scenario, scenarioSchema } from "./scenarios.js";
 import { activeSchedules } from "./schedules.js";
-import { goalText, rootOf, taskIdOf, type WorkAction, type WorkTask, withWork } from "./work.js";
+import { goalText, rootOf, taskIdOf, taskKeyOf, type WorkAction, type WorkTask, withWork } from "./work.js";
 import { bottlenecksIn, progressIn } from "./work-inspection.js";
 
 const PERSON_TASK_TOOLS = [
@@ -29,7 +29,7 @@ const PERSON_TASK_TOOLS = [
 	"channel_charter",
 ];
 const EXTERNAL_MANAGER_TOOLS = ["watch_repository"];
-const INSIGHT_TOOLS = ["economics", "predictions", "experience", "bottlenecks", "progress", "coordination"];
+const INSIGHT_TOOLS = ["economics", "predictions", "experience", "bottlenecks", "progress", "coordination", "snooze"];
 const UNITS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
 function pointInTime(text: string, now: number): number {
@@ -719,7 +719,7 @@ export function installWork(pi: ExtensionAPI): void {
 			executionMode: "sequential",
 			label: "schedule_mail",
 			description:
-				"Have the runtime mail a person (yourself by default) at a later time, once or repeatedly. Unlike remind_me, a schedule survives restarts and wakes an on-call person who is at home; each firing arrives as mail on the schedule's own thread. Give body and at to create; cancel with an id; give neither to list your schedules.",
+				"Mail a person (you by default) later, once or on a repeat, on the schedule's own thread; it survives restarts and wakes them. With task, each firing is a check-in with that task's holders and last update, ending when it closes. Give body and at to create, cancel with an id, neither to list.",
 			parameters: Type.Object(
 				{
 					body: Type.Optional(Type.String({ minLength: 1, description: "The message to send." })),
@@ -730,6 +730,7 @@ export function installWork(pi: ExtensionAPI): void {
 						Type.String({ minLength: 2, description: "Repeat at this interval after the first time: 15m, 1h, 1d." }),
 					),
 					to: Type.Optional(Type.String({ minLength: 1, description: "A person's name or id; yourself by default." })),
+					task: Type.Optional(Type.String({ minLength: 1, description: "A task to check in on." })),
 					cancel: Type.Optional(Type.String({ minLength: 1, description: "Stop the schedule with this id." })),
 				},
 				{ additionalProperties: false },
@@ -765,10 +766,20 @@ export function installWork(pi: ExtensionAPI): void {
 				const everyMs = args.every ? span(args.every) : undefined;
 				if (args.every && everyMs === undefined) throw new Error(`Give every as 15m, 1h or 1d (got "${args.every}")`);
 				const to = args.to ? resolvePerson(self, args.to) : self;
+				const input = args.task?.replace(/^task:/, "");
+				const task = input ? withWork((db) => taskIdOf(db, ctx.cwd, input)) : undefined;
+				if (input && !task) throw new Error(`No task ${input}`);
 				const commandId = randomUUID();
 				const receipt = await sendCommand(
 					self,
-					{ kind: "schedule", to, body: args.body, firstAt, ...(everyMs ? { everyMs } : {}) },
+					{
+						kind: "schedule",
+						to,
+						body: args.body,
+						firstAt,
+						...(everyMs ? { everyMs } : {}),
+						...(task ? { task } : {}),
+					},
 					{ commandId, signal },
 				);
 				if (receipt.stage === "failed") throw new Error(receipt.reason);
@@ -780,6 +791,39 @@ export function installWork(pi: ExtensionAPI): void {
 						},
 					],
 					details: { id: commandId },
+				};
+			},
+		}),
+	);
+	pi.registerTool(
+		defineTool({
+			name: "snooze",
+			executionMode: "sequential",
+			label: "snooze",
+			description: "Quiet stuck-work notices about a task for a while; any update to it ends the snooze.",
+			parameters: Type.Object(
+				{
+					task: taskParameter,
+					for: Type.String({ minLength: 2, description: "30m, 4h, 2d" }),
+				},
+				{ additionalProperties: false },
+			),
+			execute: async (_id, args, signal, _update, ctx) => {
+				const match = args.for.trim().match(/^(\d+(?:\.\d+)?)\s*([mhd])$/);
+				if (!match) throw new Error(`Give for as 30m, 4h or 2d (got "${args.for}")`);
+				const until = Date.now() + Number(match[1]) * UNITS[match[2]!]!;
+				const input = args.task.replace(/^task:/, "");
+				const task = withWork((db) => taskKeyOf(db, ctx.cwd, input));
+				if (!task) throw new Error(`No task ${input}`);
+				const receipt = await sendCommand(
+					ctx.sessionManager.getSessionId(),
+					{ kind: "snooze", task, until },
+					{ signal },
+				);
+				if (receipt.stage === "failed") throw new Error(receipt.reason);
+				return {
+					content: [{ type: "text" as const, text: `Snoozed ${task} until ${new Date(until).toISOString()}.` }],
+					details: { task, until },
 				};
 			},
 		}),

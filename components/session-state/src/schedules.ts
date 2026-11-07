@@ -1,4 +1,3 @@
-
 import type { DatabaseSync } from "node:sqlite";
 
 export interface Schedule {
@@ -11,13 +10,14 @@ export interface Schedule {
 	created_at: number;
 	cancelled_at: number | null;
 	last_fired_at: number | null;
+	task: string | null;
 }
 
 export function createSchedule(
 	db: DatabaseSync,
 	id: string,
 	owner: string,
-	command: { to: string; body: string; firstAt: number; everyMs?: number },
+	command: { to: string; body: string; firstAt: number; everyMs?: number; task?: string },
 	now: number,
 ): void {
 	if (!command.body.trim()) throw new Error("A schedule needs a message.");
@@ -26,10 +26,21 @@ export function createSchedule(
 		throw new Error("A repeating schedule repeats at most once a minute.");
 	if (!db.prepare("select 1 from sessions where id = ? and kind = 'root' and retired_at is null").get(command.to))
 		throw new Error(`No current person ${command.to}.`);
+	if (command.task && !db.prepare("select 1 from work_tasks where id = ? and archived_at is null").get(command.task))
+		throw new Error(`No open task ${command.task}.`);
 	db.prepare(
-		`insert into schedules (id, owner, target, body, next_at, every_ms, created_at) values (?, ?, ?, ?, ?, ?, ?)
+		`insert into schedules (id, owner, target, body, next_at, every_ms, created_at, task) values (?, ?, ?, ?, ?, ?, ?, ?)
 		on conflict (id) do nothing`,
-	).run(id, owner, command.to, command.body, Math.max(command.firstAt, now), command.everyMs ?? null, now);
+	).run(
+		id,
+		owner,
+		command.to,
+		command.body,
+		Math.max(command.firstAt, now),
+		command.everyMs ?? null,
+		now,
+		command.task ?? null,
+	);
 }
 
 export function cancelSchedule(db: DatabaseSync, id: string, actor: string, operator: string, now: number): void {

@@ -206,7 +206,7 @@ export function installActivityTools(pi: ExtensionAPI): void {
 			label: "activity_rule",
 			executionMode: "sequential",
 			description:
-				"Make a rule about new outside activity, or remove one by id (activity lists the rules). A rule matches every field you give: source, kind, place (github:owner/repo, jira:PROJECT or slack:<channel id>), actor, or words in the title or text. Its effect: hide (not shown), quiet (shown, not triaged), triage (always triaged, even when the source sends only what is addressed to him), or route (sent to person instead of the desk). The newest matching rule wins. Make one when the same noise keeps arriving or when a stream belongs with someone; the note says why, and the operator sees it.",
+				"Make a rule about new outside activity, or remove one by id (activity lists rules). It matches every field given: source, kind, place (github:owner/repo, jira:PROJECT, slack:<channel id>), actor, or words. Effects: hide, quiet (shown, not triaged), triage (always), or route (to person instead of the desk). The newest match wins. Make one for recurring noise or a stream that belongs with someone; the note, which the operator sees, says why.",
 			parameters: Type.Object(
 				{
 					remove: Type.Optional(

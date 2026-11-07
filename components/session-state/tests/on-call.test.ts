@@ -139,6 +139,21 @@ test("a schedule mails its target on time, repeats, survives as a thread, and st
 	]);
 });
 
+test("scheduled mail wakes its recipient at home even when it is not on call", async () => {
+	await personAtHome("planner", false);
+	const created = await sendCommand(
+		state.socketPath,
+		"planner",
+		{ kind: "schedule", to: "planner", body: "Review the plan.", firstAt: Date.now() },
+		{ commandId: "plan-check" },
+	);
+	expect(created.at(-1)).toEqual({ stage: "applied" });
+	await vi.waitFor(() => expect(readFileSync(`${log}.commands`, "utf8")).toContain("Review the plan."), {
+		timeout: 10000,
+	});
+	expect(readFileSync(log, "utf8")).toContain('"planner"');
+});
+
 test("a channel's listener is pushed every post with the charter it applies", { timeout: 20_000 }, async () => {
 	await personAtHome("triage", true);
 	const db = new DatabaseSync(state.dbPath);

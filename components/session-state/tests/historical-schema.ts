@@ -21,9 +21,11 @@ export function rewindRecentSchema(db: DatabaseSync, version: number): void {
 		[54, "sessions", "incorporated"],
 		[54, "sessions", "closing_generation"],
 		[54, "incarnations", "interactive"],
+		[55, "schedules", "task"],
 	] as const;
 	for (const [introduced, table, column] of columns)
 		if (introduced > version) db.exec(`alter table ${table} drop column ${column}`);
+	if (version < 55) db.exec("drop table task_snoozes; drop table task_notices");
 	if (version < 51)
 		db.exec(
 			"drop trigger focus_span_open; drop trigger focus_span_move; drop trigger focus_span_close; drop table focus_spans",

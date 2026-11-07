@@ -117,7 +117,15 @@ Mail bound to one incarnation (`generation`) never waits for a later one. A sess
 
 ### Schedules
 
-`schedule_mail(body, at, every?, to?)` asks the runtime to mail a person (the caller by default) at a later time, once or every interval of at least a minute; `schedule_mail(cancel)` stops one and no arguments list the caller's. Schedules live in the `schedules` table, so they survive restarts, unlike session-scoped `remind_me`. The runtime checks for due schedules every second and posts each firing as harness mail on the thread `schedule:<id>`, subject `Scheduled by <owner>`; the message id carries the due time, so a crash cannot send one firing twice. A repeating schedule skips firings missed while the runtime was down. A firing for an on-call person at home wakes it. Owners, recipients and the operator can cancel.
+`schedule_mail(body, at, every?, to?, task?)` asks the runtime to mail a person (the caller by default) at a later time, once or every interval of at least a minute; `schedule_mail(cancel)` stops one and no arguments list the caller's. Schedules live in the `schedules` table, so they survive restarts, unlike session-scoped `remind_me`. The runtime checks for due schedules every second and posts each firing as harness mail on the thread `schedule:<id>`, subject `Scheduled by <owner>`; the message id carries the due time, so a crash cannot send one firing twice. A repeating schedule skips firings missed while the runtime was down. A firing wakes its recipient at home, on call or not: a schedule is an explicit request to be woken then. Owners, recipients and the operator can cancel.
+
+With `task`, a schedule is a check-in on that open task: each firing's subject is `Check-in: <title>`, and its body is followed by the task's current state (status, last update and what it was, each holder with presence, run state, focus and assignment age, or that nobody holds it). The schedule stops without firing once the task closes.
+
+### Stuck work
+
+Every minute, and at startup, the runtime looks for stuck tasks: open ephemeral tasks and ledger tasks in `ready` or `in-progress` (ledger tasks in `planning` are parked on purpose). A task is stuck when nobody holds it and nothing has changed for 15 minutes, or when someone holds it and nothing has changed for 4 hours. A change is a message in its task thread, an assignment or focus change, or an edit to its `task.md`; the task's opening counts too. Ledger tasks the runtime has never seen come from the live `.ledger` of each organization root's working directory.
+
+Stuck tasks are mailed as one digest per recipient on `stuck:<organization>:<recipient>`: the organization's coordinator (the earliest-hired person with the `coordinator` role), else its root. The digest wakes the recipient like a schedule. A task is mailed again only after another full period passes with no change and no notice (`task_notices`). `snooze(task, for)` (managers) quiets one task until the time given or its next change, whichever comes first (`task_snoozes`). The thresholds are the operator's choice (2026-11-07) and are constants, not settings.
 
 ### External threads
 

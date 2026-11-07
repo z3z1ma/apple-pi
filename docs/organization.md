@@ -139,7 +139,7 @@ The runtime sends factual mail for three current structural patterns:
 - Distinct current work holders converging on a shared dependency that itself has an explicit outgoing wait.
 - Repeated back-and-forth in a task's own thread, with at least two returning authors, while an explicit decision wait and downstream dependent waits remain open.
 
-Each notice contains counts and a usable evidence reference, not message bodies, a diagnosis or a staffing recommendation. Discussion participant counts describe potential audiences, not delivery, reading or unnecessary recipients. Ordinary message volume and several requests to a manager are not enough. No inactivity or age threshold is inferred.
+Each notice contains counts and a usable evidence reference, not message bodies, a diagnosis or a staffing recommendation. Discussion participant counts describe potential audiences, not delivery, reading or unnecessary recipients. Ordinary message volume and several requests to a manager are not enough. These notices infer no inactivity or age threshold; idle and unassigned tasks are a separate stuck-work digest to each organization's coordinator, with recurring task check-ins and `snooze` ([session state](session-state.md#stuck-work)).
 
 Notices reach the closest common eligible manager of the actual waiting, owning or repeatedly contributing people. Passive copied participants do not widen routing. Eligibility is a managing role or an unroled recorded organization root; the operator receives the fallback when no eligible common manager exists. Inspect `bottlenecks` and the referenced task/thread before choosing a response.
 

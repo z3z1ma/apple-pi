@@ -152,8 +152,9 @@ export type Command =
 	| ReviewCommand
 	| CommunicationCommand
 	| ExternalCommand
-	| { kind: "schedule"; to: string; body: string; firstAt: number; everyMs?: number }
+	| { kind: "schedule"; to: string; body: string; firstAt: number; everyMs?: number; task?: string }
 	| { kind: "unschedule"; id: string }
+	| { kind: "snooze"; task: string; until: number }
 	| { kind: "channel_charter"; thread: string; listener: string | null; charter: string | null }
 	| ({ kind: "link_record" } & LinkRecord)
 	| { kind: "link_resolve"; id: string; resolution?: string }

@@ -502,6 +502,10 @@ const MIGRATIONS = [
 	update sessions set incorporated = 1;
 	alter table sessions add column closing_generation integer;
 	alter table incarnations add column interactive integer not null default 0;`,
+
+	`alter table schedules add column task text;
+	create table task_snoozes (task text primary key, until integer not null, at integer not null, by text not null) strict;
+	create table task_notices (task text primary key, at integer not null) strict;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

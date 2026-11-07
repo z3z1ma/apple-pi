@@ -335,6 +335,7 @@ test("a coordinator closes a running session, which records its exit", async () 
 	const run = await coordinator([call("send_home", { person: workerId })]);
 	try {
 		await vi.waitFor(() => expect(incarnation(workerId)).toMatchObject({ ended_at: null }), { timeout: 15000 });
+		await sendCommand(state.socketPath, workerId, { kind: "incorporate", by: "operator" });
 		await run.session.prompt("close the worker");
 		expect(toolResults(run)[0]).toMatchObject({ isError: false });
 		await vi.waitFor(() =>

@@ -127,6 +127,10 @@ function findTask(db: DatabaseSync, cwd: string, input: string): WorkTask | unde
 		| undefined;
 }
 
+export function taskKeyOf(db: DatabaseSync, cwd: string, input: string): string {
+	return findTask(db, cwd, input)?.id ?? bundlePath(cwd, input);
+}
+
 export function taskIdOf(db: DatabaseSync, cwd: string, input: string): string {
 	const task = findTask(db, cwd, input);
 	if (!task) throw new Error(`No task ${input}`);
