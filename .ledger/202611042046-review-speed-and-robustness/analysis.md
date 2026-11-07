@@ -2,7 +2,7 @@
 
 The operator found captured code reviews (`review_code`) slow and saw them fail or end incomplete for reasons he could not follow. This analysis measures every review run so far to find what is redundant, brittle or overkill, so the tool can plan, fan out and fan in faster than one agent reviewing by hand, without losing accuracy.
 
-How a review runs (`components/session-state/src/review-jobs.ts`): a **planner** splits the change into scopes and passes, each with questions. **Focused** passes inspect one scope each, and one **integration** pass inspects the whole change; all run in parallel and never see each other's reports. When every inspection has ended, a **per-pass validator** challenges each report, confirming or rejecting its findings and recording **coverage gaps** (questions whose evidence it judges insufficient). Finally a **merge** attempt links duplicate findings across reports. A review ends **incomplete** if any question is incomplete, any gap is recorded, or a pass asks for more work; it ends **failed** if any attempt throws.
+Baseline pipeline on 2026-11-04, before `9480a9f5` (`components/session-state/src/review-jobs.ts`): a **planner** splits the change into scopes and passes, each with questions. **Focused** passes inspect one scope each, and one **integration** pass inspects the whole change; all run in parallel and never see each other's reports. When every inspection has ended, a **per-pass validator** challenges each report, confirming or rejecting its findings and recording **coverage gaps** (questions whose evidence it judges insufficient). Finally a **merge** attempt links duplicate findings across reports. A review ends **incomplete** if any question is incomplete, any gap is recorded, or a pass asks for more work; it ends **failed** if any attempt throws.
 
 Source: every row in `review_jobs` and `review_attempts` of the live session-state database on 2026-11-04 (28 reviews, 26 planned). The query scripts were scratch files in `/tmp` and are not retained; each figure below names the table fields it came from where that is not obvious.
 
@@ -62,7 +62,7 @@ Runtime restarts (development of this harness) interrupted 5 attempts; those rev
 
 Caveat: zero rejections may partly reflect that inspectors know they will be validated and must show evidence; the sample is 26 plans from one operator's repositories.
 
-## Proposed changes (awaiting the operator's decision)
+## Historical proposals (subsequently implemented; see task.md)
 
 1. **Stop failing on bookkeeping.** The runtime fills the artifact digest and pass name itself; a coverage row or gap whose question does not match a planned ID becomes a limitation, not an error; a failed pass is retried once, and a pass that fails again is marked incomplete while the other passes keep their results.
 2. **Remove the contradiction.** The planner prompt tells the integration pass to work independently on cross-scope interactions; reconciling reports belongs to the merge.

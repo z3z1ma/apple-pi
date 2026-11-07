@@ -53,3 +53,7 @@ Activated 2026-11-07 with the operator's consent ("Activate now", declining a th
 - Seen in the live database after the restart: `user_version` 54; rsi (01a18155-0ec7-71f5-9809-638184a366dd, 41 people with root), fq-squad (`floqast`, 17) and reporting (01a183f2-16d5-7611-b2b7-165b9eea062d, 3) all `incorporated = 1`, none closing.
 - Not verified: a full test suite, the installed tarball, a physical window close or terminal signal, a live dissolution, and the Workplace UI on the operator's screen. Open sessions keep their old bridge until reloaded, so until then they are never cleaned up automatically and their `--incorporate` does nothing.
 - Known, not fixed: the embedded World accepts clicks for about a second before its stores connect; an early End session click does nothing.
+
+### Assignment 506: Tadhg Marinescu
+
+Activated 2026-11-07 and archived under .ledger/history/202611031649-persistent-versus-automatic-lifetime-organizations; the Outcome section of task.md holds the commits, reviews, live verification and limits. Closed now because Tadhg is leaving the organization.

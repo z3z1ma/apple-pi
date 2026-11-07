@@ -1,24 +1,26 @@
 Status: planning
 Created: 2026-10-23
-Updated: 2026-10-23
+Updated: 2026-11-07
 
 # Organization runtime for the handbook model
 
 ## Intent
 
-The skills are being rewritten as the organization's handbook: processes run by standing people, with the coordinator as their permanent home (see `docs/organization.md#processes` and `skills/handbook-writing/`). Planning that rewrite with the operator exposed these runtime gaps:
+Historical candidates raised during the 2026-10-23 handbook rewrite (see `docs/organization.md#processes` and `skills/handbook-writing/`); current disposition follows. Product documentation and present source take precedence over these proposals.
 
-1. **`<manager>` guidance for unroled roots.** `components/organization/src/install.ts` adds the `<manager>` charter only when `role.manages`; an unroled root holds the manager tools and catalog without the team guidance. Give every session that holds the manager tools the charter.
-2. **Working sessions report to the coordinator by default.** Each new operator session is its own root, so it cannot see or `assign` the coordinator's standing people. Decide how operator sessions join the coordinator's organization (default `--reports-to coordinator`, a setting, or another mechanism) and what happens when no coordinator exists.
+1. **`<manager>` guidance for unroled roots.** Superseded by the current contract: managing roles receive the full `<manager>` charter. Unroled recorded roots receive management capabilities and the role catalog while keeping their normal coding posture (`docs/organization.md`, `components/organization/src/install.ts`, commit `b32c4def`). No charter expansion is pending.
+2. **Working sessions report to the coordinator by default.** Unapproved proposal, not current behavior. A new session seeds reporting from explicit `--reports-to`; without that flag it seeds a root, and subsequent reporting uses the runtime record. Explicit native and Workplace moves already exist (`docs/organization.md#the-tree`, `components/session-state/src/bridge.ts`). Mengxue and the operator must decide whether default joining is still wanted, including behavior with no coordinator. No automatic joining change is authorized.
 3. **Sign-off tool names.** Done: the tools are `sign_off_code`, `sign_off_document`, and `sign_off_task`; `explain_change` keeps its name.
 4. **Markdown and pictures in code sign-off.** Done: `sign_off_code` renders full Markdown, including Mermaid, in its intent, focus text, and chapter briefs, and its guidance says where a picture belongs.
-5. **Program peers have no working directory.** `pi_exec` `agent_run` and `peer` take no `cwd`, so temporary peers always start in the caller's repository; a Ralph loop or any program cannot staff work in another repository or worktree. Found in the Ralph live run, 2026-10-24.
+5. **Public temporary-peer directory selection.** The historical gap was found in a Ralph live run on 2026-10-24. The `pi_exec` `agent_run` and `peer` APIs have since been replaced by codemode's `temporary_peer` and `colleague`. The public `temporary_peer` schema has no `cwd`, and its start request inherits the caller's directory; `colleague` uses the existing person's session. The runtime supports explicit `cwd` for internal non-review program starts, used by `compare_program` (`components/programs/src/peers.ts`, `components/session-state/src/runtime.ts`, `components/session-state/tests/program-peers.test.ts`). The remaining unapproved question is whether the public tool needs a directory option for a real cross-repository or Ralph use case; it requires shaping, not restoration of `pi_exec`.
 
 Acceptance criteria: to be settled when this task is shaped.
 
 ## Current State
 
-Planning. Items 3 and 4 are done; items 1, 2, and 5 are ready to shape.
+Planning. Items 3 and 4 are delivered. Item 1 is superseded by the adopted role/charter boundary. Items 2 and 5 remain unapproved candidates requiring an operator decision and acceptance criteria before implementation. Mengxue owns shaping; this reconciliation assigns no implementer.
+
+Reconciled on 2026-11-07 against the product contract, current source and commit history. Referenced test scenarios were read, not run. Evidence and approved record corrections: `task:work-81f18dfa-ec22-452c-bd9e-fc1e27c909e5`, messages 14135 and 14137.
 
 ## Outcome
 
