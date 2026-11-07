@@ -137,6 +137,12 @@ const api: AgentWorkplaceApi = {
 		saveFile: (request) =>
 			ipcRenderer.invoke("workspace:save-file", request) as ReturnType<AgentWorkplaceApi["workspace"]["saveFile"]>,
 	},
+	knowledge: {
+		graph: (request) =>
+			ipcRenderer.invoke("knowledge:graph", request) as ReturnType<AgentWorkplaceApi["knowledge"]["graph"]>,
+		content: (request) =>
+			ipcRenderer.invoke("knowledge:content", request) as ReturnType<AgentWorkplaceApi["knowledge"]["content"]>,
+	},
 	git: {
 		overview: (request) =>
 			ipcRenderer.invoke("git:overview", request) as ReturnType<AgentWorkplaceApi["git"]["overview"]>,

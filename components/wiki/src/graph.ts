@@ -327,7 +327,7 @@ function sortFindings(findings: WikiFinding[]): WikiFinding[] {
 	);
 }
 
-async function loadWikiGraph(start: string, signal?: AbortSignal): Promise<WikiGraph> {
+export async function loadWikiGraph(start: string, signal?: AbortSignal): Promise<WikiGraph> {
 	const projectRoot = await findWikiProjectRoot(start, signal);
 	signal?.throwIfAborted();
 	const wikiRoot = join(projectRoot, ".wiki");
@@ -511,7 +511,7 @@ function normalizeTargetPath(target: string): string {
 	return wikiRelative;
 }
 
-function resolveTarget(graph: WikiGraph, rawTarget: string): WikiPage {
+export function resolveWikiTarget(graph: WikiGraph, rawTarget: string): WikiPage {
 	const target = rawTarget.trim();
 	if (!target) throw new Error("wiki_references target must not be empty");
 	const isPath = target.includes("/") || target.includes("\\") || target.toLowerCase().endsWith(".md");
@@ -551,7 +551,7 @@ export async function getWikiReferences(
 	}
 	if (depth !== 1 && depth !== 2) throw new Error("wiki_references depth must be 1 or 2");
 	const graph = await loadWikiGraph(start, signal);
-	const target = resolveTarget(graph, targetInput);
+	const target = resolveWikiTarget(graph, targetInput);
 	const distances = new Map<string, number>([[target.path, 0]]);
 	const queue = [target.path];
 	const traversedEdges = new Map<string, WikiEdge>();

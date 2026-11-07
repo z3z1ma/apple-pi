@@ -72,6 +72,35 @@ function headingFindings(file: LintedContextFile, line: string, at: { path: stri
 	return findings;
 }
 
+export interface ContextReference {
+	kind: "coupled" | "verify" | "wiki";
+	target: string;
+	line: number;
+}
+
+function lineReferences(line: string, number: number): ContextReference[] {
+	const references: ContextReference[] = [];
+	const field = PATH_FIELD.exec(line);
+	for (const listed of field?.[2]?.split(",") ?? []) {
+		const target = listed.trim();
+		if (target) references.push({ kind: field?.[1] === "Coupled" ? "coupled" : "verify", target, line: number });
+	}
+	for (const link of line.matchAll(WIKI_LINK))
+		references.push({ kind: "wiki", target: (link[1] ?? "").trim(), line: number });
+	return references;
+}
+
+export function contextReferences(content: string): ContextReference[] {
+	const references: ContextReference[] = [];
+	let fenced = false;
+	for (const [index, raw] of content.split(/\r?\n/).entries()) {
+		const line = raw.trimEnd();
+		if (FENCE.test(line)) fenced = !fenced;
+		if (!fenced && !HEADING.test(line)) references.push(...lineReferences(line, index + 1));
+	}
+	return references;
+}
+
 function referenceFindings(
 	root: string,
 	line: string,
@@ -80,14 +109,13 @@ function referenceFindings(
 ): ContextFinding[] {
 	const where = `${at.path}:${at.line}`;
 	const findings: ContextFinding[] = [];
-	const field = PATH_FIELD.exec(line);
-	for (const listed of field?.[2]?.split(",") ?? []) {
-		const path = listed.trim();
-		if (path && !existsSync(join(root, path)))
+	for (const reference of lineReferences(line, at.line)) {
+		if (reference.kind === "wiki") continue;
+		if (!existsSync(join(root, reference.target)))
 			findings.push({
-				kind: field?.[1] === "Coupled" ? "broken-coupled" : "broken-verify",
+				kind: reference.kind === "coupled" ? "broken-coupled" : "broken-verify",
 				...at,
-				message: `${where}: ${field?.[1]} path ${path} does not exist`,
+				message: `${where}: ${reference.kind === "coupled" ? "Coupled" : "Verify"} path ${reference.target} does not exist`,
 			});
 	}
 	for (const link of line.matchAll(WIKI_LINK))

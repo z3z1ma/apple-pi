@@ -14,6 +14,7 @@ import { openDepartures } from "../backend/departures.js";
 import { openEmbeddedTerminals } from "../backend/embedded-terminal.js";
 import { openGit } from "../backend/git.js";
 import { instruct } from "../backend/instructions.js";
+import { openKnowledge } from "../backend/knowledge.js";
 import { openLifecycle } from "../backend/lifecycle.js";
 import { openFileLink, openLink } from "../backend/links.js";
 import { openNotepads } from "../backend/notepad.js";
@@ -26,6 +27,7 @@ import { leaveOutUnchanged, openWorldBackend } from "../backend/world-backend.js
 import { isCallInRequest } from "../call-in.js";
 import { isRetirePeopleRequest } from "../departures.js";
 import { type GitApi, isGitDiff, isGitLog, isGitRoot, isGitRun, isGitShow } from "../git.js";
+import { isKnowledgeRequest } from "../knowledge.js";
 import { isOrgMoveRequest, isOrgStartRequest } from "../org.js";
 import {
 	isWorkspacePath,
@@ -113,7 +115,17 @@ function wireGit(git: GitApi) {
 
 function start() {
 	const world = openWorldBackend(statePaths());
-	wireWorkspace(openWorkspace(() => world.snapshot()));
+	const workspace = openWorkspace(() => world.snapshot());
+	wireWorkspace(workspace);
+	const knowledge = openKnowledge(workspace);
+	ipcMain.handle("knowledge:graph", (_event, request: unknown) =>
+		isKnowledgeRequest(request) ? knowledge.graph(request) : { ok: false, reason: "A knowledge request is required." },
+	);
+	ipcMain.handle("knowledge:content", (_event, request: unknown) =>
+		isKnowledgeRequest(request) && "id" in request && typeof request.id === "string"
+			? knowledge.content({ ...request, id: request.id })
+			: { ok: false, reason: "A knowledge node is required." },
+	);
 	wireGit(openGit());
 	const conversations = openConversations(statePaths().socket);
 	const commands = openCommands(statePaths().socket);
@@ -475,6 +487,7 @@ function start() {
 					"app://world/index.html?workplace=org",
 					"app://world/index.html?workplace=code",
 					"app://world/index.html?workplace=git",
+					"app://world/index.html?workplace=knowledge",
 					"app://world/index.html?workplace=reviews",
 					"app://world/index.html?workplace=issues",
 				].includes(url)
