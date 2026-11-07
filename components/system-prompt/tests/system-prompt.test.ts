@@ -61,9 +61,21 @@ async function rootSession(flags: Record<string, string> = {}) {
 	}
 }
 
-test("in every posture the toolbox teaches exactly the active tools", async () => {
+function expectCommunicationTeaching(sections: Record<string, string | null>) {
+	const toolbox = sections.toolbox ?? "";
+	expect(toolbox).toContain("Keep detailed task work in its task thread");
+	expect(toolbox).toContain("`send_mail` for specific people who need to act");
+	expect(toolbox).toContain("topic channels for discoverable cross-task context");
+	expect(toolbox).toContain("organization channel (`organization:<root-id>`) for broad decisions or changes");
+	expect(toolbox).toContain("During natural catch-up, pull unread followed channels");
+	expect(toolbox).toContain("`post` shares context quietly; add `notify` only when selected people need attention");
+	expect(sections.org).toContain("Keep detailed task discussion in its task thread");
+}
+
+test("in every posture the toolbox teaches exactly the active tools and communication choices", async () => {
 	const root = await rootSession();
 	expect(root.gaps).toEqual({ untaught: [], absent: [] });
+	expectCommunicationTeaching(root.sections);
 	expect(root.active).toEqual(expect.arrayContaining(["hire", "progress", "codemode", "tool_search"]));
 	const cases = [
 		{
@@ -81,6 +93,7 @@ test("in every posture the toolbox teaches exactly the active tools", async () =
 	for (const { role, has, lacks } of cases) {
 		const person = await rootSession({ role, "reports-to": root.id });
 		expect(person.gaps, role).toEqual({ untaught: [], absent: [] });
+		expectCommunicationTeaching(person.sections);
 		expect(person.active, role).toEqual(expect.arrayContaining(has));
 		for (const tool of lacks) expect(person.active, `${role} lacks ${tool}`).not.toContain(tool);
 	}

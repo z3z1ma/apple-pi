@@ -25,7 +25,7 @@ afterAll(async () => {
 	vi.unstubAllEnvs();
 });
 
-test("the full package root prompt and active schemas stay within their token budget", async () => {
+test("the full package root request stays within its estimated-size guardrail", async () => {
 	await startRuntime(state.socketPath);
 	const run = await promptSession({
 		cwd,
@@ -61,7 +61,7 @@ test("the full package root prompt and active schemas stay within their token bu
 		expect(measured.promptChars).toBe(prompt.length);
 		expect(prompt).toContain("**The ledger**");
 		expect(prompt).toContain("<pair-protocol>");
-		expect(run.session.resourceLoader.getSkills().skills.length).toBeGreaterThan(0);
+		expect(prompt).toContain(join(ROOT, "skills/code-review/SKILL.md"));
 		budget("root prompt estimated tokens", measured.tokens, 37500, measured);
 	} finally {
 		await run.close();

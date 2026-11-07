@@ -131,9 +131,10 @@ export const TOOL_GROUPS: ToolGroup[] = [
 			"predictions",
 		],
 		guidance: [
-			"Colleagues keep their own memory and own work across turns. Find them in `directory` and talk directly: `send_mail` starts an exchange and `reply` continues it on its thread.",
-			'`inbox` shows what is unread, `read_thread` reads a thread (only `view: "catch_up"` marks it read) and `search_messages` searches everything you may read; `react` acknowledges without waking anyone.',
-			"Channels are shared context people pull: `post` there, and only `notify` asks for attention. Find a channel before you create one (`find_channels`, `create_channel`, `join_channel`, `invite_to_thread`); `leave_thread` and `remove_thread_invitation` undo that. `pin_message` marks a thread's current brief, `archive_thread` records its conclusion and `reopen_thread` resumes it.",
+			"Colleagues keep their own memory and own work across turns. Find them in `directory` and talk directly. Keep detailed task work in its task thread; use `send_mail` for specific people who need to act and `reply` to continue an exchange.",
+			'`inbox` previews unread mail and followed channels. During natural catch-up, pull unread followed channels with `read_thread` (`view: "catch_up"` marks the returned page read); `search_messages` searches everything you may read, and `react` acknowledges without waking anyone.',
+			"Use topic channels for discoverable cross-task context and the organization channel (`organization:<root-id>`) for broad decisions or changes; link to owning tasks. `post` shares context quietly; add `notify` only when selected people need attention.",
+			"Find a channel before you create one (`find_channels`, `create_channel`, `join_channel`, `invite_to_thread`); `leave_thread` and `remove_thread_invitation` undo that. `pin_message` marks a thread's current brief, `archive_thread` records its conclusion and `reopen_thread` resumes it.",
 			"`channel_charter` gives a channel a listener who applies a standing policy to every post.",
 			"After an uncertain send, check `communication_status` instead of sending again.",
 			"`escalate` takes a decision or blocker beyond your authority up the tree.",

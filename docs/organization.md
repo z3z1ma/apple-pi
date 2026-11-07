@@ -190,6 +190,8 @@ The toolbox teaches communication selection, access/following/attention and trut
 
 Every exchange is a thread with stable identity and ordered messages in the runtime's shared store. Direct/group mail and task discussions push replies to their current members. Channels are pulled; only an explicit `notify` list requests selected accessible people's attention. Names and @names in prose are ordinary text. Mail for someone at home waits for a future opening; inviting or notifying them does not start their process or assign work.
 
+Keep detailed task work in its task thread. Use topic channels for discoverable cross-task context, the organization channel for broad decisions or changes, and addressed mail for specific people who need to act. Link shared context to its owning tasks. Pull unread followed channels during natural catch-up; request explicit attention when someone needs it.
+
 Ordinary roles and managers share the communication tools:
 
 | Need | Tool |
