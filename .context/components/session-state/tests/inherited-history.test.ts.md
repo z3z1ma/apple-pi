@@ -1,0 +1,8 @@
+## file
+
+The in-memory cases exercise exported ancestry queries, including conflicting current/departed evidence and prospective reporting overrides. The runtime scenario creates tasks, reviews, links, reporting changes and permanent departure through commands against isolated state. Database reads establish cleanup, unchanged provenance and durable outcomes; they supplement successful/refused public operations rather than replace them.
+
+The failed capture is deliberately unfinished review responsibility without a model turn. Reassign it before cleanup, then remove the worker's task assignment to distinguish review-only protection from task protection. The no-change review independently exercises inherited read access. Create the broken-a/b cycle only after the valid partial/whole-root movement controls.
+Why: open-work movement validation scans all organizations, so introducing cyclic work earlier would prevent unrelated movement assertions from reaching their intended boundary. Waiting for the original command's terminal receipt proves delivery; a stored failed row plus an exact retry alone proves persistence/replay but can miss a stranded original caller. The null override must change a worker's resolved root, rather than restate an already-null reporting line.
+Coupled: components/session-state/src/tree.ts, components/session-state/src/runtime.ts, components/session-state/src/review-jobs.ts, components/session-state/tests/helpers.ts
+Verify: components/session-state/tests/inherited-history.test.ts, components/session-state/tests/organization-move.test.ts, apps/agent-workplace/tests/org-backend.test.ts

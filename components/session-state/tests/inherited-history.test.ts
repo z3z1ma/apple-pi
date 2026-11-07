@@ -38,6 +38,7 @@ test("retained task anchors follow removed managers without changing their prove
 		depart(db, "middle", "head");
 		expect(rootOf(db, "old")).toBe("head");
 		expect(rootOf(db, "worker")).toBe("head");
+		expect(rootOf(db, "worker", new Map([["worker", null]]))).toBe("worker");
 		expect(taskOrganization(db, "task")).toBe("head");
 		expect(anchorsOf(db, "head")).toEqual(["head", "old"]);
 		expect(
@@ -71,7 +72,6 @@ test("unknown ancestry and independent departures stay separate, and current rep
 		expect(rootOf(db, "independent")).toBe("independent");
 		expect(rootOf(db, "obsolete")).toBe("obsolete");
 		expect(rootOf(db, "obsolete", new Map([["obsolete", "head"]]))).toBe("head");
-		expect(rootOf(db, "head", new Map([["head", null]]))).toBe("head");
 		depart(db, "a", "b");
 		depart(db, "b", "a");
 		expect(() => rootOf(db, "a")).toThrow("cycle");
@@ -304,22 +304,21 @@ test("after root cleanup its successor can read reviews, assign inherited tasks 
 			manager: "destination",
 			branch: ["outsider", "successor", "worker"],
 		};
-		await sendCommand("operator", healthyMove, {
+		const failedMove = await sendCommand("operator", healthyMove, {
 			socketPath: state.socketPath,
 			commandId: "cyclic-move",
-			until: "accepted",
+			signal: AbortSignal.timeout(5000),
 		});
-		await vi.waitFor(() =>
-			expect(query(state.dbPath, "select stage, reason from commands where command_id = 'cyclic-move'")).toEqual([
-				{ stage: "failed", reason: "The organization has a cycle" },
-			]),
-		);
+		expect(failedMove).toMatchObject({ stage: "failed", reason: expect.stringContaining("cycle") });
+		expect(query(state.dbPath, "select stage, reason from commands where command_id = 'cyclic-move'")).toEqual([
+			{ stage: "failed", reason: failedMove.reason },
+		]);
 		expect(
 			await sendCommand("operator", healthyMove, {
 				socketPath: state.socketPath,
 				commandId: "cyclic-move",
 			}),
-		).toMatchObject({ stage: "failed", reason: "The organization has a cycle" });
+		).toMatchObject({ stage: "failed", reason: failedMove.reason });
 		expect(query(state.dbPath, "select reports_to from sessions where id = 'outsider'")).toEqual([
 			{ reports_to: null },
 		]);
