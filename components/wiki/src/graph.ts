@@ -327,7 +327,11 @@ function sortFindings(findings: WikiFinding[]): WikiFinding[] {
 	);
 }
 
-export async function loadWikiGraph(start: string, signal?: AbortSignal): Promise<WikiGraph> {
+export async function loadWikiGraph(
+	start: string,
+	signal?: AbortSignal,
+	includePath?: (path: string) => boolean,
+): Promise<WikiGraph> {
 	const projectRoot = await findWikiProjectRoot(start, signal);
 	signal?.throwIfAborted();
 	const wikiRoot = join(projectRoot, ".wiki");
@@ -354,6 +358,7 @@ export async function loadWikiGraph(start: string, signal?: AbortSignal): Promis
 		for (const entry of entries) {
 			signal?.throwIfAborted();
 			const absolute = join(directory, entry.name);
+			if (includePath && !includePath(absolute)) continue;
 			const path = portablePath(relative(projectRoot, absolute));
 			const stat = await lstat(absolute);
 			if (stat.isSymbolicLink()) {
@@ -525,7 +530,11 @@ export function resolveWikiTarget(graph: WikiGraph, rawTarget: string): WikiPage
 		throw new Error(`Wiki page not found: ${path}`);
 	}
 
-	const matches = graph.pages.filter((page) => page.key === slugKey(target));
+	return resolveWikiSlug(graph, target);
+}
+
+export function resolveWikiSlug(graph: WikiGraph, target: string): WikiPage {
+	const matches = graph.pages.filter((page) => page.key === slugKey(target.trim()));
 	if (matches.length === 0) throw new Error(`Wiki slug not found: ${target}`);
 	if (matches.length > 1) {
 		throw new Error(`Wiki slug is ambiguous: ${target} (${matches.map((page) => page.path).join(", ")})`);

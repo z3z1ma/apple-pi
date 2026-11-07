@@ -1,6 +1,6 @@
 ## file
 
-Knowledge mounts only after the first visit and remains mounted while hidden. Renderer state retains the graph and current reader across application switches; Refresh, repository and mode changes request a new graph. Reads begun for superseded roots, modes or node selections cannot settle into the visible reader. A selected node's loaded ID must match before its content or source action is shown. There is no backend graph cache or watcher.
+Knowledge mounts only after the first visit and remains mounted while hidden. Renderer state retains the graph and current reader across application switches; Refresh, repository and mode changes request a new graph. Reads begun for superseded roots, modes or node selections cannot settle into the visible reader. A selected node's loaded ID must match before its content or source action is shown. Pending graph state uses the same request key as the loaded graph, so returning A-to-B-to-A while B is pending restores A with an enabled Refresh action. An unkeyed loading flag stranded that control even though stale B data was correctly rejected. There is no backend graph cache or watcher.
 
 Open source in Code uses the shared FileReferenceNavigation provider, not an alternate editor or an external opener. Markdown uses the existing escaped conversation renderer; remote images remain inert. The explicit Links list uses backend graph IDs, including incoming links and unavailable targets.
 

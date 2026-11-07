@@ -367,6 +367,32 @@ test("graph zoom, pan, drag and neighbour highlights work; every rail app stays 
 	}
 }, 45000);
 
+test("returning to an already loaded repository clears obsolete loading and permits Refresh", async () => {
+	const fixture = await openKnowledgePage();
+	const { page, roots, errors } = fixture;
+	try {
+		await enter(page, "Knowledge");
+		await page.getByRole("button", { name: "Read src/app.ts", exact: true }).waitFor();
+		await page.evaluate(() => {
+			(window as any).holdGraph = true;
+		});
+		await choose(page.getByRole("combobox", { name: "Knowledge repository" }), roots[1]!);
+		await vi.waitFor(async () =>
+			expect(await page.evaluate(() => typeof (window as any).releaseGraph)).toBe("function"),
+		);
+		await choose(page.getByRole("combobox", { name: "Knowledge repository" }), roots[0]!);
+		await page.getByRole("button", { name: "Read src/app.ts", exact: true }).waitFor();
+		expect(await page.getByRole("button", { name: "Refresh", exact: true }).isEnabled()).toBe(true);
+		await page.evaluate(() => (window as any).releaseGraph());
+		await page.waitForTimeout(100);
+		expect(await page.getByRole("button", { name: "Read src/beacon.ts", exact: true }).count()).toBe(0);
+		expect(await page.getByRole("button", { name: "Refresh", exact: true }).isEnabled()).toBe(true);
+		expect(errors).toEqual([]);
+	} finally {
+		await fixture.close();
+	}
+}, 45000);
+
 test("superseded graph and node reads cannot overwrite the selected repository or reader", async () => {
 	const fixture = await openKnowledgePage();
 	const { page, roots, errors } = fixture;

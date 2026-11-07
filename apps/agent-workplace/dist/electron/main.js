@@ -2740,7 +2740,7 @@ function findingRank(kind) {
 function sortFindings(findings) {
 	return findings.sort((left, right) => findingRank(left.kind) - findingRank(right.kind) || (left.slug ?? left.path ?? "").localeCompare(right.slug ?? right.path ?? "") || (left.line ?? 0) - (right.line ?? 0) || (left.column ?? 0) - (right.column ?? 0) || (left.target ?? "").localeCompare(right.target ?? ""));
 }
-async function loadWikiGraph(start, signal) {
+async function loadWikiGraph(start, signal, includePath) {
 	const projectRoot = await findWikiProjectRoot(start, signal);
 	signal?.throwIfAborted();
 	const wikiRoot = join(projectRoot, ".wiki");
@@ -2760,6 +2760,7 @@ async function loadWikiGraph(start, signal) {
 		for (const entry of entries) {
 			signal?.throwIfAborted();
 			const absolute = join(directory, entry.name);
+			if (includePath && !includePath(absolute)) continue;
 			const path = portablePath(relative(projectRoot, absolute));
 			const stat = await lstat(absolute);
 			if (stat.isSymbolicLink()) {
@@ -2875,26 +2876,8 @@ async function loadWikiGraph(start, signal) {
 		findings: sortFindings(findings)
 	};
 }
-function normalizeTargetPath(target) {
-	const normalized = target.replace(/^@/, "").replaceAll("\\", "/").replace(/^\.\//, "");
-	if (normalized.startsWith("/") || normalized.split("/").includes("..")) throw new Error("wiki_references target paths must stay inside .wiki");
-	const wikiRelative = normalized.startsWith(".wiki/") ? normalized : `.wiki/${normalized}`;
-	if (!wikiRelative.toLowerCase().endsWith(".md")) throw new Error("wiki_references target paths must identify a Markdown page inside .wiki");
-	return wikiRelative;
-}
-function resolveWikiTarget(graph, rawTarget) {
-	const target = rawTarget.trim();
-	if (!target) throw new Error("wiki_references target must not be empty");
-	if (target.includes("/") || target.includes("\\") || target.toLowerCase().endsWith(".md")) {
-		const path = normalizeTargetPath(target);
-		const exact = graph.pages.filter((page) => page.path === path);
-		if (exact.length === 1) return exact[0];
-		const folded = graph.pages.filter((page) => slugKey(page.path) === slugKey(path));
-		if (folded.length === 1) return folded[0];
-		if (folded.length > 1) throw new Error(`wiki_references path is ambiguous: ${path}`);
-		throw new Error(`Wiki page not found: ${path}`);
-	}
-	const matches = graph.pages.filter((page) => page.key === slugKey(target));
+function resolveWikiSlug(graph, target) {
+	const matches = graph.pages.filter((page) => page.key === slugKey(target.trim()));
 	if (matches.length === 0) throw new Error(`Wiki slug not found: ${target}`);
 	if (matches.length > 1) throw new Error(`Wiki slug is ambiguous: ${target} (${matches.map((page) => page.path).join(", ")})`);
 	return matches[0];
@@ -2985,12 +2968,27 @@ async function extract(workspace, request) {
 	const stat = await present(folder);
 	if (!stat) return graph;
 	if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error("Knowledge folders must be real directories.");
-	const wiki = await present(join(root, ".wiki")) ? await loadWikiGraph(root) : void 0;
-	if (wiki && wiki.projectRoot !== root) throw new Error("Choose the repository root to read its wiki.");
-	if (wiki) graph.warnings.push(...wiki.findings.map((finding) => finding.message));
+	const includePath = (path) => {
+		try {
+			within$2(root, path);
+			return true;
+		} catch {
+			return false;
+		}
+	};
+	let wiki;
+	function readWiki() {
+		wiki ??= loadWikiGraph(root, void 0, includePath).then((loaded) => {
+			if (loaded.projectRoot !== root) throw new Error("Choose the repository root to read its wiki.");
+			graph.warnings.push(...loaded.findings.map((finding) => finding.message));
+			return loaded;
+		});
+		return wiki;
+	}
 	if (request.mode === "wiki") {
-		graph.nodes = wiki.pages.map((page) => nodeFor(page.path, "wiki", page.path));
-		graph.edges = wiki.edges.map((edge) => ({
+		const loaded = await readWiki();
+		graph.nodes = loaded.pages.map((page) => nodeFor(page.path, "wiki", page.path));
+		graph.edges = loaded.edges.map((edge) => ({
 			...edge,
 			kind: "wiki"
 		}));
@@ -3001,6 +2999,7 @@ async function extract(workspace, request) {
 	async function visit(folder) {
 		for (const entry of await readdir(folder, { withFileTypes: true })) {
 			const absolute = join(folder, entry.name);
+			if (!includePath(absolute)) continue;
 			const path = relative(root, absolute).split(sep).join("/");
 			if (entry.isSymbolicLink()) {
 				graph.warnings.push(`${path} is a symlink and was not followed`);
@@ -3031,20 +3030,24 @@ async function extract(workspace, request) {
 	for (const document of documents) for (const reference of contextReferences(document.text)) {
 		let target;
 		if (reference.kind === "wiki") try {
-			if (!wiki) throw new Error("No .wiki directory");
-			const page = resolveWikiTarget(wiki, reference.target);
+			const page = resolveWikiSlug(await readWiki(), reference.target);
 			target = nodeFor(page.path, "wiki", page.path);
 		} catch (error) {
 			target = nodeFor(`wiki:${reference.target}`, "missing");
 			graph.warnings.push(`${document.id}:${reference.line}: ${String(error)}`);
 		}
-		else {
-			const path = reference.target;
+		else try {
+			const absolute = resolve(root, reference.target);
+			within$2(root, absolute);
+			const path = relative(root, absolute).split(sep).join("/");
 			target = nodes.get(path) ?? nodeFor(path, "file");
 			if (!nodes.has(path)) {
 				if (await sourceExists(root, path)) target.source = path;
 				else target.kind = "missing";
 			}
+		} catch (error) {
+			target = nodeFor(`path:${reference.target}`, "missing");
+			graph.warnings.push(`${document.id}:${reference.line}: ${String(error)}`);
 		}
 		if (!nodes.has(target.id)) nodes.set(target.id, target);
 		graph.edges.push({

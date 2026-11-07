@@ -26,6 +26,67 @@ afterEach(() => {
 });
 
 describe("repository knowledge", () => {
+	it("excludes Git metadata before wiki files can contribute graph nodes, edges or warnings", async () => {
+		const root = repository();
+		put(root, ".wiki/Guide.md", "# Guide\n[[PrivateOnly]]");
+		put(root, ".wiki/.git/private.md", "# Hidden\n[[PrivateOnly|PRIVATE TOKEN]]");
+		const result = await api.graph({ root, mode: "wiki" });
+		if (!result.ok) throw new Error(result.reason);
+		expect(result.value.nodes.map((node) => node.id)).toEqual([".wiki/Guide.md"]);
+		expect(JSON.stringify(result)).not.toContain("PRIVATE TOKEN");
+		expect(JSON.stringify(result)).not.toContain(".wiki/.git");
+	});
+
+	it("keeps valid context independent of an unusable wiki and reports unavailable referenced targets", async () => {
+		const root = repository();
+		const outside = repository();
+		put(root, "src/main.ts", "source");
+		put(root, ".context/src/main.ts.md", "## file\nValid rationale");
+		symlinkSync(outside, join(root, ".wiki"));
+		expect(await api.graph({ root, mode: "context" })).toMatchObject({
+			ok: true,
+			value: { nodes: [{ id: "src/main.ts" }], warnings: [] },
+		});
+		expect(await api.content({ root, mode: "context", id: "src/main.ts" })).toMatchObject({
+			ok: true,
+			value: { text: expect.stringContaining("Valid rationale") },
+		});
+		put(root, ".context/src/main.ts.md", "## file\nValid rationale\n[[Guide]]");
+		const linked = await api.graph({ root, mode: "context" });
+		if (!linked.ok) throw new Error(linked.reason);
+		expect(linked.value.nodes).toContainEqual(expect.objectContaining({ id: "wiki:Guide", kind: "missing" }));
+		expect(linked.value.warnings.join("\n")).toContain("non-symlink");
+		expect(await api.graph({ root, mode: "wiki" })).toMatchObject({ ok: false });
+	});
+
+	it("resolves dotted context wiki slugs to the same page as wiki page links", async () => {
+		const root = repository();
+		put(root, "main.ts", "source");
+		put(root, ".context/main.ts.md", "## file\n[[release.md]]");
+		put(root, ".wiki/release.md", "# Shorter page");
+		put(root, ".wiki/release.md.md", "# Dotted slug\n[[release.md]]");
+		const result = await api.graph({ root, mode: "context" });
+		if (!result.ok) throw new Error(result.reason);
+		expect(result.value.edges).toEqual([{ from: "main.ts", to: ".wiki/release.md.md", kind: "wiki", line: 2 }]);
+		expect(result.value.warnings).toEqual([]);
+	});
+
+	it("normalizes safe relative reference spellings to existing context identities", async () => {
+		const root = repository();
+		put(root, "src/a.ts", "a");
+		put(root, "src/b.ts", "b");
+		put(root, ".context/src/a.ts.md", "## file\nCoupled: ./src/b.ts\nVerify: src/../src/b.ts");
+		put(root, ".context/src/b.ts.md", "## file\nB rationale");
+		const result = await api.graph({ root, mode: "context" });
+		if (!result.ok) throw new Error(result.reason);
+		expect(result.value.nodes.map((node) => node.id)).toEqual(["src/a.ts", "src/b.ts"]);
+		expect(result.value.edges.map((edge) => edge.to)).toEqual(["src/b.ts", "src/b.ts"]);
+		expect(await api.content({ root, mode: "context", id: result.value.edges[0]!.to })).toMatchObject({
+			ok: true,
+			value: { text: expect.stringContaining("B rationale") },
+		});
+	});
+
 	it("extracts context, verification and wiki edges using the lint parsers, with readable documents and missing targets", async () => {
 		const root = repository();
 		put(root, "src/main.ts", "export const main = 1;");

@@ -1,7 +1,7 @@
 import { lstat, readdir, realpath } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { contextReferences } from "../../../../components/code-context/src/lint.js";
-import { loadWikiGraph, resolveWikiTarget } from "../../../../components/wiki/src/graph.js";
+import { loadWikiGraph, resolveWikiSlug } from "../../../../components/wiki/src/graph.js";
 import type { KnowledgeApi, KnowledgeGraph, KnowledgeNode, KnowledgeRequest } from "../knowledge.js";
 import { isKnowledgeRequest } from "../knowledge.js";
 import type { WorkspaceApi } from "../workspace.js";
@@ -40,13 +40,27 @@ async function extract(workspace: WorkspaceApi, request: KnowledgeRequest): Prom
 	const stat = await present(folder);
 	if (!stat) return graph;
 	if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error("Knowledge folders must be real directories.");
-	const wikiPresent = await present(join(root, ".wiki"));
-	const wiki = wikiPresent ? await loadWikiGraph(root) : undefined;
-	if (wiki && wiki.projectRoot !== root) throw new Error("Choose the repository root to read its wiki.");
-	if (wiki) graph.warnings.push(...wiki.findings.map((finding) => finding.message));
+	const includePath = (path: string) => {
+		try {
+			within(root, path);
+			return true;
+		} catch {
+			return false;
+		}
+	};
+	let wiki: ReturnType<typeof loadWikiGraph> | undefined;
+	function readWiki() {
+		wiki ??= loadWikiGraph(root, undefined, includePath).then((loaded) => {
+			if (loaded.projectRoot !== root) throw new Error("Choose the repository root to read its wiki.");
+			graph.warnings.push(...loaded.findings.map((finding) => finding.message));
+			return loaded;
+		});
+		return wiki;
+	}
 	if (request.mode === "wiki") {
-		graph.nodes = wiki!.pages.map((page) => nodeFor(page.path, "wiki", page.path));
-		graph.edges = wiki!.edges.map((edge) => ({ ...edge, kind: "wiki" }));
+		const loaded = await readWiki();
+		graph.nodes = loaded.pages.map((page) => nodeFor(page.path, "wiki", page.path));
+		graph.edges = loaded.edges.map((edge) => ({ ...edge, kind: "wiki" }));
 		return graph;
 	}
 	const nodes = new Map<string, KnowledgeNode>();
@@ -54,6 +68,7 @@ async function extract(workspace: WorkspaceApi, request: KnowledgeRequest): Prom
 	async function visit(folder: string): Promise<void> {
 		for (const entry of await readdir(folder, { withFileTypes: true })) {
 			const absolute = join(folder, entry.name);
+			if (!includePath(absolute)) continue;
 			const path = relative(root, absolute).split(sep).join("/");
 			if (entry.isSymbolicLink()) {
 				graph.warnings.push(`${path} is a symlink and was not followed`);
@@ -80,19 +95,25 @@ async function extract(workspace: WorkspaceApi, request: KnowledgeRequest): Prom
 			let target: KnowledgeNode;
 			if (reference.kind === "wiki") {
 				try {
-					if (!wiki) throw new Error("No .wiki directory");
-					const page = resolveWikiTarget(wiki, reference.target);
+					const page = resolveWikiSlug(await readWiki(), reference.target);
 					target = nodeFor(page.path, "wiki", page.path);
 				} catch (error) {
 					target = nodeFor(`wiki:${reference.target}`, "missing");
 					graph.warnings.push(`${document.id}:${reference.line}: ${String(error)}`);
 				}
 			} else {
-				const path = reference.target;
-				target = nodes.get(path) ?? nodeFor(path, "file");
-				if (!nodes.has(path)) {
-					if (await sourceExists(root, path)) target.source = path;
-					else target.kind = "missing";
+				try {
+					const absolute = resolve(root, reference.target);
+					within(root, absolute);
+					const path = relative(root, absolute).split(sep).join("/");
+					target = nodes.get(path) ?? nodeFor(path, "file");
+					if (!nodes.has(path)) {
+						if (await sourceExists(root, path)) target.source = path;
+						else target.kind = "missing";
+					}
+				} catch (error) {
+					target = nodeFor(`path:${reference.target}`, "missing");
+					graph.warnings.push(`${document.id}:${reference.line}: ${String(error)}`);
 				}
 			}
 			if (!nodes.has(target.id)) nodes.set(target.id, target);

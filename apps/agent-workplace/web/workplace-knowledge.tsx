@@ -149,8 +149,9 @@ export function WorkplaceKnowledge({ active }: { active: boolean }) {
 	const [refresh, setRefresh] = useState(0);
 	const [loaded, setLoaded] = useState<{ key: string; graph: KnowledgeGraph }>();
 	const [error, setError] = useState<{ key: string; reason: string }>();
-	const [loading, setLoading] = useState(false);
+	const [pendingKey, setPendingKey] = useState<string>();
 	const key = JSON.stringify([root, mode, refresh]);
+	const loading = pendingKey === key && loaded?.key !== key;
 	const [repositoryError, setRepositoryError] = useState<string>();
 	useEffect(() => {
 		let live = true;
@@ -175,7 +176,7 @@ export function WorkplaceKnowledge({ active }: { active: boolean }) {
 	useEffect(() => {
 		if (!active || !root || loaded?.key === key) return;
 		let live = true;
-		setLoading(true);
+		setPendingKey(key);
 		setError(undefined);
 		void window.agentWorkplace.knowledge
 			.graph({ root, mode })
@@ -188,7 +189,7 @@ export function WorkplaceKnowledge({ active }: { active: boolean }) {
 				if (live) setError({ key, reason: String(reason) });
 			})
 			.finally(() => {
-				if (live) setLoading(false);
+				if (live) setPendingKey(undefined);
 			});
 		return () => {
 			live = false;

@@ -62,6 +62,24 @@
   ],
   "scripts": [
     {
+      "id": "workplace-wiki-policy",
+      "on": "edit",
+      "script": "workplace-wiki-policy.js",
+      "includes": ["apps/agent-workplace/src/backend/knowledge.ts"],
+      "fires": [
+        {
+          "path": "apps/agent-workplace/src/backend/knowledge.ts",
+          "content": "const graph = await loadWikiGraph(root);"
+        }
+      ],
+      "passes": [
+        {
+          "path": "apps/agent-workplace/src/backend/knowledge.ts",
+          "content": "const graph = await loadWikiGraph(root, undefined, includePath);"
+        }
+      ]
+    },
+    {
       "id": "git-action-root",
       "on": "edit",
       "script": "git-action-root.js",
