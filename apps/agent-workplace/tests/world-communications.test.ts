@@ -682,6 +682,7 @@ test.each([0, 60])("opening Mail marks its newest visible page read (%i addition
 		await page.evaluate(() => (window as any).receiveMail());
 		await page.getByRole("button", { name: "Search this conversation", exact: true }).click();
 		await page.getByRole("spinbutton", { name: "Message page size" }).fill("5");
+		await page.getByText(`New mail evidence ${seq + 7}`, { exact: true }).waitFor();
 		await vi.waitFor(async () =>
 			expect((await calls(page, "markRead")).at(-1)).toEqual({ thread: "mail:review", seq: seq + 7 }),
 		);
@@ -792,6 +793,11 @@ test("a Mail page loaded without focus stays unread until focused; hidden Mail d
 		await page.getByRole("button", { name: "Chat", exact: true }).click();
 		const reads = await calls(page, "readThread");
 		await page.evaluate(() => (window as any).receiveMail());
+		await vi.waitFor(async () =>
+			expect(await page.getByRole("button", { name: "Mail", exact: true }).getAttribute("aria-description")).toBe(
+				"1 unread messages",
+			),
+		);
 		expect(await calls(page, "readThread")).toEqual(reads);
 		expect(await calls(page, "markRead")).toEqual([{ thread: "mail:review", seq: 7 }]);
 		expect(errors).toEqual([]);

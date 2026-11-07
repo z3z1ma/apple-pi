@@ -2,6 +2,9 @@
 
 These cases exercise built Workplace assets in headless Chrome against an in-memory typed-facade fixture. Recent/range/search do not acknowledge the fixture cursor; markRead does, for the end of the conversation he is looking at. Actual runtime authorization, command deduplication, persistence and delivery remain backend/core test responsibilities.
 
+Mail acknowledgment assertions pair API calls with the rendered message, unread indicator and (for scroll restoration) viewport position at acknowledgment. For hidden Mail, wait for the rail's updated unread description before checking that no read occurred.
+Why: a negative call assertion immediately after publishing can pass before React consumes the new snapshot. Observing its unread indicator first establishes that the hidden-reader boundary had an update to ignore.
+
 The preload fixture supplies workspace.resolvePaths even when it validates no file destinations; return an explicit empty successful result for that scenario. Inspect rendered failure notices alongside pageerror/console errors, and retain positive canonical-file and Code activation checks in world-file-links.test.ts.
 Why: a missing fixture method produced a locally caught File links unavailable notice despite clean browser error listeners and passing interactions. Correct the incomplete fixture rather than adding a production fallback.
 
