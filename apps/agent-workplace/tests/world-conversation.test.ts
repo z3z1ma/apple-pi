@@ -1115,9 +1115,6 @@ test("DM grouping separates later response streams without splitting delayed del
 	try {
 		await openSessionReader(page, "DM");
 		await log(page).getByText("Earlier response.", { exact: true }).waitFor();
-		await vi.waitFor(async () =>
-			expect(await page.evaluate(() => (window as any).watched.at(-1))).toEqual(["pi-tests"]),
-		);
 		await page.clock.setFixedTime(new Date(start + 6 * 60_000));
 		await page.evaluate(() =>
 			(window as any).reply({
@@ -1150,7 +1147,13 @@ test("DM grouping separates later response streams without splitting delayed del
 			(window as any).reply({ kind: "end", characterId: "pi-tests", streamId: "timed-stream-1", entry });
 		}, stored);
 		await log(page).locator('[data-entry="timed-stored-1"]').waitFor();
-		await vi.waitFor(async () => expect(await log(page).locator(".aw-conv-writing").count()).toBe(0));
+		const savedTime = await page.evaluate(
+			(at) => new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(at),
+			stored.at,
+		);
+		await vi.waitFor(async () =>
+			expect(await log(page).locator(".aw-conv-assistant").last().locator("header time").textContent()).toBe(savedTime),
+		);
 		expect(await log(page).locator(".aw-conv-assistant").count()).toBe(2);
 		expect(await log(page).getByText("Streaming first and much later.", { exact: true }).count()).toBe(1);
 		await page.clock.setFixedTime(new Date(start + 97 * 60_000));

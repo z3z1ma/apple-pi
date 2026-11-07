@@ -4,7 +4,7 @@ Research date: 2026-11-07. Decision owner: the operator. Inquiry owner: Jean-Pau
 
 ## Recommendation
 
-Keep apple-pi's pre-execution rule refusals. **TTSR has merit as optional early output coaching, not as their replacement.** Its distinctive benefit is interrupting a long wrong draft before the model finishes it. For a short forbidden tool call, our existing path already prevents that call and gives the model a named correction on its next step. Rewinding adds no rollback of side effects and does not remove that next model request.
+Keep apple-pi's pre-execution rule refusals. **Time Traveling Stream Rules (TTSR) have merit as optional early output coaching, not as their replacement.** Its distinctive benefit is interrupting a long wrong draft before the model finishes it. For a short forbidden tool call, our existing path already prevents that call and gives the model a named correction on its next step. Rewinding adds no rollback of side effects and does not remove that next model request.
 
 Borrow the principle of specific, just-in-time guidance. Consider stream interruption only if long wrong output is the actual problem. Improving a demonstrated unclear refusal is a smaller intervention than importing a second rule lifecycle. This report recommends discussion, not implementation or a new evaluation project.
 
@@ -24,9 +24,9 @@ I also read apple-pi's rules implementation, refusal/batch tests and context con
 
 The [coordinator][U1] observes assistant `text_delta`, `thinking_delta`, `toolcall_delta`, finalized tool arguments and final nonempty text/thinking blocks. Default scope is text and tool arguments, **not thinking**. It isolates stream buffers and resets them between assistant responses and provider partial-response restarts.
 
-Regex rules run during generation. Tools may supply per-file `matcherEntries` or a combined `matcherDigest`; otherwise matching uses raw argument deltas, with a final argument snapshot when deltas are absent. These adapters make payload matching more useful than a regex over escaped JSON, but do not make incomplete arguments equivalent to a completed execution plan.
+Regex rules run during generation. Tools may supply per-file `matcherEntries` or a combined `matcherDigest` (source text for matching, not a cryptographic hash); otherwise matching uses raw argument deltas, with a final argument snapshot when deltas are absent. These adapters make payload matching more useful than a regex over escaped JSON, but do not make incomplete arguments equivalent to a completed execution plan.
 
-AST rules run separately in an **awaited pre-tool hook**, against finalized validated arguments. They need a usable source digest and file extension. Upstream's [lifecycle contract][U2] explicitly says this source is generally the **new payload**, not the prospective whole file: replacement text or added lines for edits, full content for creates/writes. Our whole-file preview therefore has different semantics.
+Abstract syntax tree (AST) rules match code structure rather than raw text. They run separately in an **awaited pre-tool hook**, against finalized validated arguments. They need a usable source digest and file extension. Upstream's [lifecycle contract][U2] explicitly says this source is generally the **new payload**, not the prospective whole file: replacement text or added lines for edits, full content for creates/writes. Our whole-file preview therefore has different semantics.
 
 Natural-language `question` rules are different again: they use a judge after completed outputs and deliver warnings, not stream interrupts. The code groups eligible questions into one judge request per output; a message can yield separate text, thinking and per-tool/per-file outputs. These checks have their own model cost and cannot serve as pre-side-effect gates. [U1, U2]
 
@@ -45,7 +45,7 @@ The timer alone is not the resume protocol; session ownership, guards and a resu
 
 In an ordinary tool batch, a stream abort prevents those still-undispatched calls; upstream's loop emits skipped/aborted result placeholders rather than executing their bodies. An AST interruption blocks the checked call before dispatch and starts the retry path. **Neither reverses earlier work.** Provider/bridged execution can have different boundaries, so “nothing in the session has executed yet” would be too strong. [U1, U4]
 
-Upstream itself treats bridged inner calls differently: `beforeBridgedToolCall` can return a blocking reason plus reminder **without rewinding**. Non-interrupting tool matches let the tool run and add passive guidance after its result. Non-interrupting prose queues a follow-up. Some host/prelude calls are outside the bridged-AgentTool path. [U1, U2]
+Upstream itself treats bridged inner calls—tools invoked through another tool or provider bridge rather than the ordinary assistant-call loop—differently: `beforeBridgedToolCall` can return a blocking reason plus reminder **without rewinding**. Non-interrupting tool matches let the tool run and add passive guidance after its result. Non-interrupting prose queues a follow-up. Some host/prelude calls are outside the bridged-AgentTool path. [U1, U2]
 
 ### 3. Its defaults are teaching defaults
 

@@ -198,7 +198,7 @@ test("a coordinator starts a session in a new tmux window, and reopens it by id 
 		expect(worker.tmux_socket).toBe(realpathSync(tmux("display-message", "-p", "#{socket_path}")));
 		expect(tmux("display-message", "-p", "-t", worker.pane_id, "#{pane_pid}")).toBe(String(worker.pid));
 		await vi.waitFor(
-			() => expect(tmux("list-windows", "-a", "-F", "#{window_name}").split("\n")).toContain("Ada Lovelace"),
+			() => expect(tmux("display-message", "-p", "-t", worker.pane_id, "#{window_name}")).toBe("Ada Lovelace"),
 			{ timeout: 4000 },
 		);
 		expect(query(state.dbPath, "select stage from commands where session_id = 'worker-1' and kind = 'start'")).toEqual([
