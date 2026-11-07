@@ -1294,7 +1294,6 @@ export class Runtime {
 					reportsTo: current.reports_to,
 					handoffFile,
 					sessionFile: current.session_file,
-					successor: command.successor ?? null,
 				};
 				this.event("runtime", sessionId, current.generation, "person_departed", departure);
 				db.prepare("update sessions set retired_at = ?, retired_reason = ?, updated_at = ? where id = ?").run(

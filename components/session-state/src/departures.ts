@@ -14,7 +14,6 @@ export interface Departure {
 	reportsTo: string | null;
 	handoffFile: string | null;
 	sessionFile: string | null;
-	successor?: string | null;
 }
 
 export function departureOf(db: DatabaseSync, person: string): Departure | undefined {

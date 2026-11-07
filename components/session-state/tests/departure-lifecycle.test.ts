@@ -370,12 +370,6 @@ test("a named successor joins the departing person's conversations and receives 
 			worker.id,
 		),
 	).toHaveLength(1);
-	const [{ data }] = query<{ data: string }>(
-		state.dbPath,
-		"select data from events where type = 'person_departed' and session_id = ?",
-		worker.id,
-	);
-	expect(JSON.parse(data).successor).toBe(heir.id);
 }, 30000);
 
 test("no-handoff departure preserves a failed first launch without observed process identity", async () => {

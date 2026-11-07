@@ -1,7 +1,5 @@
 ## file
 
-`successor` names who took over the person's conversations; absent on departures recorded before successors existed, null when none was named.
-
 `handoffFile: null` records an explicitly skipped handoff, not a failed or missing requested artifact. Both choices use the same permanent identity and safe cleanup path; null creates neither a file nor a produced-file link.
 
 A `person_departed` event is the permanent identity authority after the live row is removed. It means departure is irreversible; process death, filesystem cleanup and final command completion are separate facts. The retained reporting/name snapshot serves historical accounting and shared authorship, not a reusable directory entry. `reportsTo` remains null for an independent person departed by the operator; that absence is a historical root, not operator membership or a missing manager to invent. Cleanup, retained authorship and accounting use the same marker as dependent-person departure.
