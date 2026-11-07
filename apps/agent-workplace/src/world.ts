@@ -517,7 +517,7 @@ export interface AgentWorkplaceApi extends IntegrationsApi {
 	onOrgStart(listener: (progress: OrgStartProgress) => void): () => void;
 	retirePeople(request: RetirePeopleRequest): Promise<RetirePeopleProgress>;
 	onRetirePeople(listener: (progress: RetirePeopleProgress) => void): () => void;
-	retire(characterId: string, reason: string, handoff?: boolean): Promise<CommandReceipt>;
+	retire(characterId: string, reason: string, handoff?: boolean, successor?: string): Promise<CommandReceipt>;
 	openNotepad(coordinatorId: string): Promise<NotepadRead>;
 	saveNotepad(coordinatorId: string, text: string, base: string): Promise<NotepadSave>;
 	closeNotepad(): Promise<void>;

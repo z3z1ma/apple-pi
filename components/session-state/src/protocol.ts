@@ -212,6 +212,7 @@ export type Command =
 			reason: string;
 			by?: string;
 			handoff?: boolean;
+			successor?: string;
 			dissolution?: { root: string; generation: number };
 	  }
 	| { kind: "mark_seen" }

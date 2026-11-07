@@ -164,7 +164,7 @@ A person whose role manages, or an unroled organization root, also has eight man
 | `send_home` (`person`, optional `dissolve`) | Members and incorporated roots sleep with history retained. An unincorporated root refuses unless the operator explicitly chooses `dissolve:true`; that choice permanently lets its settled organization go without handoffs. |
 | `rename` (`person`, `name`) | Renames a running person. Its id and history stay. |
 | `move` (`person`, `manager`) | Puts a person, with everyone under it, under another manager of the same organization. |
-| `let_go` (`person`, `reason`, `handoff?`) | Accepts asynchronous permanent departure after responsibilities are settled. By default saves an own-context handoff; `handoff:false` skips that turn and file. Later mail reports the outcome. |
+| `let_go` (`person`, `reason`, `handoff?`, `successor?`) | Accepts asynchronous permanent departure after responsibilities are settled. By default saves an own-context handoff; `handoff:false` skips that turn and file. A successor (a current lasting person in the same organization, usually hired first) receives the departure mail with the handoff location and joins every conversation the person was in. Later mail reports the outcome. |
 | `assign` (`person`, `goal` and `title`, or `task`; `value?`, `cost_of_delay?`) | Gives a person a task or a written goal. It becomes the person's focus. |
 | `unassign` (`person`, `task`) | Takes an assignment back without finishing it. |
 

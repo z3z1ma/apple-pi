@@ -96,6 +96,7 @@ import { ReviewJobs, type ReviewNotify } from "./review-jobs.js";
 import { cancelSchedule, createSchedule, dueSchedules, markFired } from "./schedules.js";
 import { migrate } from "./schema.js";
 import { describeTask, markNoticed, openTaskState, snoozeTask, stuckDigest, stuckWork } from "./stuck-work.js";
+import { passOnAccess, requireSuccessor } from "./succession.js";
 import { HARNESS, markRead, nameOf, OPERATOR, participateIn, postToThread, type ThreadPost } from "./threads.js";
 import {
 	canonicalSocket,
@@ -1183,6 +1184,7 @@ export class Runtime {
 			throw new Error("Only the operator can let an organization root go.");
 		if (temporaryCallers(db).has(sessionId))
 			throw new Error("Temporary program peers belong to their program's discard lifecycle, not let_go.");
+		requireSuccessor(db, sessionId, command.successor);
 		if (
 			db
 				.prepare("select 1 from review_jobs where owner = ? and state not in ('completed', 'cancelled', 'no-changes')")
@@ -1240,7 +1242,7 @@ export class Runtime {
 						kind: "run_turn",
 						task: [
 							`Prepare your final handoff before permanently leaving the organization. Reason: ${command.reason}`,
-							"Your final prose will be saved verbatim in a private durable Markdown file. Your manager and the requestor will receive its location, not a full-team post.",
+							`Your final prose will be saved verbatim in a private durable Markdown file. Your manager${command.successor ? `, your successor ${nameOf(db, command.successor)}` : ""} and the requestor will receive its location, not a full-team post.`,
 							"Use your retained context to explain completed and open work, useful decisions and reasoning, important file/task/thread references, risks and next steps. Distinguish verified facts from beliefs and uncertainties.",
 						].join("\n\n"),
 					},
@@ -1292,6 +1294,7 @@ export class Runtime {
 					reportsTo: current.reports_to,
 					handoffFile,
 					sessionFile: current.session_file,
+					successor: command.successor ?? null,
 				};
 				this.event("runtime", sessionId, current.generation, "person_departed", departure);
 				db.prepare("update sessions set retired_at = ?, retired_reason = ?, updated_at = ? where id = ?").run(
@@ -1313,6 +1316,7 @@ export class Runtime {
 						},
 						now,
 					);
+				if (command.successor) passOnAccess(db, commandId, sessionId, command.successor, now);
 				syncChannels(db, now);
 				close = this.queueDelivery(closeId, sessionId, { kind: "close" }, current.generation);
 				pending = this.prepareDepartureNotice(
@@ -1351,7 +1355,7 @@ export class Runtime {
 		manager?: string | null,
 	) {
 		const db = this.db!;
-		const to = [...new Set([command.dissolution ? null : manager, command.by ?? OPERATOR])].filter(
+		const to = [...new Set([command.dissolution ? null : manager, command.by ?? OPERATOR, command.successor])].filter(
 			(id): id is string =>
 				Boolean(id) &&
 				(id === OPERATOR ||

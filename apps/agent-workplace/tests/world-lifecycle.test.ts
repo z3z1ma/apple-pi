@@ -191,7 +191,8 @@ async function openLifecycle(appearance: "light" | "dark" = "light", width = 144
 			],
 			endSession: (person: string, confirmed?: boolean, dissolve?: boolean) =>
 				held("home", dissolve ? { person, confirmed, dissolve } : { person, confirmed }),
-			retire: (person: string, reason: string, handoff?: boolean) => held("retire", { person, reason, handoff }),
+			retire: (person: string, reason: string, handoff?: boolean, successor?: string) =>
+				held("retire", successor ? { person, reason, handoff, successor } : { person, reason, handoff }),
 			retirePeople: (request: unknown) => held("retirePeople", request),
 			onRetirePeople: (listener: (progress: any) => void) => {
 				departures.add(listener);
@@ -822,13 +823,28 @@ test("Org card context actions do not read, and profile Let go requires reason a
 			"Work handed over to Ada.",
 		);
 		await dialog.getByRole("checkbox", { name: "Request a final handoff", exact: true }).uncheck();
+		const successor = dialog.getByRole("combobox", { name: "Successor", exact: true });
+		await successor.click();
+		const offered = page.getByRole("listbox", { name: "Successor", exact: true }).getByRole("option");
+		expect(await offered.evaluateAll((options) => options.map((option) => option.getAttribute("data-value")))).toEqual([
+			"",
+			"ada",
+			"bea",
+			"cleo",
+			"daria",
+			"erin",
+			"mina",
+		]);
+		await offered.and(page.locator('[data-value="ada"]')).click();
+		expect(await successor.getAttribute("data-value")).toBe("ada");
+		await dialog.getByText("and join every conversation Ben was in", { exact: false }).waitFor();
 		await bounded(page, dialog);
 		await shot(page, "dark-let-go-without-handoff");
 		await submit.click();
 		await vi.waitFor(async () =>
 			expect((await calls(page)).retire).toEqual([
 				{ person: "ben", reason: "Work handed over to Ada.", handoff: true },
-				{ person: "ben", reason: "Work handed over to Ada.", handoff: false },
+				{ person: "ben", reason: "Work handed over to Ada.", handoff: false, successor: "ada" },
 			]),
 		);
 		await release(page, { ok: true, stage: "accepted", commandId: "retire-ben" });

@@ -299,6 +299,85 @@ test.each([
 	30000,
 );
 
+test("a named successor joins the departing person's conversations and receives the departure mail", async () => {
+	const manager = await organization();
+	const worker = await person(manager.id);
+	const heir = await person(manager.id);
+	const outsider = await person(null);
+	await command(manager.id, {
+		kind: "work",
+		action: "assign",
+		cwd: worker.cwd,
+		person: worker.id,
+		goal: "Carry the integration seam.",
+		title: "Integration seam",
+		value: 0,
+		cost_of_delay: 0,
+	});
+	await command(worker.id, { kind: "work", action: "finish", cwd: worker.cwd, outcome: "Seam carried." });
+	const thread = `shared-${randomUUID()}`;
+	await command(worker.id, {
+		kind: "thread_post",
+		thread,
+		subject: "Seam decisions",
+		to: [manager.id],
+		body: "The seam stays in the runtime.",
+	});
+	const inherited = query<{ thread_id: string; read_up_to: number }>(
+		state.dbPath,
+		"select thread_id, read_up_to from thread_participants where participant = ? and thread_id not like 'team:%' and thread_id not like 'organization:%' order by thread_id",
+		worker.id,
+	);
+	expect(inherited.map((row) => row.thread_id)).toEqual(
+		expect.arrayContaining([thread, expect.stringMatching(/^task:/)]),
+	);
+	for (const successor of [worker.id, outsider.id]) {
+		const refused = await sendCommand(
+			worker.id,
+			{ kind: "retire", reason: "Replaced.", by: "operator", handoff: false, successor },
+			{ socketPath: state.socketPath },
+		);
+		expect(refused.stage).toBe("failed");
+	}
+	const receipt = await sendCommand(
+		worker.id,
+		{ kind: "retire", reason: "Replaced.", by: "operator", handoff: false, successor: heir.id },
+		{ socketPath: state.socketPath, until: "accepted" },
+	);
+	expect(receipt.stage, receipt.reason).toBe("accepted");
+	await vi.waitFor(() => expect(stage(receipt.commandId)).toBe("applied"), { timeout: 10000 });
+	expect(
+		query<{ thread_id: string; read_up_to: number }>(
+			state.dbPath,
+			`select thread_id, read_up_to from thread_participants where participant = ? and thread_id in (${inherited.map(() => "?").join(",")}) order by thread_id`,
+			heir.id,
+			...inherited.map((row) => row.thread_id),
+		),
+	).toEqual(inherited);
+	expect(
+		query(
+			state.dbPath,
+			"select 1 from thread_participants where thread_id = ? and participant = ?",
+			`departure:${receipt.commandId}`,
+			heir.id,
+		),
+	).toHaveLength(1);
+	expect(
+		query(
+			state.dbPath,
+			"select 1 from links where from_id = ? and to_id = ? and relation = 'supersedes'",
+			heir.id,
+			worker.id,
+		),
+	).toHaveLength(1);
+	const [{ data }] = query<{ data: string }>(
+		state.dbPath,
+		"select data from events where type = 'person_departed' and session_id = ?",
+		worker.id,
+	);
+	expect(JSON.parse(data).successor).toBe(heir.id);
+}, 30000);
+
 test("no-handoff departure preserves a failed first launch without observed process identity", async () => {
 	const id = randomUUID();
 	const start = await sendCommand(

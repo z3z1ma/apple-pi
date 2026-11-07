@@ -367,12 +367,15 @@ function start() {
 		});
 	});
 	ipcMain.handle("world:roles", () => lifecycle.roles());
-	ipcMain.handle("world:retire", (_event, characterId: unknown, reason: unknown, handoff: unknown) =>
-		typeof characterId === "string" &&
-		typeof reason === "string" &&
-		(handoff === undefined || typeof handoff === "boolean")
-			? lifecycle.retire(characterId, reason, handoff)
-			: unnamed,
+	ipcMain.handle(
+		"world:retire",
+		(_event, characterId: unknown, reason: unknown, handoff: unknown, successor: unknown) =>
+			typeof characterId === "string" &&
+			typeof reason === "string" &&
+			(handoff === undefined || typeof handoff === "boolean") &&
+			(successor === undefined || typeof successor === "string")
+				? lifecycle.retire(characterId, reason, handoff, successor)
+				: unnamed,
 	);
 	ipcMain.handle("world:rename", (_event, characterId: unknown, name: unknown) =>
 		typeof characterId === "string" && typeof name === "string" ? lifecycle.rename(characterId, name) : unnamed,

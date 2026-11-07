@@ -35,7 +35,7 @@ export interface Lifecycle extends Mailbox {
 	recruit(request: RecruitRequest): Promise<RecruitReceipt>;
 	rename(characterId: string, name: string): Promise<CommandReceipt>;
 	roles(): RoleChoice[];
-	retire(characterId: string, reason: string, handoff?: boolean): Promise<CommandReceipt>;
+	retire(characterId: string, reason: string, handoff?: boolean, successor?: string): Promise<CommandReceipt>;
 }
 
 const expandHome = (path: string) =>
@@ -262,7 +262,7 @@ export function openLifecycle(
 
 		roles: () => loadRoleChoices(paths.agentDir),
 
-		async retire(characterId, given, handoff = true) {
+		async retire(characterId, given, handoff = true, successor) {
 			const reason = given.trim();
 			if (!reason) return { ok: false, reason: "Say why it leaves." };
 			const world = snapshot();
@@ -273,7 +273,7 @@ export function openLifecycle(
 			const receipt = await follow(
 				commands,
 				characterId,
-				{ kind: "retire", reason, by: "operator", handoff },
+				{ kind: "retire", reason, by: "operator", handoff, ...(successor ? { successor } : {}) },
 				CLOSE_MS,
 				(stage) => stage === "accepted",
 				() => "The departure request is accepted; the runtime will report progress.",

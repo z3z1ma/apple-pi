@@ -231,8 +231,8 @@ const api: AgentWorkplaceApi = {
 		ipcRenderer.on("world:departures", forward);
 		return () => ipcRenderer.removeListener("world:departures", forward);
 	},
-	retire: (characterId, reason, handoff) =>
-		ipcRenderer.invoke("world:retire", characterId, reason, handoff) as Promise<CommandReceipt>,
+	retire: (characterId, reason, handoff, successor) =>
+		ipcRenderer.invoke("world:retire", characterId, reason, handoff, successor) as Promise<CommandReceipt>,
 	openNotepad: (coordinatorId) => ipcRenderer.invoke("world:open-notepad", coordinatorId) as Promise<NotepadRead>,
 	saveNotepad: (coordinatorId, text, base) =>
 		ipcRenderer.invoke("world:save-notepad", coordinatorId, text, base) as Promise<NotepadSave>,

@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { AgentWorkplaceApi, CommandReceipt, WorldSnapshot } from "../src/world.js";
 import { useWorkplaceMenu } from "./workplace-context-menu.js";
+import { type Choice, Select } from "./workplace-fields.js";
 import "./workplace-person-actions.css";
 
 type Action = "home" | "call" | "retire";
@@ -55,6 +56,69 @@ function personIn(world: WorldSnapshot, id: string): Person | undefined {
 		awake: !!awake,
 		busy: !!awake && (awake.facts?.run !== "idle" || awake.facts?.status === "asking"),
 	};
+}
+
+function successorChoices(world: WorldSnapshot, id: string): Choice<string>[] {
+	const managers = new Map<string, string | null>([
+		...world.characters.map((person) => [person.id, person.facts?.reportsTo ?? null] as const),
+		...(world.dormant ?? []).map((person) => [person.id, person.reportsTo] as const),
+	]);
+	const headOf = (start: string) => {
+		const seen = new Set<string>();
+		let at = start;
+		while (!seen.has(at)) {
+			seen.add(at);
+			const up = managers.get(at);
+			if (!up) break;
+			at = up;
+		}
+		return at;
+	};
+	const head = headOf(id);
+	const people = [...managers.keys()]
+		.filter((other) => other !== id && headOf(other) === head)
+		.map((other) => personIn(world, other))
+		.filter((person): person is Person => !!person)
+		.sort((a, b) => a.name.localeCompare(b.name));
+	return [{ value: "", label: "Nobody" }, ...people.map((person) => ({ value: person.id, label: person.name }))];
+}
+
+function SuccessorField({
+	id,
+	world,
+	person,
+	value,
+	handoff,
+	disabled,
+	onChange,
+}: {
+	id: string;
+	world: WorldSnapshot;
+	person: Person;
+	value: string;
+	handoff: boolean;
+	disabled: boolean;
+	onChange: (id: string) => void;
+}) {
+	return (
+		<>
+			<label htmlFor={id}>Successor</label>
+			<Select
+				id={id}
+				label="Successor"
+				value={value}
+				options={successorChoices(world, person.id)}
+				disabled={disabled}
+				onChange={onChange}
+			/>
+			{value && (
+				<p>
+					They get the departure mail{handoff ? " and the handoff" : ""}, and join every conversation {person.name} was
+					in.
+				</p>
+			)}
+		</>
+	);
 }
 
 function callPlan(world: WorldSnapshot, id: string) {
@@ -181,6 +245,7 @@ function PersonActionDialog({
 	const [reason, setReason] = useState("");
 	const [permanent, setPermanent] = useState(false);
 	const [handoff, setHandoff] = useState(true);
+	const [successor, setSuccessor] = useState("");
 	const [busyWarning, setBusyWarning] = useState(operation.person.busy);
 	const [dissolving, setDissolving] = useState(!!operation.dissolving);
 	const [dissolveConsent, setDissolveConsent] = useState(false);
@@ -225,7 +290,7 @@ function PersonActionDialog({
 				const result =
 					action === "home"
 						? await window.agentWorkplace.endSession(person.id, automatic ? false : busy, choice === "dissolve")
-						: await window.agentWorkplace.retire(person.id, reason.trim(), handoff);
+						: await window.agentWorkplace.retire(person.id, reason.trim(), handoff, successor || undefined);
 				setReceipt(result);
 				if (!result.ok && result.confirm) setBusyWarning(true);
 				if (!result.ok && result.dissolve) setDissolving(true);
@@ -358,6 +423,15 @@ function PersonActionDialog({
 							{busy && "Their current turn will be stopped."}
 						</p>
 					)}
+					<SuccessorField
+						id={`${titleId}-successor`}
+						world={world}
+						person={person}
+						value={successor}
+						handoff={handoff}
+						disabled={pending || !!uncertain}
+						onChange={setSuccessor}
+					/>
 					<label className="wp-person-permanent">
 						<input
 							type="checkbox"

@@ -4023,7 +4023,7 @@ function openLifecycle(paths, commands, snapshot) {
 			}, RENAME_MS, (stage) => stage === "applied", () => "Sent; it has not taken the name yet.");
 		},
 		roles: () => loadRoleChoices(paths.agentDir),
-		async retire(characterId, given, handoff = true) {
+		async retire(characterId, given, handoff = true, successor) {
 			const reason = given.trim();
 			if (!reason) return {
 				ok: false,
@@ -4038,7 +4038,8 @@ function openLifecycle(paths, commands, snapshot) {
 				kind: "retire",
 				reason,
 				by: "operator",
-				handoff
+				handoff,
+				...successor ? { successor } : {}
 			}, CLOSE_MS, (stage) => stage === "accepted", () => "The departure request is accepted; the runtime will report progress.");
 			return receipt.ok ? {
 				...receipt,
@@ -14286,7 +14287,7 @@ function start() {
 		});
 	});
 	ipcMain.handle("world:roles", () => lifecycle.roles());
-	ipcMain.handle("world:retire", (_event, characterId, reason, handoff) => typeof characterId === "string" && typeof reason === "string" && (handoff === void 0 || typeof handoff === "boolean") ? lifecycle.retire(characterId, reason, handoff) : unnamed);
+	ipcMain.handle("world:retire", (_event, characterId, reason, handoff, successor) => typeof characterId === "string" && typeof reason === "string" && (handoff === void 0 || typeof handoff === "boolean") && (successor === void 0 || typeof successor === "string") ? lifecycle.retire(characterId, reason, handoff, successor) : unnamed);
 	ipcMain.handle("world:rename", (_event, characterId, name) => typeof characterId === "string" && typeof name === "string" ? lifecycle.rename(characterId, name) : unnamed);
 	const notepads = openNotepads(() => world.snapshot(), (change) => toWindow("world:notepad", change));
 	const noCoordinator = {

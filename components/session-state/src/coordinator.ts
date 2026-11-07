@@ -260,7 +260,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 			name: "let_go",
 			label: "let_go",
 			description:
-				"Let a person go for good, once its assignments are finished or reassigned and its reports moved. Returns an accepted request, not completion; you and its manager get mail as it progresses. By default the person first writes a handoff file; handoff:false skips that. A failed handoff keeps the person.",
+				"Let a person go for good once its assignments are finished or reassigned and its reports moved. Accepted is not done: you and its manager get mail as it progresses. By default it first writes a handoff file; a failed handoff keeps the person. A successor gets that mail and joins the person's conversations.",
 			parameters: Type.Object(
 				{
 					person: personParameter,
@@ -268,15 +268,18 @@ export function installCoordinator(pi: ExtensionAPI): void {
 					handoff: Type.Optional(
 						Type.Boolean({
 							default: true,
-							description:
-								"Ask the departing person to write a final handoff. False skips the model turn and handoff file and can stop an active turn; responsibility and cleanup checks still apply.",
+							description: "False skips the final handoff turn and file, and can stop an active turn.",
 						}),
 					),
+					successor: Type.Optional(Type.String({ minLength: 1, description: "Who takes over; hire them first." })),
 				},
 				{ additionalProperties: false },
 			),
 			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 				const id = resolvePerson(ctx.sessionManager.getSessionId(), params.person);
+				const successor = params.successor
+					? resolvePerson(ctx.sessionManager.getSessionId(), params.successor)
+					: undefined;
 				const receipt = await run(
 					id,
 					{
@@ -284,6 +287,7 @@ export function installCoordinator(pi: ExtensionAPI): void {
 						reason: params.reason,
 						by: ctx.sessionManager.getSessionId(),
 						handoff: params.handoff ?? true,
+						...(successor ? { successor } : {}),
 					},
 					signal,
 					"accepted",
