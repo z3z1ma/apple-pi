@@ -30,7 +30,12 @@ function reply(model: Model<Api>, errorMessage?: string): Reply {
 	);
 }
 
-async function fixture(before?: ExtensionFactory, after?: ExtensionFactory, sourceProvider = "antigravity") {
+async function fixture(
+	before?: ExtensionFactory,
+	after?: ExtensionFactory,
+	sourceProvider = "antigravity",
+	sourceReasoning = false,
+) {
 	const root = mkdtempSync(join(tmpdir(), "apple-pi-failover-recovery-"));
 	roots.push(root);
 	const agentDir = join(root, "agent");
@@ -59,7 +64,12 @@ async function fixture(before?: ExtensionFactory, after?: ExtensionFactory, sour
 		cwd: root,
 	});
 	sessions.push(run);
-	const source = { ...run.session.model!, provider: sourceProvider, id: "source" } as Model<Api>;
+	const source = {
+		...run.session.model!,
+		provider: sourceProvider,
+		id: "source",
+		reasoning: sourceReasoning,
+	} as Model<Api>;
 	const target = {
 		...source,
 		provider: sourceProvider === "anthropic" ? "openai" : "anthropic",
@@ -144,6 +154,7 @@ describe("provider failover caller recovery", () => {
 		]);
 		expect(JSON.stringify(h.run.requests[2]!.messages)).not.toContain(quota);
 		expect(JSON.stringify(h.run.requests[2]!.messages)).toContain("effect-completed");
+		expect(JSON.stringify(h.run.requests[2]!.messages)).not.toContain("Provider failover");
 		const entries = h.run.session.sessionManager.getEntries();
 		const failure = entries.find(
 			(entry) => entry.type === "message" && entry.message.role === "assistant" && entry.message.errorMessage === quota,
@@ -240,6 +251,7 @@ describe("provider failover caller recovery", () => {
 		await h.run.session.prompt("Finish this task");
 		expect(h.errors).toEqual([]);
 		expect(h.run.requests).toHaveLength(2);
+		expect(h.dispatch.mock.calls.map(([model]) => model.provider)).toEqual([h.source.provider, h.target.provider]);
 		expect(h.select).toHaveBeenCalledOnce();
 		expect(h.run.session.model).toMatchObject(h.target);
 	});
@@ -258,6 +270,11 @@ describe("provider failover caller recovery", () => {
 		await h.run.session.prompt("Finish this task");
 		expect(h.errors).toEqual([]);
 		expect(h.run.requests).toHaveLength(3);
+		expect(h.dispatch.mock.calls.map(([model]) => model.provider)).toEqual([
+			h.source.provider,
+			h.target.provider,
+			h.third.provider,
+		]);
 		expect(h.select.mock.calls.map(([model]) => model.provider)).toEqual(["anthropic", "openai"]);
 	});
 
@@ -273,6 +290,11 @@ describe("provider failover caller recovery", () => {
 			true,
 		],
 		["antigravity", quota, false],
+		[
+			"openai",
+			'OpenAI API error (429): {"error":{"code":"organization_usage_limit_exceeded","message":"Organization token limit exceeded"}}',
+			false,
+		],
 	])(
 		"automatically dispatches a different provider with default retry settings: %s %s",
 		async (provider, error, nativeRetry) => {
@@ -344,10 +366,10 @@ describe("provider failover caller recovery", () => {
 		expect(h.run.session.model).toMatchObject(h.target);
 	});
 
-	it.each(["manual", "abort"])(
+	it.each(["manual", "abort", "effort"])(
 		"records the installed setter's late auth commit after %s without another request",
 		async (interruption) => {
-			const h = await fixture();
+			const h = await fixture(undefined, undefined, "antigravity", interruption === "effort");
 			let release!: () => void;
 			let reached!: () => void;
 			const blocked = new Promise<void>((resolve) => {
@@ -372,12 +394,24 @@ describe("provider failover caller recovery", () => {
 			await entered;
 			let aborted: Promise<void> | undefined;
 			if (interruption === "manual") await h.api.setModel({ ...h.third, id: "manual" });
+			else if (interruption === "effort") h.api.setThinkingLevel("high");
 			else aborted = h.run.session.abort();
 			release();
 			await Promise.all([running, aborted]);
 			expect(h.errors).toEqual([]);
 			expect(h.dispatch.mock.calls.map(([model]) => model.provider)).toEqual([h.source.provider]);
 			expect(h.run.session.model).toMatchObject(h.target);
+			const entries = h.run.session.sessionManager.getEntries();
+			const failure = entries.find(
+				(entry) =>
+					entry.type === "message" && entry.message.role === "assistant" && entry.message.errorMessage === quota,
+			);
+			expect(failure).toBeDefined();
+			expect(entries.some((entry) => entry.type === "context_edit" && entry.targetId === failure!.id)).toBe(false);
+			expect(h.warnings).toHaveBeenCalledWith(
+				expect.stringContaining(`${h.target.provider}/${h.target.id} is currently selected`),
+			);
+			expect(JSON.stringify(h.warnings.mock.calls)).not.toContain("Provider failover selected");
 		},
 	);
 

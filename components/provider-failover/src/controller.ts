@@ -1,5 +1,5 @@
 import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
-import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
+import { isContextOverflow, isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { PROGRAM_ID_ENV } from "../../session-state/src/protocol.js";
 import { inForkedContinuation } from "../../shared/src/fork-context.js";
@@ -45,6 +45,16 @@ function eligibleSelection(
 			ctx.modelRegistry.hasConfiguredAuth(registered) &&
 			(!needsImages || registered.input.includes("image")),
 	);
+}
+
+function nativeRetryable(message: Parameters<typeof isContextOverflow>[0], contextWindow: number): boolean {
+	return !isContextOverflow(message, contextWindow) && isRetryableAssistantError(message);
+}
+
+function stoppedSelectionMessage(ctx: ExtensionContext): string {
+	const model = ctx.model;
+	const selection = model ? `${model.provider}/${model.id} is currently selected.` : "No model is currently selected.";
+	return `Provider failover stopped: model selection was interrupted or unavailable. ${selection} No restoration was attempted.`;
 }
 
 export default function installProviderFailover(pi: ExtensionAPI): void {
@@ -174,12 +184,12 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 			const signal = ctx.signal ? AbortSignal.any([ctx.signal, current.controller.signal]) : current.controller.signal;
 			current.selecting = { model: candidate.model, previous: source };
 			const selected = await pi.setModel(candidate.model);
-			if (current !== episode) return;
+			if (current !== episode) {
+				report(ctx, stoppedSelectionMessage(ctx));
+				return;
+			}
 			if (!selected || signal.aborted || !matches(ctx.model, candidate.model)) {
-				stop(
-					ctx,
-					"Provider failover stopped: model selection was interrupted or unavailable. The current selection was left as it is.",
-				);
+				stop(ctx, stoppedSelectionMessage(ctx));
 				return;
 			}
 			pi.setThinkingLevel(candidate.thinking);
@@ -191,7 +201,7 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 				thinking: pi.getThinkingLevel(),
 			};
 			current.failureEntry = event.messageEntryId;
-			current.pending = { signal, requested: false, nativeRetry: isRetryableAssistantError(message) };
+			current.pending = { signal, requested: false, nativeRetry: nativeRetryable(message, source.contextWindow) };
 			const eligible = eligibleSelection(ctx, candidate.model, needsImages);
 			if (!isCurrent(current, signal)) return;
 			if (!eligible || lastUserEntry(ctx) !== current.userEntry) {

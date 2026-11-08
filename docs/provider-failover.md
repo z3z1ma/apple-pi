@@ -14,7 +14,7 @@ Recovery resolves the existing global profile only after an eligible failure:
 
 Candidates stay in configured order, even when startup selection is random or round-robin. Recovery consumes no startup rotation counter. It considers registered models with configured authentication, excludes xAI and virtual-model destinations, and requires image support when retained or pending messages contain images. Configured auth is eligibility metadata, not evidence of quota or endpoint health. A same-provider-only profile has no fallback.
 
-The replacement uses its configured thinking level, subject to Pi's capability clamping. It stays selected for subsequent work and becomes a roled person's retained mind across reopen, including when continuation stops after the model change. There is no automatic promotion back. Normal saved-mind restoration still refuses an unavailable model/auth rather than silently selecting another provider.
+After an uninterrupted selection, the extension applies the configured thinking level, subject to Pi's capability clamping. A late commit after interruption stops before that effort step: it keeps Pi's switch-time thinking level, which can differ from the profile. The committed model/effort combination stays selected for subsequent work and becomes a roled person's retained mind across reopen, including when continuation stops after the model change. There is no automatic promotion back. Normal saved-mind restoration still refuses an unavailable model/auth rather than silently selecting another provider.
 
 ## Recognized terminal signals
 
@@ -46,7 +46,7 @@ Continuation follows the installed Pi retry classifier:
 | OpenAI credit/spend/organization-usage codes in a429 wrapper | Native retry makes the next request on the selected replacement. |
 | Anthropic enforced spend error (`rate_limit_error`) | Native retry makes the next request on the selected replacement. |
 
-Pi's exported `isRetryableAssistantError` determines the actual distinction; wrapper text can affect it. A recognized JSON code without retryable text uses the extension's settlement continuation instead. Tests exercise the concrete shapes above with the installed SDK and default retry settings.
+Recovery mirrors Pi's retry predicate: exclude `isContextOverflow` first, then use the exported `isRetryableAssistantError`. Wrapper and overflow wording can affect the distinction. A recognized JSON code without retryable text uses the extension's settlement continuation instead. Tests exercise the concrete shapes above with the installed SDK and default retry settings.
 
 **If native retry is disabled, its budget was already exhausted, or its countdown is cancelled, a retryable failure can leave the replacement selected but waiting for another user turn.** The extension deliberately adds no settlement continuation for these failures: the installed extension API does not expose retry-cancel events, so such a vote could revive cancelled work. Selection alone is not successful continuation.
 

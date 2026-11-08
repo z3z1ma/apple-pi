@@ -60,6 +60,13 @@
   ],
   "actions": [
     {
+      "id": "repo-rule-lint-loader",
+      "pattern": "(^|[;&|]\\s*)(timeout\\s+(-k\\s+\\d+\\s+)?\\d+\\s+)?node\\s+lint/repo-rules\\.mjs",
+      "reason": "Run repository rule validation through npm run lint so it loads the repository's TypeScript resolver.",
+      "fires": "timeout -k 5 90 node lint/repo-rules.mjs",
+      "passes": "npm run lint"
+    },
+    {
       "id": "bsd-sed-in-place",
       "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\s*''",
       "reason": "sed here is GNU sed, so `sed -i ''` fails. Use the edit tool.",
@@ -96,6 +103,28 @@
     }
   ],
   "scripts": [
+    {
+      "id": "failover-native-retry",
+      "on": "edit",
+      "script": "failover-native-retry.js",
+      "includes": ["components/provider-failover/src/controller.ts"],
+      "fires": [
+        {
+          "path": "components/provider-failover/src/controller.ts",
+          "content": "const pending = { nativeRetry: isRetryableAssistantError(message) };"
+        },
+        {
+          "path": "components/provider-failover/src/controller.ts",
+          "content": "function nativeRetryable(message) { return isRetryableAssistantError(message); }"
+        }
+      ],
+      "passes": [
+        {
+          "path": "components/provider-failover/src/controller.ts",
+          "content": "function nativeRetryable(message, window) { return !isContextOverflow(message, window) && isRetryableAssistantError(message); }"
+        }
+      ]
+    },
     {
       "id": "link-output-contract",
       "on": "call",
