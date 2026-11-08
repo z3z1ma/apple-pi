@@ -1,19 +1,11 @@
 import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { sessionRole } from "../../organization/src/session-role.js";
 import { PROGRAM_ID_ENV } from "../../session-state/src/protocol.js";
 import { inForkedContinuation } from "../../shared/src/fork-context.js";
 import { ModelProfileError, type ResolvedModelProfile } from "../../shared/src/model-profiles.js";
 import { classifyTerminalProviderFailure } from "./classify.js";
 import { failoverCandidates, nextFailoverCandidate, requiresImages } from "./policy.js";
-import { providerFailoverEnabled } from "./settings.js";
-
-type GuardedAPI = ExtensionAPI & {
-	setModelIfUnchanged?: (
-		model: Model<Api>,
-		options: { signal?: AbortSignal; thinkingLevel?: ModelThinkingLevel },
-	) => Promise<boolean>;
-};
 
 type Selection = { provider: string; id: string; thinking: ModelThinkingLevel };
 type Episode = {
@@ -22,9 +14,9 @@ type Episode = {
 	attempted: Set<string>;
 	userEntry: string | undefined;
 	failureEntry: string;
-	selecting: boolean;
+	selecting?: { model: Model<Api>; previous: Model<Api> };
 	selection?: Selection;
-	pending?: { signal: AbortSignal; requested: boolean };
+	pending?: { signal: AbortSignal; requested: boolean; nativeRetry: boolean };
 };
 
 function excluded(): boolean {
@@ -56,10 +48,13 @@ function eligibleSelection(
 }
 
 export default function installProviderFailover(pi: ExtensionAPI): void {
-	const api = pi as GuardedAPI;
 	let active = false;
 	let suppressed = false;
 	let episode: Episode | undefined;
+
+	function isCurrent(current: Episode, signal: AbortSignal): boolean {
+		return current === episode && !signal.aborted;
+	}
 
 	function clear(): Episode | undefined {
 		const previous = episode;
@@ -87,28 +82,11 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 		if (previous?.pending) ctx.abort();
 	}
 
-	pi.on("session_start", (_event, ctx) => {
+	pi.on("session_start", () => {
 		if (excluded()) return;
 		clear();
 		suppressed = false;
-		active = false;
-		try {
-			if (!providerFailoverEnabled()) return;
-			if (typeof api.setModelIfUnchanged !== "function") {
-				report(
-					ctx,
-					"Provider failover is disabled: this Pi build lacks guarded model selection. Normal sessions remain unchanged.",
-				);
-				return;
-			}
-			sessionRole(ctx);
-			active = true;
-		} catch (error) {
-			report(
-				ctx,
-				`Provider failover is disabled: ${error instanceof Error ? error.message : "configuration could not be read"}`,
-			);
-		}
+		active = true;
 	});
 
 	pi.on("input", () => {
@@ -121,18 +99,17 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 		clear();
 		suppressed = false;
 	});
-	pi.on("model_select", (_event, ctx) => {
-		if (!excluded() && episode && !episode.selecting) interrupt(ctx);
+	pi.on("model_select", (event, ctx) => {
+		if (excluded() || !episode) return;
+		const selecting = episode.selecting;
+		if (selecting && matches(event.model, selecting.model) && matches(event.previousModel, selecting.previous)) return;
+		interrupt(ctx);
 	});
 	pi.on("thinking_level_select", (_event, ctx) => {
-		if (
-			!excluded() &&
-			episode?.selection &&
-			!episode.selecting &&
-			pi.getThinkingLevel() !== episode.selection.thinking
-		) {
+		if (excluded() || !episode) return;
+		if (episode.selecting && matches(ctx.model, episode.selecting.model)) return;
+		if (episode.selecting || (episode.selection && pi.getThinkingLevel() !== episode.selection.thinking))
 			interrupt(ctx);
-		}
 	});
 	pi.on("session_before_switch", (_event, ctx) => {
 		if (!excluded()) interrupt(ctx);
@@ -156,7 +133,7 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 	});
 
 	pi.on("turn_end", async (event, ctx) => {
-		if (!active || excluded() || typeof api.setModelIfUnchanged !== "function") return;
+		if (!active || excluded()) return;
 		if (episode && event.message.role === "assistant") episode.pending = undefined;
 		const message = event.message;
 		const source = ctx.model;
@@ -180,7 +157,6 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 					attempted: new Set(),
 					userEntry: lastUserEntry(ctx),
 					failureEntry: event.messageEntryId,
-					selecting: false,
 				};
 				episode = current;
 			}
@@ -196,26 +172,28 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 			}
 			current.attempted.add(candidate.model.provider);
 			const signal = ctx.signal ? AbortSignal.any([ctx.signal, current.controller.signal]) : current.controller.signal;
-			current.selecting = true;
-			const selected = await api.setModelIfUnchanged(candidate.model, { signal, thinkingLevel: candidate.thinking });
-			current.selecting = false;
+			current.selecting = { model: candidate.model, previous: source };
+			const selected = await pi.setModel(candidate.model);
 			if (current !== episode) return;
-			if (!selected || signal.aborted) {
+			if (!selected || signal.aborted || !matches(ctx.model, candidate.model)) {
 				stop(
 					ctx,
 					"Provider failover stopped: model selection was interrupted or unavailable. The current selection was left as it is.",
 				);
 				return;
 			}
+			pi.setThinkingLevel(candidate.thinking);
+			current.selecting = undefined;
+			if (!isCurrent(current, signal)) return;
 			current.selection = {
 				provider: candidate.model.provider,
 				id: candidate.model.id,
 				thinking: pi.getThinkingLevel(),
 			};
 			current.failureEntry = event.messageEntryId;
-			current.pending = { signal, requested: false };
+			current.pending = { signal, requested: false, nativeRetry: isRetryableAssistantError(message) };
 			const eligible = eligibleSelection(ctx, candidate.model, needsImages);
-			if (current !== episode || signal.aborted) return;
+			if (!isCurrent(current, signal)) return;
 			if (!eligible || lastUserEntry(ctx) !== current.userEntry) {
 				stop(
 					ctx,
@@ -227,7 +205,7 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 				ctx,
 				`Provider failover selected ${candidate.model.provider}/${candidate.model.id} (${current.selection.thinking}) after ${source.provider} ${reason}; provider success is not yet established.`,
 			);
-			if (current !== episode || signal.aborted) return;
+			if (!isCurrent(current, signal)) return;
 			return {
 				entries: [
 					...event.entries,
@@ -235,7 +213,7 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 				],
 			};
 		} catch (error) {
-			if (current) current.selecting = false;
+			if (current) current.selecting = undefined;
 			if (current && current !== episode) return;
 			stop(
 				ctx,
@@ -251,7 +229,7 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 		if (!active || excluded() || !episode) return;
 		const current = episode;
 		const pending = current.pending;
-		if (!pending || pending.requested) return;
+		if (!pending || pending.requested || pending.nativeRetry) return;
 		const signal = pending.signal;
 		pending.requested = true;
 		if (signal.aborted || suppressed || event.outcome !== "error") return;
@@ -263,7 +241,7 @@ export default function installProviderFailover(pi: ExtensionAPI): void {
 				selection,
 				requiresImages([...event.context.llmMessages, ...event.context.pendingMessages]),
 			);
-		if (current !== episode || signal.aborted || suppressed) return;
+		if (!isCurrent(current, signal) || suppressed) return;
 		if (
 			!selection ||
 			!eligible ||

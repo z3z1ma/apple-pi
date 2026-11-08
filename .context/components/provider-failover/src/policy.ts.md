@@ -1,6 +1,6 @@
 ## file
 
-The global enable flag grants permission; model-profiles.json remains the only destination catalog. Use resolveModelProfileCandidates, never startup selection: ordered failover must not consume a random/round-robin startup choice. Snapshot configured identities and efforts at episode start, then let the guarded native setter and continuation checks resolve current registered metadata.
+model-profiles.json is the only destination catalog; no extra enable flag is read. Use resolveModelProfileCandidates, never startup selection: ordered failover must not consume a random/round-robin startup choice. Snapshot configured identities and efforts at episode start, then revalidate registered metadata before continuation after the ordinary public setter.
 
 A role's leading profile is approved current workload suitability, not recovered historical provenance. Unroled roots use coordination; unknown and concrete-only roles stop rather than being assigned a speculative workload. Current source membership in that pool is not required, so ordinary existing people with retained physical minds remain eligible after failure.
 
