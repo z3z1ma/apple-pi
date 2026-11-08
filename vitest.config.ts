@@ -12,6 +12,7 @@ export default defineConfig({
 			"components/pair-programmer/tests/**/*.test.ts",
 			"components/vroom/tests/**/*.test.ts",
 			"components/anthropic-watchdog/tests/**/*.test.ts",
+			"components/provider-failover/tests/**/*.test.ts",
 			"components/home-search-guard/tests/**/*.test.ts",
 			"components/repo-rules/tests/**/*.test.ts",
 			"components/formal-verification/tests/**/*.test.ts",

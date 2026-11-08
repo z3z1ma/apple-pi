@@ -1,0 +1,6 @@
+language js
+
+`pi.on("agent_before_settle", $handler)` where {
+  $handler <: contains `$state.pending = undefined`,
+  $handler <: contains `return { continue: true }`
+}

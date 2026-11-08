@@ -84,6 +84,16 @@ try {
 	assert(
 		result.extensions.some(
 			(extension) =>
+				extension.path.endsWith("provider-failover.ts") &&
+				(extension.handlers.get("turn_end")?.length ?? 0) > 0 &&
+				(extension.handlers.get("agent_before_settle")?.length ?? 0) > 0 &&
+				(extension.handlers.get("session_shutdown")?.length ?? 0) > 0,
+		),
+		"missing failure-only provider recovery lifecycle hooks",
+	);
+	assert(
+		result.extensions.some(
+			(extension) =>
 				extension.path.endsWith("home-search-guard.ts") && (extension.handlers.get("tool_call")?.length ?? 0) > 0,
 		),
 		"missing home search guard",

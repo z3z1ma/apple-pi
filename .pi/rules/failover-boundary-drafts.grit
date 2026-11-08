@@ -1,0 +1,5 @@
+language js
+
+`return { entries: $drafts }` where {
+  not $drafts <: contains `event.entries`
+}

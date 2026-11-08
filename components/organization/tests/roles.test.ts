@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { createCodemodeExtension, type ExtensionAPI, SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, expect, test, vi } from "vitest";
@@ -246,16 +247,54 @@ test("a model chosen after the role resolved becomes the person's mind and survi
 	const run = await fauxSession([organization], [fauxAssistantMessage("ok")], ["read"], { cwd });
 	try {
 		const initial = run.session.model!;
-		const chosen = { ...initial, id: "chosen-model" };
+		const chosen = { ...initial, id: "chosen-model", reasoning: true };
 		vi.spyOn(registryOf(run), "find").mockImplementation((provider, id) =>
 			provider === initial.provider ? (id === chosen.id ? chosen : id === initial.id ? initial : undefined) : undefined,
 		);
 		await restartWithRole(run, "desk");
 		expect(run.session.model).toMatchObject({ id: initial.id });
 		await run.session.setModel(chosen);
+		run.session.setThinkingLevel("high");
 		await restartWithRole(run, "desk");
 		expect(run.session.model).toMatchObject({ provider: initial.provider, id: "chosen-model" });
+		expect(run.session.thinkingLevel).toBe("high");
 		await run.session.prompt("keep working on the chosen model");
+		expect(run.session.agent.state.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "stop" });
+	} finally {
+		run.dispose();
+	}
+});
+
+test("a nested newer manual choice remains the retained physical mind after older notifications finish", async () => {
+	const cwd = tempDir();
+	mkdirSync(join(cwd, ".pi", "roles"), { recursive: true });
+	writeFileSync(join(cwd, ".pi", "roles", "desk.md"), ROLE);
+	let manual!: Model<Api>;
+	let changed = false;
+	const reentrant = (pi: ExtensionAPI) => {
+		pi.on("model_select", async (event) => {
+			if (event.model.id !== "fallback-model" || changed) return;
+			changed = true;
+			await pi.setModel(manual);
+		});
+	};
+	const run = await fauxSession([reentrant, organization], [fauxAssistantMessage("ok")], ["read"], { cwd });
+	try {
+		const initial = run.session.model!;
+		const fallback = { ...initial, id: "fallback-model", reasoning: true };
+		manual = { ...initial, id: "manual-model", reasoning: true };
+		const models = [initial, fallback, manual];
+		vi.spyOn(registryOf(run), "find").mockImplementation((provider, id) =>
+			models.find((model) => model.provider === provider && model.id === id),
+		);
+		await restartWithRole(run, "desk");
+		await run.session.setModel(fallback);
+		expect(run.session.model).toMatchObject({ provider: manual.provider, id: manual.id });
+		const thinking = run.session.thinkingLevel;
+		await restartWithRole(run, "desk");
+		expect(run.session.model).toMatchObject({ provider: manual.provider, id: manual.id });
+		expect(run.session.thinkingLevel).toBe(thinking);
+		await run.session.prompt("keep the latest manual mind");
 		expect(run.session.agent.state.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "stop" });
 	} finally {
 		run.dispose();

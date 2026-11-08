@@ -2,6 +2,20 @@
   "comments": "forbid",
   "rules": [
     {
+      "grit": "failover-continuation-handoff.grit",
+      "message": "Retain the in-flight continuation record after requesting continuation; later settlement handlers can still interrupt it.",
+      "includes": ["components/provider-failover/src/controller.ts"],
+      "fires": "pi.on(\"agent_before_settle\", () => { current.pending = undefined; return { continue: true }; });",
+      "passes": "pi.on(\"agent_before_settle\", () => { pending.requested = true; return { continue: true }; });"
+    },
+    {
+      "grit": "failover-boundary-drafts.grit",
+      "message": "Chain incoming event.entries when appending provider-failover boundary drafts.",
+      "includes": ["components/provider-failover/src/controller.ts"],
+      "fires": "function recover(event) { return { entries: [draft] }; }",
+      "passes": "function recover(event) { return { entries: [...event.entries, draft] }; }"
+    },
+    {
       "grit": "conversation-visibility.grit",
       "message": "Gate read-position readiness with inline transcript visibility before acknowledging a result.",
       "includes": ["apps/agent-workplace/web/overlay/conversation/conversation-panel.tsx"],
