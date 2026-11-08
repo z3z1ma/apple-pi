@@ -97,6 +97,29 @@
   ],
   "scripts": [
     {
+      "id": "link-output-contract",
+      "on": "call",
+      "script": "link-output-contract.js",
+      "fires": [
+        { "tool": "codemode", "input": { "code": "text(JSON.parse(await tools.link(entry)));" } },
+        {
+          "tool": "codemode",
+          "input": {
+            "code": "const result = await tools.link(entry); text(typeof result === 'string' ? JSON.parse(result).id ?? result : result);"
+          }
+        }
+      ],
+      "passes": [
+        { "tool": "codemode", "input": { "code": "text(await tools.link(entry));" } },
+        {
+          "tool": "codemode",
+          "input": {
+            "code": "const result = await tools.link(entry); text(result); const payload = await tools.read({path: 'data.json'}); text(JSON.parse(payload));"
+          }
+        }
+      ]
+    },
+    {
       "id": "thread-reading-position",
       "on": "edit",
       "script": "thread-reading-position.js",
